@@ -1,9 +1,8 @@
-import { S, V3, FILE_W, FILE_D, FILE_H, FILE_GAP, MARGIN, PLATE_H, isCode, linesOf, render } from "./state.js";
-import { depthOf } from "./repo.js";
+import { S, V3, FILE_SIZE, FILE_H, TILE_GAP, MARGIN, PLATE_H, FLOOR_STEP, AREA_PER_WEIGHT, isCode, linesOf, render } from "./state.js";
 import { filePath } from "./panels.js";
 import { syncMeshes } from "./meshes.js";
 
-// Lays out the whole tree for the terraces, then hands it to the shapes on screen.
+// Lays out the whole tree as a treemap, then hands it to the shapes on screen.
 function build()
 {
   S.boxes.length = 0;
@@ -11,14 +10,18 @@ function build()
   {
     n.index = i;
     n.children = n.children || [];
+    n.parent = null;
   });
+  for (const n of S.NODES) for (const child of n.children) child.parent = n;
 
   const root = S.NODES.find((n) => n.id === "");
   if (!root) return;
 
   markHidden(root, false);
-  measureNode(root);
-  placeNode(root, -root.tileW / 2, -root.tileD / 2);
+  weighNode(root);
+  const area = Math.max(root.weight, 1) * AREA_PER_WEIGHT;
+  const width = Math.sqrt(area * 1.5);
+  placeNode(root, { x: -width / 2, z: -area / width / 2, w: width, d: area / width }, 0);
   syncMeshes();
   render();
 }
@@ -30,60 +33,112 @@ function markHidden(n, parentHidden)
   for (const child of n.children) markHidden(child, n.hidden);
 }
 
-// Works out how big a folder's tile is: its files and subfolders packed together.
-function measureNode(n)
+// Lists what each folder holds (its visible subfolders and its files) and how much floor
+// the whole folder asks for: one unit per file, the subfolders' own, and room for the
+// folder's margin, which grows with the edge of what it holds.
+function weighNode(n)
 {
-  n.items = [];
+  n.entries = [];
   for (const child of n.children)
   {
     if (child.hidden) continue;
-    measureNode(child);
-    n.items.push({ dir: child, w: child.tileW, d: child.tileD });
+    weighNode(child);
+    n.entries.push({ dir: child, weight: child.weight });
   }
   n.files.forEach((name, fileIndex) =>
   {
     // Loose top-level files (readme, package files) count as extras.
-    if (n.id === "" && !S.testsShown) return;
-    n.items.push({ name, fileIndex, w: FILE_W, d: FILE_D });
+    if (n.id === "" && !S.extrasShown) return;
+    n.entries.push({ fileIndex, path: filePath(n.index, fileIndex), weight: 1 });
   });
-  n.items.sort((a, b) => b.d - a.d || b.w - a.w);
-
-  // Pack the items onto shelves, wrapping when a row grows wide enough.
-  const gap = FILE_GAP * 1.6;
-  const area = n.items.reduce((sum, item) => sum + item.w * item.d, 0);
-  const maxRow = Math.max(FILE_W * 3, Math.sqrt(area) * 1.4);
-  let x = 0, z = 0, rowD = 0, usedW = 0;
-  for (const item of n.items)
-  {
-    if (x > 0 && x + item.w > maxRow) { x = 0; z += rowD + gap; rowD = 0; }
-    item.x = x; item.z = z;
-    x += item.w + gap;
-    rowD = Math.max(rowD, item.d);
-    usedW = Math.max(usedW, x - gap);
-  }
-  n.tileW = Math.max(FILE_W + MARGIN * 2, usedW + MARGIN * 2);
-  n.tileD = Math.max(FILE_D + MARGIN * 2, z + rowD + MARGIN * 2);
+  const held = n.entries.reduce((sum, entry) => sum + entry.weight, 0);
+  n.weight = held + 1.6 * Math.sqrt(held) + 1;
 }
 
-// Places a folder's tile at (ox, oz), and inside it its subfolders and file boxes.
-// A code file's box is as tall as its line count suggests, so big files stand out.
-function placeNode(n, ox, oz)
+// The worst aspect ratio in a row of areas laid along a side of the given length.
+function worstAspect(areas, sum, side)
+{
+  const thickness = sum / side;
+  let worst = 1;
+  for (const area of areas) worst = Math.max(worst, area / (thickness * thickness), (thickness * thickness) / area);
+  return worst;
+}
+
+// Squarified treemap: splits the rectangle among the entries by weight, largest first,
+// adding to a row while that keeps its tiles closer to square. Sets x, z, w, d on each entry.
+function squarify(entries, x, z, w, d)
+{
+  const items = [...entries].sort((a, b) => b.weight - a.weight);
+  const total = items.reduce((sum, item) => sum + item.weight, 0);
+  if (total <= 0 || w <= 0 || d <= 0) return;
+  const scale = (w * d) / total;
+  let start = 0;
+  while (start < items.length)
+  {
+    const side = Math.min(w, d);
+    const areas = [];
+    let sum = 0, worst = Infinity;
+    while (start + areas.length < items.length)
+    {
+      const area = items[start + areas.length].weight * scale;
+      const nextWorst = worstAspect([...areas, area], sum + area, side);
+      if (areas.length > 0 && nextWorst > worst) break;
+      areas.push(area);
+      sum += area;
+      worst = nextWorst;
+    }
+
+    // Lay the row along the short side; it takes `thickness` off the rectangle.
+    const thickness = sum / side;
+    let cursor = w >= d ? z : x;
+    areas.forEach((area, k) =>
+    {
+      const item = items[start + k], length = area / thickness;
+      if (w >= d) { item.x = x; item.z = cursor; item.w = thickness; item.d = length; }
+      else { item.x = cursor; item.z = z; item.w = length; item.d = thickness; }
+      cursor += length;
+    });
+    if (w >= d) { x += thickness; w -= thickness; }
+    else { z += thickness; d -= thickness; }
+    start += areas.length;
+  }
+}
+
+// Places a folder's tile in its rectangle, and inside it a treemap of its subfolders and
+// file boxes. Nesting reads on the floor: each level is a tile laid on its parent, one thin
+// step higher. Every file box has the same footprint, centred in its cell; its height is the
+// line count, and it rises to its layer's plane when layers are declared.
+function placeNode(n, rect, level)
 {
   if (n.hidden) return;
-  n.cx = ox + n.tileW / 2;
-  n.cz = oz + n.tileD / 2;
-  n.baseY = depthOf(n.id) * S.levelGap;
+  const layered = S.LAYERS.length > 0;
+  n.level = level;
+  n.cx = rect.x + rect.w / 2;
+  n.cz = rect.z + rect.d / 2;
+  n.tileW = rect.w;
+  n.tileD = rect.d;
+  n.baseY = 0;
+  n.topY = PLATE_H + level * FLOOR_STEP;
 
-  const innerX = ox + MARGIN, innerZ = oz + MARGIN;
-  for (const item of n.items)
+  const pad = Math.min(MARGIN, 0.15 * Math.min(rect.w, rect.d));
+  squarify(n.entries, rect.x + pad, rect.z + pad, rect.w - pad * 2, rect.d - pad * 2);
+  for (const entry of n.entries)
   {
-    if (item.dir) { placeNode(item.dir, innerX + item.x, innerZ + item.z); continue; }
-    const path = filePath(n.index, item.fileIndex);
-    const height = isCode(path) ? Math.min(1.8, 0.22 + linesOf(path) / 260) : FILE_H * 0.6;
+    if (entry.dir)
+    {
+      // Sibling tiles are pulled apart by a gap, so their outlines never touch.
+      const gap = Math.min(TILE_GAP, 0.15 * Math.min(entry.w, entry.d));
+      placeNode(entry.dir, { x: entry.x + gap / 2, z: entry.z + gap / 2, w: entry.w - gap, d: entry.d - gap }, level + 1);
+      continue;
+    }
+    const height = isCode(entry.path) ? Math.min(1.8, 0.22 + linesOf(entry.path) / 260) : FILE_H * 0.6;
+    const layerIndex = layered && S.FILE_LAYERS.has(entry.path) ? S.LAYERS.indexOf(S.FILE_LAYERS.get(entry.path)) : -1;
+    const baseY = layerIndex >= 0 ? Math.max(n.topY, layerIndex * S.layerGap) : n.topY;
+    const side = Math.min(FILE_SIZE, Math.min(entry.w, entry.d) - 0.2);
     S.boxes.push({
-      path, node: n.index, file: item.fileIndex, code: isCode(path),
-      terrace: new V3(innerX + item.x + FILE_W / 2, n.baseY + PLATE_H + height / 2, innerZ + item.z + FILE_D / 2),
-      terraceSize: new V3(FILE_W, height, FILE_D),
+      path: entry.path, node: n.index, file: entry.fileIndex,
+      terrace: new V3(entry.x + entry.w / 2, baseY + height / 2, entry.z + entry.d / 2),
+      terraceSize: new V3(side, height, side),
     });
   }
 }

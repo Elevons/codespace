@@ -11,34 +11,56 @@
 <div id="labels"></div>
 <div id="loading">Reading the repository…</div>
 
-<div class="panel" id="legend"><h2>Layers</h2><div id="legend-items"></div>
-  <div class="breaks"><div class="swatch"><i style="background:#f85149"></i>layer breaks</div>
-  <div id="breaks-count">—</div></div></div>
-
-<div class="panel" id="info">
-  <h3>Click a block</h3>
-  <p class="hint">Trace what a folder imports, and what imports it.</p>
-</div>
-
-<div class="panel" id="tools">
-  <button id="spin" class="on">Spin: on</button>
-  <button id="reset">Reset view</button>
-  <button id="refresh">Refresh</button>
-  <button id="live" class="on">Live: on</button>
-</div>
-
-<div class="panel" id="controls">
-  <label for="spread">Level spread</label>
-  <input id="spread" type="range" min="0.3" max="6" step="0.1" value="1.2">
-  <button id="tests" title="Tests, docs, scripts, assets, and loose top-level files">Extras: hidden</button>
-</div>
-
-<div class="panel" id="hierarchy">
-  <div id="hierarchy-head">
-    <h3>Folders</h3>
-    <button id="hierarchy-toggle" type="button" aria-expanded="true" aria-controls="hierarchy-tree">Hide</button>
+<div class="panel" id="codeblock" hidden>
+  <div id="codeblock-head">
+    <span id="codeblock-name"></span>
+    <button id="codeblock-close" type="button" title="Close the code panel">Close</button>
   </div>
-  <div id="hierarchy-tree"></div>
+  <pre id="symbol-code"></pre>
+</div>
+
+<div class="dock" id="dock-left">
+  <section class="panel" id="showing" hidden>
+    <div id="showing-head">
+      <h2 class="panel-title">Showing</h2>
+      <button id="showing-clear" type="button" title="Stop highlighting these files">Clear</button>
+    </div>
+    <div id="showing-body"></div>
+  </section>
+  <section class="panel" id="info">
+    <h3>Click a block</h3>
+    <p class="hint">Trace what a folder imports, and what imports it.</p>
+  </section>
+</div>
+
+<div class="dock" id="dock-right">
+  <section class="panel" id="legend">
+    <h2 class="panel-title">Layers</h2>
+    <div id="legend-items"></div>
+    <div class="breaks"><div class="swatch"><i style="background:#f85149"></i>layer breaks</div>
+    <div id="breaks-count">—</div></div>
+  </section>
+  <section class="panel" id="hierarchy">
+    <div id="hierarchy-head">
+      <h2 class="panel-title">Folders</h2>
+      <button id="hierarchy-toggle" type="button" aria-expanded="true" aria-controls="hierarchy-tree">Hide</button>
+    </div>
+    <div id="hierarchy-tree"></div>
+  </section>
+</div>
+
+<div id="dock-bottom">
+  <div class="panel bar" id="tools">
+    <button id="spin" class="on">Spin: on</button>
+    <button id="reset">Reset view</button>
+    <button id="refresh">Refresh</button>
+    <button id="live" class="on">Live: on</button>
+  </div>
+  <div class="panel bar" id="controls">
+    <label for="spread">Layer gap</label>
+    <input id="spread" type="range" min="0.3" max="6" step="0.1" value="1.2">
+    <button id="tests" title="Tests, docs, scripts, assets, and loose top-level files">Extras: hidden</button>
+  </div>
 </div>
 
 <script src="https://cdn.babylonjs.com/v9.31.3/babylon.js"></script>

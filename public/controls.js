@@ -1,7 +1,7 @@
 import { S, camera, DEFAULT_ALPHA } from "./state.js";
 import { build } from "./city.js";
 import { centerView, recenterTarget } from "./meshes.js";
-import { select, renderLegend, renderHierarchy } from "./panels.js";
+import { filePath, select, selectFile, renderLegend, renderHierarchy } from "./panels.js";
 import { loadGraph } from "./repo.js";
 
 // Fetches the live graph and, only when it has actually changed, redraws it.
@@ -16,23 +16,38 @@ async function refreshGraph()
   if (graph.nodes.length === 0) return;
 
   const signature = JSON.stringify(graph.nodes.map((node) => node.id + ":" + node.files.length)) +
-    JSON.stringify(graph.edges) + JSON.stringify(graph.fileEdges) + JSON.stringify([...graph.lines]);
+    JSON.stringify(graph.edges) + JSON.stringify(graph.fileEdges) + JSON.stringify([...graph.lines]) +
+    JSON.stringify([...graph.tags]) + JSON.stringify([...graph.summaries]) + JSON.stringify([...graph.layers]) + JSON.stringify(graph.layerOrder) + JSON.stringify(graph.notes);
   if (signature === S.graphSignature) return;
   S.graphSignature = signature;
 
+  // What is chosen now, so the choice survives the redraw if it is still there.
+  const keptFolder = S.selected >= 0 ? S.NODES[S.selected].id : null;
+  const keptFile = S.selected >= 0 && S.selectedFile >= 0 ? filePath(S.selected, S.selectedFile) : null;
   S.NODES = graph.nodes;
   S.EDGES = graph.edges;
   S.FILE_EDGES = graph.fileEdges;
   S.FILE_LINES = graph.lines;
+  S.FILE_TAGS = graph.tags;
+  S.FILE_LAYERS = graph.layers;
+  S.FILE_SUMMARIES = graph.summaries;
+  S.ARCH_NOTES = graph.notes;
+  S.LAYERS = graph.layerOrder !== null ? graph.layerOrder : [...new Set(graph.layers.values())].sort();
+  spreadSlider.value = String(S.layerGap);
+  spreadCaption.hidden = spreadSlider.hidden = S.LAYERS.length === 0;
   renderLegend();
   S.selected = -1;
   S.selectedFile = -1;
   S.focusSet = null;
-  if (!S.hasCentered) applyTestsToggle();
+  if (!S.hasCentered) applyExtrasToggle();
   build();
   if (!S.hasCentered) { centerView(true); S.hasCentered = true; }
-  select(-1);
+  const folder = keptFolder === null ? -1 : S.NODES.findIndex((n) => n.id === keptFolder);
+  const file = folder >= 0 && keptFile !== null ? S.NODES[folder].files.findIndex((name, i) => filePath(folder, i) === keptFile) : -1;
+  if (file >= 0) selectFile(folder, file);
+  else select(folder);
   renderHierarchy();
+  window.dispatchEvent(new Event("codespace:built"));
 }
 
 document.getElementById("refresh").addEventListener("click", () => { S.graphSignature = ""; refreshGraph(); });
@@ -46,11 +61,13 @@ setInterval(() => { if (S.liveOn && !document.hidden) refreshGraph(); }, 15000);
 
 /* ------------------------------------------------- bottom controls ---- */
 
-// The layer-spread slider pulls the nesting levels apart or presses them together.
+// The spread slider: the gap between layer planes. It only shows when the repository has layers.
 const spreadSlider = document.getElementById("spread");
+const spreadCaption = document.querySelector('label[for="spread"]');
 spreadSlider.addEventListener("input", () =>
 {
-  S.levelGap = Number(spreadSlider.value);
+  const value = Number(spreadSlider.value);
+  S.layerGap = value;
   build();
   recenterTarget();
 });
@@ -94,26 +111,26 @@ document.getElementById("reset").addEventListener("click", () => {
 
 // Shows or hides the extras at once — tests, docs, scripts, assets, loose top-level
 // files. They start hidden so the map shows only the code that does the work.
-const EXTRA_FOLDER = /(^|\/)tests$|^docs$|^scripts$|^game\/public$/;
-function testFolderIds() { return S.NODES.filter((n) => EXTRA_FOLDER.test(n.id)).map((n) => n.id); }
-function applyTestsToggle()
+const EXTRA_FOLDER = /(^|\/)tests$|^docs$|^scripts$|^\.codespace$|^game\/public$/;
+function extraFolderIds() { return S.NODES.filter((n) => EXTRA_FOLDER.test(n.id)).map((n) => n.id); }
+function applyExtrasToggle()
 {
-  for (const id of testFolderIds())
+  for (const id of extraFolderIds())
   {
-    if (S.testsShown) S.hiddenFolders.delete(id);
+    if (S.extrasShown) S.hiddenFolders.delete(id);
     else S.hiddenFolders.add(id);
   }
   const button = document.getElementById("tests");
-  button.textContent = "Extras: " + (S.testsShown ? "shown" : "hidden");
-  button.classList.toggle("on", S.testsShown);
+  button.textContent = "Extras: " + (S.extrasShown ? "shown" : "hidden");
+  button.classList.toggle("on", S.extrasShown);
 }
 document.getElementById("tests").addEventListener("click", () =>
 {
-  S.testsShown = !S.testsShown;
-  applyTestsToggle();
+  S.extrasShown = !S.extrasShown;
+  applyExtrasToggle();
   build();
   centerView(false);
   renderHierarchy();
 });
 
-export { setSpin, applyTestsToggle, refreshGraph };
+export { setSpin, refreshGraph };

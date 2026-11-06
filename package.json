@@ -8,7 +8,7 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "start": "node --experimental-transform-types src/Server.ts",
+    "start": "node --experimental-transform-types src/server/Server.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --test --experimental-transform-types tests/*.test.ts"
   },

@@ -1,6 +1,6 @@
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1117; color: #e6edf3;
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #04070d; color: #e6edf3;
     font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
   #scene { display: block; width: 100vw; height: 100vh; touch-action: none; cursor: grab; }
   #scene:active { cursor: grabbing; }
@@ -15,80 +15,149 @@
   .label.folder.sel { background: rgba(31,111,235,.94); color: #fff; font-weight: 600; }
   .label.file { padding: 1px 4px; font-size: 9.5px; color: #aab6c4; background: rgba(13,17,23,.7); }
   .label.file.hover { color: #fff; background: rgba(48,54,61,.92); font-size: 10.5px; }
+  .label.layer { padding: 2px 8px; font: 10px ui-sans-serif, system-ui, sans-serif; letter-spacing: .8px;
+    text-transform: uppercase; color: #9aa4b2; background: rgba(13,17,23,.6); }
+  /* The code panel: the source of a symbol picked from a file's list, docked beside the left column. */
+  #codeblock { position: fixed; top: 14px; left: calc(14px + clamp(260px, 25vw, 360px) + 12px); z-index: 5;
+    width: clamp(360px, 42vw, 720px); max-height: 60vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+  #codeblock[hidden] { display: none; }
+  #codeblock-head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 8px 10px 8px 14px; border-bottom: 1px solid #30363d; }
+  #codeblock-name { font: 600 12px ui-monospace, Menlo, monospace; color: #e6edf3; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  #codeblock-close { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
+    padding: 2px 8px; font-size: 11px; cursor: pointer; }
+  #codeblock-close:hover { background: #30363d; }
+  #symbol-code { margin: 0; padding: 10px 14px 12px; overflow: auto; white-space: pre;
+    font: 11.5px/1.5 ui-monospace, Menlo, monospace; color: #c9d1d9; }
+  #info li.sym { cursor: pointer; }
+  #info li.sym:hover span { color: #79c0ff; }
+  #info .open { cursor: pointer; }
+  #info .open:hover { color: #79c0ff; }
   #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
     color: #8b91ad; font-size: 13px; pointer-events: none; }
-  #legend .breaks { margin-top: 8px; padding-top: 8px; border-top: 1px solid #30363d; }
-  #breaks-count { color: #6e7681; }
-  #breaks-count.bad { color: #f85149; }
 
-  .panel { position: fixed; background: rgba(22,27,34,.88); border: 1px solid #30363d;
-    border-radius: 10px; backdrop-filter: blur(8px); box-shadow: 0 8px 30px rgba(0,0,0,.45); }
+  /* ---- layout ------------------------------------------------------------
+     Three docks hold every panel: left and right columns, and a bar along the bottom.
+     Panels flow inside a dock instead of floating on their own, so they stack, share the
+     height, scroll when short of room, and never overlap. The docks let clicks through
+     their gaps to the scene. */
+  .dock { position: fixed; top: 14px; bottom: 78px; display: flex; flex-direction: column; gap: 10px;
+    pointer-events: none; }
+  #dock-left { left: 14px; width: clamp(260px, 25vw, 360px); }
+  #dock-right { right: 14px; width: clamp(210px, 19vw, 280px); }
+  #dock-bottom { position: fixed; left: 14px; right: 14px; bottom: 14px; display: flex;
+    justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 10px; pointer-events: none; }
 
-  /* The legend sits top right; the click-a-block panel sits top left. */
-  #legend { top: 14px; right: 14px; padding: 10px 14px; font-size: 12px; }
-  #legend h2 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: #9aa4b2; }
-  .swatch { display: flex; align-items: center; gap: 8px; margin: 3px 0; color: #c9d1d9; }
-  .swatch i { width: 12px; height: 12px; border-radius: 3px; }
+  .panel { min-height: 0; overflow: auto; pointer-events: auto; background: rgba(22,27,34,.88);
+    border: 1px solid #30363d; border-radius: 10px; backdrop-filter: blur(8px);
+    box-shadow: 0 8px 30px rgba(0,0,0,.45); padding: 12px 14px; }
+  .panel-title { margin: 0 0 8px; font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .8px; color: #9aa4b2; }
 
-  #info { left: 14px; top: 14px; width: 344px; max-height: calc(100vh - 96px); overflow: auto; padding: 14px 16px; }
-  #info h3 { margin: 0 0 2px; font-size: 14px; font-family: ui-monospace, Menlo, monospace; }
+  /* What a tool has asked the map to show, with its explanation. Present only while something is shown. */
+  #showing { flex: 0 1 auto; max-height: 50%; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+  #showing[hidden] { display: none; }
+  #showing-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px 8px 14px; border-bottom: 1px solid #30363d; }
+  #showing-head .panel-title { margin: 0; }
+  #showing-clear { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
+  #showing-clear:hover { background: #30363d; }
+  #showing-body { min-height: 0; overflow-y: auto; padding: 10px 14px 12px; }
+  #showing-body h3 { margin: 0 0 4px; font-size: 13.5px; color: #e6edf3; }
+  #showing-body .about { margin: 0 0 8px; font-size: 12.5px; line-height: 1.5; color: #c9d1d9; }
+  #showing-body ol, #showing-body ul { margin: 0; padding: 0; list-style: none; }
+  #showing-body li { display: grid; grid-template-columns: 22px 1fr; gap: 0 6px; padding: 6px 0; border-top: 1px solid #21262d; }
+  #showing-body li:first-child { border-top: 0; }
+  #showing-body .step { align-self: start; margin-top: 1px; width: 18px; height: 18px; border-radius: 9px; background: #238636; color: #fff;
+    font: 600 10.5px/18px ui-sans-serif, system-ui, sans-serif; text-align: center; }
+  #showing-body .dot { align-self: start; margin: 6px 0 0 5px; width: 8px; height: 8px; border-radius: 4px; background: #3fb950; }
+  #showing-body a.path { font: 600 11.5px ui-monospace, Menlo, monospace; color: #79c0ff; text-decoration: none; overflow-wrap: anywhere; }
+  #showing-body a.path:hover { color: #a5d6ff; }
+  #showing-body .what { margin: 2px 0 0; font-size: 12.5px; line-height: 1.45; color: #c9d1d9; }
+  #showing-body .summary { margin: 3px 0 0; font-size: 12.5px; line-height: 1.45; color: #8b91ad; }
+  #showing-body hr { margin: 8px 0; border: 0; border-top: 1px solid #30363d; }
+  #info { flex: 0 1 auto; }
+  #info h3 { margin: 0 0 2px; font-size: 14px; font-family: ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }
   #info .layer { font-size: 11px; text-transform: uppercase; letter-spacing: .7px; color: #9aa4b2; }
   #info h4 { margin: 12px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .7px; }
   #info h4.out { color: #58a6ff; }
   #info h4.in { color: #d29922; }
   #info ul { margin: 0; padding: 0; list-style: none; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
-  #info li { padding: 2px 0; color: #c9d1d9; display: flex; justify-content: space-between; gap: 10px; }
+  #info li { padding: 2px 0; color: #c9d1d9; display: flex; justify-content: space-between; gap: 10px; overflow-wrap: anywhere; }
   #info li span.n { color: #6e7681; }
-  #info .hint { color: #6e7681; font-style: italic; }
-
-  /* The chosen file, at the top of the info panel. */
-  #info .chosen-file { margin: -2px 0 12px; padding: 10px 12px; border: 1px solid #1f6feb;
+  #info .hint { color: #6e7681; font-style: italic; margin: 4px 0 0; }
+  #info .filelist .tags { color: #8b91ad; font-size: 10.5px; }
+  #info .filelist .fileref { display: block; }
+  #info .filelist .sum { margin-top: 2px; color: #9aa4b2; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 11px; }
+  #info .chosen-tags { margin: 3px 0 0; font: 11px ui-monospace, Menlo, monospace; color: #7ee787; }
+  #info .chosen-sum { margin: 4px 0 0; color: #c9d1d9; font-size: 11.5px; }
+  #info .chosen-file { margin: 0 0 12px; padding: 10px 12px; border: 1px solid #1f6feb;
     border-radius: 8px; background: rgba(31,111,235,.12); }
-  #info .chosen-name { font: 600 13px ui-monospace, Menlo, monospace; color: #e6edf3; }
+  #info .chosen-name { font: 600 13px ui-monospace, Menlo, monospace; color: #e6edf3; overflow-wrap: anywhere; }
   #info .chosen-meta { margin: 2px 0 0; font-size: 11.5px; color: #9aa4b2; }
 
-  #tools { left: 14px; bottom: 14px; padding: 8px; display: flex; gap: 8px; }
-  #tools button { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 7px;
-    padding: 7px 12px; font-size: 12px; cursor: pointer; }
-  #tools button:hover { background: #30363d; }
-  #tools button.on { background: #1f6feb; border-color: #1f6feb; }
+  .label.step { padding: 1px 7px; border-radius: 10px; background: #238636; color: #fff; font: 600 11px ui-sans-serif, system-ui, sans-serif; }
+  /* A traced code path, listed in order beside the files, each step tied to its block by a thin line. */
+  #trace-lines { position: absolute; left: 0; top: 0; overflow: visible; }
+  #trace-lines path { fill: none; stroke: #8b98a8; stroke-opacity: .6; stroke-width: 1.2; }
+  #trace-lines circle { fill: #8b98a8; fill-opacity: .9; }
+  #trace-rail { position: absolute; left: 0; top: 0; margin: 0; padding: 0; list-style: none; will-change: transform; }
+  #trace-rail li { display: flex; align-items: center; gap: 6px; height: 36px; box-sizing: border-box;
+    pointer-events: auto; cursor: pointer; }
+  #trace-rail li:hover span { border-color: #8b98a8; background: rgba(33,38,45,.95); }
+  #trace-rail li.chosen span { border-color: #1f6feb; background: rgba(31,111,235,.3); }
+  #trace-rail.left li { flex-direction: row-reverse; text-align: right; }
+  #trace-rail li span { padding: 2px 6px; border-radius: 5px; background: rgba(13,17,23,.85); border: 1px solid #30363d;
+    font: 11px ui-monospace, Menlo, monospace; color: #e6edf3; white-space: nowrap; }
+  #trace-rail li small { display: block; font: 10px ui-sans-serif, system-ui, sans-serif; color: #9aa4b2; }
+  #trace-rail li b { flex: 0 0 auto; width: 18px; height: 18px; border-radius: 9px; background: #238636; color: #fff;
+    font: 600 10.5px/18px ui-sans-serif, system-ui, sans-serif; text-align: center; }
 
-  /* Bottom control bar: the layer-spread slider and the extras toggle. */
-  #controls { right: 14px; bottom: 14px; display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
-  #controls label { font-size: 12px; color: #9aa4b2; white-space: nowrap; }
-  #controls input[type="range"] { width: 150px; accent-color: #1f6feb; }
-  #controls button { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 7px;
-    padding: 7px 12px; font-size: 12px; cursor: pointer; }
-  #controls button:hover { background: #30363d; }
-  #controls button.on { background: #1f6feb; border-color: #1f6feb; }
+  #legend { flex: 0 0 auto; font-size: 12px; }
+  .swatch { display: flex; align-items: center; gap: 8px; margin: 3px 0; color: #c9d1d9; }
+  .swatch i { flex: none; width: 12px; height: 12px; border-radius: 3px; }
+  #legend .breaks { margin-top: 8px; padding-top: 8px; border-top: 1px solid #30363d; }
+  #breaks-count { color: #6e7681; }
+  #breaks-count.bad { color: #f85149; }
 
-  /* The folders panel, down the right side under the legend, sized to its list. */
-  #hierarchy { right: 14px; top: 150px; width: 300px; max-height: calc(100vh - 230px); overflow: hidden;
-    display: flex; flex-direction: column; }
+  /* The folders panel takes whatever height the right column has left, and scrolls its list. */
+  #hierarchy { flex: 0 1 auto; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
   #hierarchy-head { display: flex; align-items: center; justify-content: space-between;
     padding: 10px 14px; border-bottom: 1px solid #30363d; }
-  #hierarchy-head h3 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .7px; color: #9aa4b2; }
+  #hierarchy-head .panel-title { margin: 0; }
   #hierarchy-toggle { display: none; background: #21262d; border: 1px solid #30363d; color: #e6edf3;
     border-radius: 7px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
   #hierarchy.collapsed #hierarchy-tree { display: none; }
   #hierarchy-tree { min-height: 0; overflow: auto; padding: 8px 12px 12px; }
   .hrow { display: flex; align-items: center; gap: 8px; padding: 3px 0;
     font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #c9d1d9; cursor: pointer; }
-  .hrow input { accent-color: #1f6feb; }
+  .hrow input { flex: none; accent-color: #1f6feb; }
   .hrow span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .hrow.hidden span { color: #6e7681; text-decoration: line-through; }
 
-  /* Phones: give the scene the room, and fold the panels down to fit a narrow screen. */
+  /* The bottom bars: the view buttons on the left, the layer gap and extras on the right. */
+  .bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 8px 10px; overflow: visible; }
+  .bar button { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 7px;
+    padding: 7px 12px; font-size: 12px; cursor: pointer; }
+  .bar button:hover { background: #30363d; }
+  .bar button.on { background: #1f6feb; border-color: #1f6feb; }
+  #controls label { font-size: 12px; color: #9aa4b2; white-space: nowrap; }
+  #controls input[type="range"] { width: clamp(90px, 10vw, 150px); accent-color: #1f6feb; }
+
+  /* Narrow screens: the scene gets the room. Summary and details stack along the top,
+     the folders list folds down above the bars, and the legend drops out. */
   @media (max-width: 720px)
   {
-    #legend { display: none; }
-    #info { left: 8px; right: 8px; top: 8px; width: auto; max-height: 24vh; padding: 10px 12px; }
+    .dock { top: auto; bottom: auto; }
+    #dock-left { top: 8px; left: 8px; right: 8px; width: auto; max-height: 38vh; }
+    #info { padding: 10px 12px; }
     #info h3 { font-size: 13px; }
-    #hierarchy { left: 8px; right: 8px; top: auto; bottom: 96px; width: auto; max-height: 44vh; }
+    #legend { display: none; }
+    #codeblock { top: auto; left: 8px; right: 8px; width: auto; transform: none; bottom: 96px; max-height: 40vh; }
+    #dock-right { left: 8px; right: 8px; bottom: 104px; width: auto; max-height: 36vh; }
     #hierarchy-toggle { display: block; }
-    #tools { left: 8px; right: 8px; bottom: 52px; justify-content: center; flex-wrap: wrap; }
-    #tools button { padding: 6px 10px; font-size: 11.5px; }
-    #controls { left: 8px; right: 8px; transform: none; bottom: 8px; justify-content: center; flex-wrap: wrap; gap: 6px; }
-    #controls button { padding: 6px 9px; font-size: 11.5px; }
-    #controls input[type="range"] { flex: 1; width: auto; }
+    #dock-bottom { left: 8px; right: 8px; bottom: 8px; justify-content: center; gap: 6px; }
+    .bar { justify-content: center; gap: 6px; }
+    .bar button { padding: 6px 9px; font-size: 11.5px; }
+    #controls input[type="range"] { flex: 1; width: auto; min-width: 80px; }
   }

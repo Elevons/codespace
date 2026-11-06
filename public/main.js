@@ -6,6 +6,7 @@ import { updateLabels } from "./labels.js";
 import { select, selectFile } from "./panels.js";
 import { setSpin, refreshGraph } from "./controls.js";
 import { loadRepo } from "./repo.js";
+import "./view.js";
 /* -------------------------------------------------------- interaction ---- */
 
 // A tap picks the file or folder under it; dragging orbits, right-drag pans, and

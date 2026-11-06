@@ -24,16 +24,18 @@ function nodeIdFor(dir)
   return dir;
 }
 
-// How far a folder sits below the root, in path segments minus one.
-function depthOf(id)
-{
-  return id === "" ? 0 : id.split("/").length - 1;
-}
-
 // How a folder is named on screen; the repository root has no path of its own.
 function displayName(id)
 {
   return id === "" ? "(repo root)" : id;
+}
+
+// How a folder is named on the map: its name below the nearest folder drawn above it
+// (a merged chain reads whole, like "src/game"), else the last two path segments.
+function labelOf(n)
+{
+  if (n.id === "") return "(root)";
+  return n.name && n.name.includes("/") ? n.name : shortLabel(n.id);
 }
 
 // A short label for the map: the last two path segments, so deep folders stay legible.
@@ -74,6 +76,47 @@ function parseImports(text)
     if (match[1].startsWith(".")) specs.push(match[1]);
   }
   return specs;
+}
+// The declaration's source: from its line to the closing brace of its block, or the line itself
+// when it opens no block. A rough brace count is enough for the shapes this reads.
+function symbolBlock(lines, start)
+{
+  let depth = 0, opened = false;
+  for (let i = start; i < lines.length; i++)
+  {
+    for (const ch of lines[i])
+    {
+      if (ch === "{") { depth++; opened = true; }
+      else if (ch === "}") depth--;
+      else if (ch === ";" && !opened && depth === 0) return lines.slice(start, i + 1).join("\n");
+    }
+    if (opened && depth <= 0) return lines.slice(start, i + 1).join("\n");
+  }
+  return lines.slice(start).join("\n");
+}
+
+// The top-level functions, classes, and variables a script declares, each with its source.
+// Only lines starting at the left margin count, so declarations nested in a block stay out.
+function symbolsOf(text)
+{
+  const lines = text.split("\n");
+  const functions = [], classes = [], variables = [];
+  lines.forEach((raw, i) =>
+  {
+    if (raw === "" || /^\s/.test(raw)) return;
+    const line = raw.replace(/^export\s+(?:default\s+)?/, "");
+    let match;
+    if ((match = /^(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/.exec(line)) ||
+        (match = /^(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=(?!=)[^=]*=>/.exec(line)) ||
+        (match = /^(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?function\b/.exec(line)))
+    {
+      functions.push({ name: match[1], code: symbolBlock(lines, i) });
+      return;
+    }
+    if ((match = /^class\s+([A-Za-z_$][\w$]*)/.exec(line))) { classes.push({ name: match[1], code: symbolBlock(lines, i) }); return; }
+    if ((match = /^(?:const|let|var)\s+([A-Za-z_$][\w$]*)/.exec(line))) { variables.push({ name: match[1], code: symbolBlock(lines, i) }); return; }
+  });
+  return { functions, classes, variables };
 }
 // Reads the whole codebase through the server and turns it into nodes and edges.
 async function loadGraph()
@@ -117,6 +160,24 @@ async function loadGraph()
     node.files.push(folder ? path.slice(folder.length + 1) : path);
   }
 
+  // A folder that holds no files and one subfolder is only a hop on the way down, so it
+  // folds into that subfolder, which is then named by the whole chain below its parent.
+  function foldChains(parent)
+  {
+    parent.children = parent.children.map((child) =>
+    {
+      while (child.files.length === 0 && child.children.length === 1)
+      {
+        folderNodes.delete(child.id);
+        child = child.children[0];
+      }
+      child.name = parent.id === "" ? child.id : child.id.slice(parent.id.length + 1);
+      foldChains(child);
+      return child;
+    });
+  }
+  foldChains(root);
+
   // Read the code files for their imports; every other type is shown, not scanned.
   const codeText = new Map();
   await Promise.all(paths.filter((path) => CODE_FILE.test(path)).map((path) =>
@@ -148,6 +209,22 @@ async function loadGraph()
     }
   });
 
+  // What the architecture file says about each file (its layer, tags, and summary), and the layer order.
+  const architecture = await fetch("/api/architecture", { cache: "no-cache" })
+    .then((response) => response.ok ? response.json() : null)
+    .catch(() => null) || { layers: [], files: {}, warnings: [], error: "" };
+  const tags = new Map();
+  const layers = new Map();
+  const summaries = new Map();
+  for (const [path, entry] of Object.entries(architecture.files))
+  {
+    if (entry.tags && entry.tags.length > 0) tags.set(path, entry.tags);
+    if (entry.layer) layers.set(path, entry.layer);
+    if (entry.summary) summaries.set(path, entry.summary);
+  }
+  const layerOrder = architecture.layers.length > 0 ? architecture.layers : null;
+  const notes = architecture.error ? [architecture.error] : architecture.warnings;
+
   const nodes = Array.from(folderNodes.values());
   nodes.forEach((node) => node.files.sort());
 
@@ -157,7 +234,7 @@ async function loadGraph()
     return [parts[0], parts[1], count];
   });
 
-  return { nodes, edges, fileEdges, lines };
+  return { nodes, edges, fileEdges, lines, tags, layers, summaries, layerOrder, notes };
 }
 // The file an import names: as written, or with the extension or index file it leaves off.
 function resolveFile(resolved, known)
@@ -185,4 +262,4 @@ async function loadRepo()
   }
 }
 
-export { classifyFolder, dirOf, nodeIdFor, depthOf, displayName, shortLabel, resolveRelative, parseImports, resolveFile, loadGraph, loadRepo };
+export { displayName, labelOf, loadGraph, loadRepo, symbolsOf };

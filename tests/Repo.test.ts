@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Repo } from '../src/Repo.ts'
+import { Repo } from '../src/repo/Repo.ts'
 
 test('Repo lists readable files and refuses a path outside the repository', async () =>
 {

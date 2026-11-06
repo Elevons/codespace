@@ -1,4 +1,4 @@
-import { S, V3, scene, camera, engine, PLATE_H, DEFAULT_BETA } from "./state.js";
+import { S, V3, scene, camera, engine, DEFAULT_BETA, colorFor, materialFor } from "./state.js";
 
 let gridMesh = null;
 
@@ -34,8 +34,9 @@ function syncMeshes()
   for (const n of S.NODES)
   {
     if (n.hidden || n.cx === undefined) continue;
-    const plate = BABYLON.MeshBuilder.CreateBox("plate:" + n.id, { width: n.tileW, height: PLATE_H, depth: n.tileD }, scene);
-    plate.position.set(n.cx, n.baseY + PLATE_H / 2, n.cz);
+    const thickness = n.topY - n.baseY;
+    const plate = BABYLON.MeshBuilder.CreateBox("plate:" + n.id, { width: n.tileW, height: thickness, depth: n.tileD }, scene);
+    plate.position.set(n.cx, n.baseY + thickness / 2, n.cz);
     plate.metadata = { node: n.index, file: -1 };
     plate.enableEdgesRendering();
     plate.edgesWidth = 2.5;
@@ -43,6 +44,39 @@ function syncMeshes()
   }
 
   buildGrid();
+  buildLayerPlanes();
+}
+
+// One translucent plane per layer, stacked so each layer's files can rise to it.
+function buildLayerPlanes()
+{
+  for (const plane of S.layerPlanes) plane.dispose();
+  S.layerPlanes = [];
+  if (S.LAYERS.length === 0) return;
+  const bounds = sceneBounds();
+  const width = bounds ? bounds.max.x - bounds.min.x + 6 : 12;
+  const depth = bounds ? bounds.max.z - bounds.min.z + 6 : 12;
+  const cx = bounds ? (bounds.min.x + bounds.max.x) / 2 : 0;
+  const cz = bounds ? (bounds.min.z + bounds.max.z) / 2 : 0;
+  S.LAYERS.forEach((name, index) =>
+  {
+    const plane = BABYLON.MeshBuilder.CreateGround("layer:" + name, { width, height: depth }, scene);
+    plane.position.set(cx, index * S.layerGap, cz);
+    plane.material = materialFor("#1f7f9c", 0.08, 0.1);
+    plane.material.backFaceCulling = false;
+    plane.isPickable = false;
+    plane.metadata = { layer: name, rank: index };
+
+    // A bright outline in the layer's own colour, so the level reads even though the sheet is faint.
+    const hx = width / 2, hz = depth / 2;
+    const border = BABYLON.MeshBuilder.CreateLines("layer-border:" + name, {
+      points: [new V3(-hx, 0, -hz), new V3(hx, 0, -hz), new V3(hx, 0, hz), new V3(-hx, 0, hz), new V3(-hx, 0, -hz)],
+    }, scene);
+    border.color = BABYLON.Color3.FromHexString(colorFor(name));
+    border.parent = plane;
+    border.isPickable = false;
+    S.layerPlanes.push(plane);
+  });
 }
 
 // One file's box, starting where its terrace sits and at its terrace size.
@@ -53,6 +87,9 @@ function makeBox(path, target, size)
   mesh.scaling.copyFrom(size);
   mesh.outlineColor = BABYLON.Color3.White();
   mesh.outlineWidth = 0.04;
+  mesh.enableEdgesRendering();
+  mesh.edgesColor = new BABYLON.Color4(0.35, 0.82, 0.98, 0.4);
+  mesh.edgesWidth = 1.2;
   return mesh;
 }
 
@@ -69,12 +106,32 @@ function buildGrid()
   const cz = Math.round((bounds.min.z + bounds.max.z) / 2 / step) * step;
   const y = bounds.min.y - 0.4;
   const lines = [], colors = [];
-  const color = new BABYLON.Color4(0.55, 0.6, 0.68, 0.12);
+  const color = new BABYLON.Color4(0.32, 0.85, 1, 0.1);
   for (let offset = -half; offset <= half; offset += step)
   {
     lines.push([new V3(cx + offset, y, cz - half), new V3(cx + offset, y, cz + half)]);
     lines.push([new V3(cx - half, y, cz + offset), new V3(cx + half, y, cz + offset)]);
     colors.push([color, color], [color, color]);
+  }
+  // Spokes out from the centre, then range rings, like a sensor sweep.
+  const spokeColor = new BABYLON.Color4(0.32, 0.85, 1, 0.05);
+  for (let i = 0; i < 16; i++)
+  {
+    const angle = (i / 16) * Math.PI * 2;
+    lines.push([new V3(cx, y, cz), new V3(cx + Math.cos(angle) * half, y, cz + Math.sin(angle) * half)]);
+    colors.push([spokeColor, spokeColor]);
+  }
+  const ringColor = new BABYLON.Color4(0.4, 0.9, 1, 0.08);
+  for (const radius of [half * 0.2, half * 0.4, half * 0.6, half * 0.8, half])
+  {
+    const points = [];
+    for (let i = 0; i <= 96; i++)
+    {
+      const angle = (i / 96) * Math.PI * 2;
+      points.push(new V3(cx + Math.cos(angle) * radius, y, cz + Math.sin(angle) * radius));
+    }
+    lines.push(points);
+    colors.push(points.map(() => ringColor));
   }
   gridMesh = BABYLON.MeshBuilder.CreateLineSystem("grid", { lines, colors, useVertexAlpha: true }, scene);
   gridMesh.isPickable = false;

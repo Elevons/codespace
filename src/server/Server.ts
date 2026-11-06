@@ -1,7 +1,9 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { extname, join, normalize, resolve, sep } from 'node:path'
-import { Repo } from './Repo.ts'
+import { Api } from './Api.ts'
+import { Repo } from '../repo/Repo.ts'
+import { View } from './View.ts'
 
 /** The content type sent for each static file type. */
 const ContentTypes: Readonly<Record<string, string>> = {
@@ -25,15 +27,20 @@ export class Server
     /** The folder holding the map page and its index. */
     private readonly publicRoot: string
 
+    /** The endpoints tools use to read the architecture and change what the map shows. */
+    private readonly api: Api
+
     /**
      * Prepares one server.
      * @param repo the repository to read
      * @param publicRoot the folder holding the page and index
+     * @param api the endpoints for tools
      */
-    private constructor(repo: Repo, publicRoot: string)
+    private constructor(repo: Repo, publicRoot: string, api: Api)
     {
         this.repo = repo
         this.publicRoot = publicRoot
+        this.api = api
     }
 
     /**
@@ -46,7 +53,7 @@ export class Server
     public static async StartAsync(repoPath: string, publicRoot: string, port: number, host: string): Promise<void>
     {
         const repo = await Repo.OpenAsync(repoPath)
-        const server = new Server(repo, publicRoot)
+        const server = new Server(repo, publicRoot, new Api(repo, new View(), `http://127.0.0.1:${port}`))
 
         const http = createServer((request, response) =>
         {
@@ -60,6 +67,7 @@ export class Server
         await new Promise<void>((done) => http.listen(port, host, done))
         console.log(`Codespace reading ${repo.Name} at ${repo.Root}`)
         console.log(`Open http://localhost:${port}`)
+        console.log(`MCP for agents: http://127.0.0.1:${port}/mcp`)
         if (host === '0.0.0.0') console.log(`On the LAN, open http://<this machine>:${port}`)
     }
 
@@ -72,6 +80,8 @@ export class Server
     {
         const url = new URL(request.url ?? '/', 'http://localhost')
         const pathname = decodeURIComponent(url.pathname)
+
+        if (await this.api.HandleAsync(request, response, url)) return
 
         if (url.pathname === '/api/repo')
         {
@@ -110,7 +120,7 @@ export class Server
         try
         {
             const text = await this.repo.ReadFileAsync(path)
-            response.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' })
+            response.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' })
             response.end(text)
         }
         catch (error)
@@ -139,8 +149,8 @@ export class Server
         try
         {
             const body = await readFile(filePath)
-            const type = ContentTypes[extname(filePath).toLowerCase()] ?? 'application/octet-stream'
-            response.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-cache' })
+      const type = ContentTypes[extname(filePath).toLowerCase()] ?? 'application/octet-stream'
+      response.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' })
             response.end(body)
         }
         catch
@@ -181,6 +191,6 @@ const args = process.argv.slice(2)
 const repoArg = Server.ReadOption(args, '--repo') ?? process.env.CODESPACE_REPO ?? process.cwd()
 const port = Number(Server.ReadOption(args, '--port') ?? process.env.PORT ?? 5190)
 const host = process.env.HOST ?? '0.0.0.0'
-const publicRoot = join(import.meta.dirname, '..', 'public')
+const publicRoot = join(import.meta.dirname, '..', '..', 'public')
 
 await Server.StartAsync(repoArg, publicRoot, port, host)
