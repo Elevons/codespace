@@ -1,17 +1,25 @@
-import { S, V3, camera, render } from "./state.js";
-import { escapeHtml, filePath, select, selectFile } from "./panels.js";
+import { S, V3, camera, render, filePath } from "./state.js";
+import { escapeHtml, select, selectFile } from "./panels.js";
 import { refreshGraph, setSpin } from "./controls.js";
+import { routeTargets } from "./route.js";
+import type { FileRecord, GraphNode } from "./types.js";
 
-const panel = document.getElementById("showing");
-const body = document.getElementById("showing-body");
+/** One file a tool asks the map to show, with an optional explanation. */
+interface ShownFile { path: string; note?: string }
+/** The payload the server streams when a tool asks the map to show something. */
+interface ShownPayload { files: ShownFile[]; trace: boolean; title: string; note: string }
+
+const panel = document.getElementById("showing")!;
+const body = document.getElementById("showing-body")!;
 
 // Where each file and folder is in the node list, by path, so a path can be selected and clicked.
-let cache = { nodes: null, files: new Map(), folders: new Map() };
-function index()
+let cache: { nodes: GraphNode[] | null; files: Map<string, [number, number]>; folders: Map<string, number> } =
+  { nodes: null, files: new Map(), folders: new Map() };
+function index(): typeof cache
 {
   if (cache.nodes !== S.NODES)
   {
-    const files = new Map(), folders = new Map();
+    const files = new Map<string, [number, number]>(), folders = new Map<string, number>();
     S.NODES.forEach((n, nodeIndex) =>
     {
       folders.set(n.id, nodeIndex);
@@ -25,7 +33,7 @@ function index()
 /* ------------------------------------------------------------ showing ---- */
 
 // Lists what is shown beside the map: the heading and note, then each file, numbered when it is a route.
-function renderShowing()
+function renderShowing(): void
 {
   const shown = S.trace;
   panel.hidden = shown === null;
@@ -47,33 +55,34 @@ function renderShowing()
 
 body.addEventListener("click", (event) =>
 {
-  const link = event.target.closest("a.path");
+  const link = (event.target as HTMLElement).closest("a.path") as HTMLElement | null;
   if (!link) return;
   event.preventDefault();
-  const spot = index().files.get(link.dataset.path);
+  const spot = index().files.get(link.dataset.path!);
   if (spot) selectFile(spot[0], spot[1]);
 });
 
 // A step in the rail beside a traced path selects its file, like a click on the block.
-document.getElementById("labels").addEventListener("click", (event) =>
+document.getElementById("labels")!.addEventListener("click", (event) =>
 {
-  const row = event.target.closest("#trace-rail li[data-path]");
+  const row = (event.target as HTMLElement).closest("#trace-rail li[data-path]") as HTMLElement | null;
   if (!row) return;
-  const spot = index().files.get(row.dataset.path);
+  const spot = index().files.get(row.dataset.path!);
   if (spot) selectFile(spot[0], spot[1]);
 });
 
 // Lights up what a tool asked for, and brings the camera's aim to it.
-function show(shown)
+function show(shown: ShownPayload): void
 {
   S.trace = {
     paths: shown.files.map((file) => file.path), set: new Set(shown.files.map((file) => file.path)),
-    notes: new Map(shown.files.filter((file) => file.note).map((file) => [file.path, file.note])),
+    notes: new Map(shown.files.filter((file) => file.note).map((file) => [file.path, file.note!])),
     trace: shown.trace, title: shown.title, note: shown.note,
   };
   renderShowing();
   render();
-  const spots = S.trace.paths.map((path) => S.fileRecords.get(path)).filter(Boolean).map((rec) => rec.target);
+  routeTargets();
+  const spots = S.trace.paths.map((path) => S.fileRecords.get(path)).filter((rec): rec is FileRecord => Boolean(rec)).map((rec) => rec.target);
   if (spots.length === 0) return;
   let min = spots[0].clone(), max = spots[0].clone();
   for (const spot of spots) { min = V3.Minimize(min, spot); max = V3.Maximize(max, spot); }
@@ -81,14 +90,15 @@ function show(shown)
   S.camGoal = { target: V3.Center(min, max), radius: camera.radius };
 }
 
-function clear()
+function clear(): void
 {
   S.trace = null;
+  routeTargets();
   renderShowing();
   render();
 }
 
-document.getElementById("showing-clear").addEventListener("click", () =>
+document.getElementById("showing-clear")!.addEventListener("click", () =>
 {
   clear();
   // Tell the server too, so a page opened later does not light the files again. It may refuse, from a
@@ -97,21 +107,23 @@ document.getElementById("showing-clear").addEventListener("click", () =>
 });
 
 // Selects a file or folder and glides the camera to it.
-function focus(path)
+function focus(path: string): void
 {
   const { files, folders } = index();
-  let target = null;
+  let target: BABYLON.Vector3 | null = null;
   if (files.has(path))
   {
-    selectFile(files.get(path)[0], files.get(path)[1]);
+    const spot = files.get(path)!;
+    selectFile(spot[0], spot[1]);
     const rec = S.fileRecords.get(path);
     if (rec) target = rec.target;
   }
   else if (folders.has(path))
   {
-    select(folders.get(path));
-    const n = S.NODES[folders.get(path)];
-    if (n.cx !== undefined) target = new V3(n.cx, n.topY, n.cz);
+    const folderIndex = folders.get(path)!;
+    select(folderIndex);
+    const n = S.NODES[folderIndex];
+    if (n.cx !== undefined) target = new V3(n.cx, n.topY!, n.cz!);
   }
   if (target === null) return;
   setSpin(false);

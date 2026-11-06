@@ -1,25 +1,29 @@
 import { S, V3, scene, camera, engine, DEFAULT_BETA, colorFor, materialFor } from "./state.js";
+import type { FileRecord } from "./types.js";
 
-let gridMesh = null;
+let gridMesh: BABYLON.Mesh | null = null;
 
 // Builds, reuses, or retires each file's box so it sits on its folder's tile.
-function syncMeshes()
+function syncMeshes(): void
 {
-  const seen = new Set();
+  const seen = new Set<string>();
   for (const b of S.boxes)
   {
     seen.add(b.path);
     let rec = S.fileRecords.get(b.path);
     if (!rec)
     {
-      rec = { path: b.path, mesh: null };
+      rec = {
+        path: b.path, mesh: makeBox(b.path, b.terrace, b.terraceSize), node: b.node, file: b.file,
+        terrace: b.terrace.clone(), target: b.terrace.clone(), targetSize: b.terraceSize.clone(),
+      };
       S.fileRecords.set(b.path, rec);
     }
     rec.node = b.node;
     rec.file = b.file;
+    rec.terrace = b.terrace.clone();
     rec.target = b.terrace.clone();
     rec.targetSize = b.terraceSize.clone();
-    if (!rec.mesh) rec.mesh = makeBox(rec.path, b.terrace, b.terraceSize);
     rec.mesh.metadata = { node: b.node, file: b.file, path: b.path };
   }
   for (const [path, rec] of S.fileRecords)
@@ -34,9 +38,9 @@ function syncMeshes()
   for (const n of S.NODES)
   {
     if (n.hidden || n.cx === undefined) continue;
-    const thickness = n.topY - n.baseY;
+    const thickness = n.topY! - n.baseY!;
     const plate = BABYLON.MeshBuilder.CreateBox("plate:" + n.id, { width: n.tileW, height: thickness, depth: n.tileD }, scene);
-    plate.position.set(n.cx, n.baseY + thickness / 2, n.cz);
+    plate.position.set(n.cx, n.baseY! + thickness / 2, n.cz!);
     plate.metadata = { node: n.index, file: -1 };
     plate.enableEdgesRendering();
     plate.edgesWidth = 2.5;
@@ -48,7 +52,7 @@ function syncMeshes()
 }
 
 // One translucent plane per layer, stacked so each layer's files can rise to it.
-function buildLayerPlanes()
+function buildLayerPlanes(): void
 {
   for (const plane of S.layerPlanes) plane.dispose();
   S.layerPlanes = [];
@@ -63,7 +67,7 @@ function buildLayerPlanes()
     const plane = BABYLON.MeshBuilder.CreateGround("layer:" + name, { width, height: depth }, scene);
     plane.position.set(cx, index * S.layerGap, cz);
     plane.material = materialFor("#1f7f9c", 0.08, 0.1);
-    plane.material.backFaceCulling = false;
+    (plane.material as BABYLON.StandardMaterial).backFaceCulling = false;
     plane.isPickable = false;
     plane.metadata = { layer: name, rank: index };
 
@@ -80,7 +84,7 @@ function buildLayerPlanes()
 }
 
 // One file's box, starting where its terrace sits and at its terrace size.
-function makeBox(path, target, size)
+function makeBox(path: string, target: BABYLON.Vector3, size: BABYLON.Vector3): BABYLON.Mesh
 {
   const mesh = BABYLON.MeshBuilder.CreateBox("file:" + path, { size: 1 }, scene);
   mesh.position.copyFrom(target);
@@ -94,7 +98,7 @@ function makeBox(path, target, size)
 }
 
 // A ground grid under everything, the clearest hint of which way is up.
-function buildGrid()
+function buildGrid(): void
 {
   if (gridMesh) gridMesh.dispose();
   gridMesh = null;
@@ -105,7 +109,7 @@ function buildGrid()
   const cx = Math.round((bounds.min.x + bounds.max.x) / 2 / step) * step;
   const cz = Math.round((bounds.min.z + bounds.max.z) / 2 / step) * step;
   const y = bounds.min.y - 0.4;
-  const lines = [], colors = [];
+  const lines: BABYLON.Vector3[][] = [], colors: BABYLON.Color4[][] = [];
   const color = new BABYLON.Color4(0.32, 0.85, 1, 0.1);
   for (let offset = -half; offset <= half; offset += step)
   {
@@ -124,7 +128,7 @@ function buildGrid()
   const ringColor = new BABYLON.Color4(0.4, 0.9, 1, 0.08);
   for (const radius of [half * 0.2, half * 0.4, half * 0.6, half * 0.8, half])
   {
-    const points = [];
+    const points: BABYLON.Vector3[] = [];
     for (let i = 0; i <= 96; i++)
     {
       const angle = (i / 96) * Math.PI * 2;
@@ -138,9 +142,9 @@ function buildGrid()
 }
 
 // The box that holds every visible file at its resting spot.
-function sceneBounds()
+function sceneBounds(): { min: BABYLON.Vector3; max: BABYLON.Vector3 } | null
 {
-  let min = null, max = null;
+  let min: BABYLON.Vector3 | null = null, max: BABYLON.Vector3 | null = null;
   for (const rec of S.fileRecords.values())
   {
     const half = rec.targetSize.scale(0.5);
@@ -154,11 +158,11 @@ function sceneBounds()
     min = min ? V3.Minimize(min, info.minimumWorld) : info.minimumWorld.clone();
     max = max ? V3.Maximize(max, info.maximumWorld) : info.maximumWorld.clone();
   }
-  return min ? { min, max } : null;
+  return min ? { min, max: max! } : null;
 }
 
 // Glides the camera to frame everything; `instant` jumps there instead.
-function centerView(instant)
+function centerView(instant: boolean): void
 {
   const bounds = sceneBounds();
   if (!bounds) return;
@@ -172,7 +176,7 @@ function centerView(instant)
 }
 
 // Moves the camera's aim back to the middle, leaving how far away it is alone.
-function recenterTarget()
+function recenterTarget(): void
 {
   const bounds = sceneBounds();
   if (!bounds) return;
@@ -180,7 +184,7 @@ function recenterTarget()
 }
 
 // Steps the camera a share of the way to where it is gliding.
-function settleCamera(share)
+function settleCamera(share: number): void
 {
   if (!S.camGoal) return;
   V3.LerpToRef(camera.target, S.camGoal.target, share, camera.target);

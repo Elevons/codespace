@@ -110,6 +110,9 @@
   #trace-rail li span { padding: 2px 6px; border-radius: 5px; background: rgba(13,17,23,.85); border: 1px solid #30363d;
     font: 11px ui-monospace, Menlo, monospace; color: #e6edf3; white-space: nowrap; }
   #trace-rail li small { display: block; font: 10px ui-sans-serif, system-ui, sans-serif; color: #9aa4b2; }
+  #trace-rail li small i { font: 10px ui-monospace, Menlo, monospace; font-style: normal; }
+  .label.folder.routed { border: 1px solid currentColor; font-weight: 600; }
+  .label.folder.routed.strip { font-size: 10px; padding: 1px 5px; background: rgba(13,17,23,.6); font-weight: 500; }
   #trace-rail li b { flex: 0 0 auto; width: 18px; height: 18px; border-radius: 9px; background: #238636; color: #fff;
     font: 600 10.5px/18px ui-sans-serif, system-ui, sans-serif; text-align: center; }
 

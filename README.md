@@ -8,7 +8,11 @@ draws their folder tree and imports as a city you can orbit.
 ```sh
 npm install
 
+# Compile the browser code in public/ to JavaScript (the output is git-ignored).
+npm run build
+
 # Serve the map at http://localhost:5190, reading the repository live.
+# npm start runs the build step for you first.
 npm start -- --repo /path/to/repo
 ```
 
@@ -27,16 +31,19 @@ the same from the environment.
 - `src/server/Guard.ts` — who may change anything: this machine only.
 - `src/mcp/Mcp.ts` — the MCP server agents connect to.
 - `public/index.html` — the map page: the scene and its controls.
-- `public/main.js` — the entry: pointer interaction, the render loop, and boot.
-- `public/state.js` — the shared world: constants, the Babylon scene, and the live state.
-- `public/repo.js` — reads the live repository into nodes and edges.
-- `public/city.js` — lays out the map as a treemap: each folder a tile, each file a box of the same footprint, as tall as its line count.
-- `public/meshes.js` — builds the boxes and grid, and moves the camera.
-- `public/highlight.js`, `public/edges.js`, `public/labels.js` — the selection glow, the import strands, and the names.
-- `public/view.js` — the Showing panel, and what tools ask the map to light up or focus.
-- `public/panels.js` — the summary, info, folders, and legend panels.
-- `public/controls.js` — the buttons, the live poll, and refresh.
+- `public/main.ts` — the entry: pointer interaction, the render loop, and boot.
+- `public/state.ts` — the shared world: constants, the Babylon scene, and the live state.
+- `public/repo.ts` — reads the live repository into nodes and edges.
+- `public/city.ts` — lays out the map as a treemap: each folder a tile, each file a box of the same footprint, as tall as its line count.
+- `public/meshes.ts` — builds the boxes and grid, and moves the camera.
+- `public/highlight.ts`, `public/edges.ts`, `public/labels.ts`, `public/route.ts`, `public/pads.ts` — the selection glow, the import strands, the names, the route lane, and the layer rings.
+- `public/view.ts` — the Showing panel, and what tools ask the map to light up or focus.
+- `public/panels.ts` — the summary, info, folders, and legend panels.
+- `public/controls.ts` — the buttons, the live poll, and refresh.
 - `public/style.css` — the page styles.
+- `public/types.ts` — the shapes the page shares between its modules: the folder tree, each file's record, and what a tool asks to show.
+- `public/babylon.d.ts` — the slice of the Babylon.js global the page uses, so the browser code type-checks.
+- `tsconfig.web.json` — the compiler settings for the browser code; `npm run build` compiles `public/*.ts` to `.js` beside them.
 - `docs/review-rubric.md` — the code-health review rubric.
 - `docs/FUTURE.md` — ideas deliberately deferred, written so they can be picked up later.
 - `docs/architecture.md` — the architecture file: its fields, the tag vocabulary, and the rules for generated code.

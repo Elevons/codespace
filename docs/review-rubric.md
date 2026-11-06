@@ -142,7 +142,7 @@ Deduplicate by primary `file:line` + category.
 | Pass | Area | Scope |
 | --- | --- | --- |
 | A | Server & Repository | `src/repo/Repo.ts`, `src/server/Server.ts` |
-| B | City & visualizer | `public/app.js`, `public/index.html`, `public/style.css` |
+| B | City & visualizer | `public/*.ts`, `public/index.html`, `public/style.css` |
 | C | Tests | `tests/**` |
 | D | Cross-cutting | whole-repo dead-code/duplication sweep |
 

@@ -1,26 +1,53 @@
-import { S, V3, scene, camera, canvas, labelLayer, colorFor } from "./state.js";
+import { S, V3, scene, camera, canvas, labelLayer, colorFor, filePath } from "./state.js";
 import { labelOf } from "./repo.js";
-import { filePath } from "./panels.js";
+import { routeFolderHues, routeRuns, runLine } from "./route.js";
 
-const labelPool = [];
+/** One name, tag, or step the page wants on screen this frame. */
+interface LabelItem
+{
+  key: string;
+  text: string;
+  pos: BABYLON.Vector3;
+  cls: string;
+  caption: string;
+  priority: number;
+  color: string;
+  opacity: number;
+}
+
+/** A screen box already claimed, so names never pile up. */
+interface Box { left: number; right: number; top: number; bottom: number }
+
+const labelPool: HTMLDivElement[] = [];
 
 // What to name on screen: shallow folders and the chosen block's neighbourhood,
 // the chosen folder's files once you are close, and the file under the pointer.
 // A traced code path's files are named in the step rail instead (see updateRail).
-function collectLabels()
+function collectLabels(): LabelItem[]
 {
-  const wanted = [];
+  const wanted: LabelItem[] = [];
+  const hues = routeFolderHues();
   S.NODES.forEach((n, i) =>
   {
     if (n.hidden || n.cx === undefined) return;
-    const labelled = i === S.selected || (S.focusSet !== null && S.focusSet.has(i)) || n.level <= 1;
+    const hue = hues.get(i);
+    const labelled = hue !== undefined || i === S.selected || (S.focusSet !== null && S.focusSet.has(i)) || (n.level ?? 0) <= 1;
     if (!labelled) return;
-    const pos = new V3(n.cx, n.topY + 0.5, n.cz);
-    const dim = S.focusSet !== null && !S.focusSet.has(i);
-    wanted.push({ key: "d" + i, text: labelOf(n), pos, cls: i === S.selected ? "folder sel" : "folder",
+    const pos = new V3(n.cx, n.topY! + 0.5, n.cz!);
+    const dim = S.focusSet !== null && !S.focusSet.has(i) && hue === undefined;
+    wanted.push({ key: "d" + i, text: labelOf(n), pos, cls: i === S.selected ? "folder sel" : hue ? "folder routed" : "folder",
       caption: "",
-      priority: i === S.selected ? 2 : dim ? 5 : 3,
-      color: i === S.selected ? "" : colorFor(n.layer), opacity: dim ? 0.3 : 1 });
+      priority: i === S.selected || hue ? 2 : dim ? 5 : 3,
+      color: i === S.selected ? "" : hue || colorFor(n.layer), opacity: dim ? 0.3 : 1 });
+  });
+
+  // Each floor strip under the route's lane is named for its folder at its leading end.
+  routeRuns().forEach((run, i) =>
+  {
+    const n = S.NODES[run.node];
+    if (!n) return;
+    wanted.push({ key: "r" + i, text: labelOf(n), pos: runLine(run)[0], cls: "folder routed strip",
+      caption: "", priority: 2, color: run.hue, opacity: 1 });
   });
 
   // File names: the chosen folder's files when close up, and whatever is hovered.
@@ -35,7 +62,7 @@ function collectLabels()
     if (!named) continue;
     const pos = rec.mesh.position.clone();
     pos.y += rec.mesh.scaling.y / 2 + 0.12;
-    const name = rec.path.split("/").pop();
+    const name = rec.path.split("/").pop()!;
     const chosenFile = rec.node === S.selected && rec.file === S.selectedFile;
     const tags = S.FILE_TAGS.get(rec.path);
     wanted.push({ key: "f" + rec.path, text: name, pos,
@@ -47,9 +74,10 @@ function collectLabels()
   for (const plane of S.layerPlanes)
   {
     const info = plane.getBoundingInfo().boundingBox;
-    wanted.push({ key: "L" + plane.metadata.rank, text: "layer · " + plane.metadata.layer,
+    const meta = plane.metadata as { layer: string; rank: number };
+    wanted.push({ key: "L" + meta.rank, text: "layer · " + meta.layer,
       pos: new V3(info.minimumWorld.x, plane.position.y, info.minimumWorld.z),
-      cls: "layer", color: "", opacity: 1, priority: 0 });
+      cls: "layer", caption: "", color: "", opacity: 1, priority: 0 });
   }
   return wanted.sort((a, b) => a.priority - b.priority);
 }
@@ -60,14 +88,14 @@ function collectLabels()
 // with a leader line from each step to a numbered pin on its file's block. The rail sits
 // in the open space between the side panels, on whichever side of the files has room.
 const SVG = "http://www.w3.org/2000/svg";
-let rail = null, railSvg = null, railSignature = "";
-const feet = [];
+let rail: HTMLOListElement | null = null, railSvg: SVGSVGElement | null = null, railSignature = "";
+const feet: SVGCircleElement[] = [];
 const ROW = 36, RAIL_GAP = 70;
 
-function ensureRail()
+function ensureRail(): void
 {
   if (rail) return;
-  railSvg = document.createElementNS(SVG, "svg");
+  railSvg = document.createElementNS(SVG, "svg") as SVGSVGElement;
   railSvg.id = "trace-lines";
   labelLayer.appendChild(railSvg);
   rail = document.createElement("ol");
@@ -76,7 +104,7 @@ function ensureRail()
 }
 
 // The screen columns free of the side panels.
-function openSpan(width)
+function openSpan(width: number): [number, number]
 {
   let left = 0, right = width;
   const dockLeft = document.getElementById("dock-left"), dockRight = document.getElementById("dock-right");
@@ -88,24 +116,28 @@ function openSpan(width)
 
 // Places the rail, its leader lines, and the pins for this frame, and returns the screen
 // boxes they take so the other labels keep clear of them.
-function updateRail(width, height, transform, viewport)
+function updateRail(width: number, height: number, transform: BABYLON.Matrix, viewport: BABYLON.Viewport): Box[]
 {
   const steps = S.trace && S.trace.trace ? S.trace.paths : [];
   if (steps.length === 0)
   {
-    if (rail) { rail.style.display = "none"; railSvg.style.display = "none"; }
+    if (rail) { rail.style.display = "none"; }
+    if (railSvg) { railSvg.style.display = "none"; }
     return [];
   }
   ensureRail();
-  rail.style.display = "";
-  railSvg.style.display = "";
+  const railEl = rail!, svgEl = railSvg!;
+  railEl.style.display = "";
+  svgEl.style.display = "";
 
-  // The rows: one per step, in order.
-  const signature = steps.map((path) => path + "|" + (S.FILE_TAGS.get(path) || []).join(",")).join("\n");
+  // The rows: one per step, in order, each edged in its folder's route colour and naming that folder.
+  const hues = routeFolderHues();
+  const folderOf = (path: string): number => { const rec = S.fileRecords.get(path); return rec ? rec.node : -1; };
+  const signature = steps.map((path) => path + "|" + (S.FILE_TAGS.get(path) || []).join(",") + "|" + (hues.get(folderOf(path)) || "")).join("\n");
   if (signature !== railSignature)
   {
     railSignature = signature;
-    rail.textContent = "";
+    railEl.textContent = "";
     steps.forEach((path, i) =>
     {
       const row = document.createElement("li");
@@ -115,23 +147,29 @@ function updateRail(width, height, transform, viewport)
       badge.textContent = String(i + 1);
       row.appendChild(badge);
       const name = document.createElement("span");
-      name.textContent = path.split("/").pop();
+      name.textContent = path.split("/").pop()!;
+      const node = folderOf(path), hue = hues.get(node);
+      if (hue) name.style.borderLeft = "3px solid " + hue;
       const tags = S.FILE_TAGS.get(path);
-      if (tags)
+      const line = document.createElement("small");
+      if (node >= 0)
       {
-        const line = document.createElement("small");
-        line.textContent = tags.join(" · ");
-        name.appendChild(line);
+        const folder = document.createElement("i");
+        folder.textContent = labelOf(S.NODES[node]);
+        if (hue) folder.style.color = hue;
+        line.appendChild(folder);
       }
+      if (tags) line.appendChild(document.createTextNode((node >= 0 ? " · " : "") + tags.join(" · ")));
+      if (line.childNodes.length) name.appendChild(line);
       row.appendChild(name);
-      rail.appendChild(row);
+      railEl.appendChild(row);
     });
   }
   const chosen = S.selected >= 0 && S.selectedFile >= 0 ? filePath(S.selected, S.selectedFile) : null;
-  for (const row of rail.children) row.classList.toggle("chosen", row.dataset.path === chosen);
+  for (const row of Array.from(railEl.children) as HTMLElement[]) row.classList.toggle("chosen", row.dataset.path === chosen);
 
   // Where each traced file is on screen: the middle of its block's near face.
-  const spots = new Map();
+  const spots = new Map<string, { x: number; y: number }>();
   for (const path of new Set(steps))
   {
     const rec = S.fileRecords.get(path);
@@ -142,7 +180,7 @@ function updateRail(width, height, transform, viewport)
   }
 
   // Put the rail beside the files, on the side with room, centred on them.
-  const railWidth = rail.offsetWidth, railHeight = steps.length * ROW;
+  const railWidth = railEl.offsetWidth, railHeight = steps.length * ROW;
   const [open0, open1] = openSpan(width);
   const xs = [...spots.values()].map((s) => s.x), ys = [...spots.values()].map((s) => s.y);
   const minX = xs.length ? Math.min(...xs) : width / 2, maxX = xs.length ? Math.max(...xs) : width / 2;
@@ -153,12 +191,12 @@ function updateRail(width, height, transform, viewport)
   let railX = onRight ? maxX + RAIL_GAP : minX - RAIL_GAP - railWidth;
   railX = Math.max(open0 + 12, Math.min(open1 - 12 - railWidth, railX));
   const railY = Math.max(16, Math.min(height - 90 - railHeight, midY - railHeight / 2));
-  rail.style.transform = "translate(" + railX.toFixed(1) + "px," + railY.toFixed(1) + "px)";
-  rail.classList.toggle("left", !onRight);
+  railEl.style.transform = "translate(" + railX.toFixed(1) + "px," + railY.toFixed(1) + "px)";
+  railEl.classList.toggle("left", !onRight);
 
   // A leader line from each row's inner edge to its file's block: a short level stub, then straight on.
-  railSvg.setAttribute("width", String(width));
-  railSvg.setAttribute("height", String(height));
+  svgEl.setAttribute("width", String(width));
+  svgEl.setAttribute("height", String(height));
   let d = "";
   const edgeX = onRight ? railX : railX + railWidth, dir = onRight ? -1 : 1;
   steps.forEach((path, i) =>
@@ -170,8 +208,8 @@ function updateRail(width, height, transform, viewport)
     d += "M" + edgeX.toFixed(1) + " " + y0.toFixed(1) + "L" + stubX.toFixed(1) + " " + y0.toFixed(1) +
       "L" + spot.x.toFixed(1) + " " + spot.y.toFixed(1);
   });
-  let line = railSvg.firstChild;
-  if (!line) { line = document.createElementNS(SVG, "path"); railSvg.appendChild(line); }
+  let line = svgEl.firstChild as SVGPathElement | null;
+  if (!line) { line = document.createElementNS(SVG, "path"); svgEl.appendChild(line); }
   line.setAttribute("d", d);
 
   // A small foot where each line meets its block, like the tethers' feet on the floor.
@@ -179,7 +217,7 @@ function updateRail(width, height, transform, viewport)
   for (const spot of spots.values())
   {
     let foot = feet[used];
-    if (!foot) { foot = document.createElementNS(SVG, "circle"); foot.setAttribute("r", "3"); railSvg.appendChild(foot); feet.push(foot); }
+    if (!foot) { foot = document.createElementNS(SVG, "circle"); foot.setAttribute("r", "3"); svgEl.appendChild(foot); feet.push(foot); }
     used++;
     foot.setAttribute("cx", spot.x.toFixed(1));
     foot.setAttribute("cy", spot.y.toFixed(1));
@@ -190,7 +228,7 @@ function updateRail(width, height, transform, viewport)
 }
 
 // Places the HTML labels over the scene for this frame.
-function updateLabels()
+function updateLabels(): void
 {
   const width = canvas.clientWidth, height = canvas.clientHeight;
   const transform = scene.getTransformMatrix();
@@ -205,9 +243,9 @@ function updateLabels()
     // Try the label with its caption, nudged a little up or down if its spot is crowded;
     // failing that, the name alone; failing that, it is left off this frame.
     const nameHalf = item.text.length * (item.cls.startsWith("file") ? 3.1 : 3.5) + 6;
-    const fits = (b) => !taken.some((t) => b.left < t.right && b.right > t.left && b.top < t.bottom && b.bottom > t.top);
-    let caption = "", box = null, shift = 0;
-    const tries = [];
+    const fits = (b: Box) => !taken.some((t) => b.left < t.right && b.right > t.left && b.top < t.bottom && b.bottom > t.top);
+    let caption = "", box: Box | null = null, shift = 0;
+    const tries: [boolean, number][] = [];
     for (const withCaption of item.caption ? [true, false] : [false])
     {
       for (const dy of [0, -16, 16, -32, 32]) tries.push([withCaption, dy]);

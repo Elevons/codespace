@@ -6,7 +6,19 @@ import { updateLabels } from "./labels.js";
 import { select, selectFile } from "./panels.js";
 import { setSpin, refreshGraph } from "./controls.js";
 import { loadRepo } from "./repo.js";
+import { routeTargets } from "./route.js";
+import { syncPads } from "./pads.js";
 import "./view.js";
+
+/** What a mesh's metadata carries: which folder and file it stands for. */
+interface MeshMeta
+{
+  file: number;
+  node: number;
+  path: string;
+}
+const metaOf = (mesh: BABYLON.Mesh): MeshMeta | null => mesh.metadata as MeshMeta | null;
+
 /* -------------------------------------------------------- interaction ---- */
 
 // A tap picks the file or folder under it; dragging orbits, right-drag pans, and
@@ -23,8 +35,8 @@ scene.onPointerObservable.add((info) =>
   if (info.type === BABYLON.PointerEventTypes.POINTERMOVE)
   {
     if (event.buttons) { setSpin(false); return; }
-    const hit = scene.pick(scene.pointerX, scene.pointerY, (mesh) => mesh.isPickable && mesh.metadata && mesh.metadata.file >= 0);
-    const path = hit && hit.hit ? hit.pickedMesh.metadata.path : null;
+    const hit = scene.pick(scene.pointerX, scene.pointerY, (mesh) => { const m = metaOf(mesh); return mesh.isPickable && !!m && m.file >= 0; });
+    const path = hit && hit.hit ? metaOf(hit.pickedMesh)!.path : null;
     canvas.style.cursor = path ? "pointer" : "";
     if (path !== S.hoveredPath) { S.hoveredPath = path; render(); }
     return;
@@ -32,15 +44,15 @@ scene.onPointerObservable.add((info) =>
   if (info.type !== BABYLON.PointerEventTypes.POINTERTAP || event.button === 2) return;
 
   // A file always wins over the tile under it, so a tap lands on what it looks like it does.
-  const fileHit = scene.pick(scene.pointerX, scene.pointerY, (mesh) => mesh.metadata && mesh.metadata.file >= 0);
+  const fileHit = scene.pick(scene.pointerX, scene.pointerY, (mesh) => { const m = metaOf(mesh); return !!m && m.file >= 0; });
   if (fileHit && fileHit.hit)
   {
-    const meta = fileHit.pickedMesh.metadata;
+    const meta = metaOf(fileHit.pickedMesh)!;
     selectFile(meta.node, meta.file);
     return;
   }
-  const plateHit = scene.pick(scene.pointerX, scene.pointerY, (mesh) => mesh.metadata && mesh.metadata.file === -1);
-  select(plateHit && plateHit.hit ? plateHit.pickedMesh.metadata.node : -1);
+  const plateHit = scene.pick(scene.pointerX, scene.pointerY, (mesh) => { const m = metaOf(mesh); return !!m && m.file === -1; });
+  select(plateHit && plateHit.hit ? metaOf(plateHit.pickedMesh)!.node : -1);
 });
 
 /* --------------------------------------------------------------- frame ---- */
@@ -60,6 +72,9 @@ engine.runRenderLoop(() =>
   const share = 1 - Math.pow(0.002, seconds);
   settleCamera(share);
 
+  // A shown route lifts its files onto an arch; everyone else heads back to their terrace.
+  routeTargets();
+
   let moving = false;
   for (const rec of S.fileRecords.values())
   {
@@ -73,7 +88,7 @@ engine.runRenderLoop(() =>
   }
 
   if (S.dirty) applyHighlight();
-  if (S.dirty || moving) rebuildEdges();
+  if (S.dirty || moving) { rebuildEdges(); syncPads(); }
   S.dirty = false;
 
   loadingNote.style.display = S.NODES.length > 0 ? "none" : "";

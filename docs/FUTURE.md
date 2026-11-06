@@ -17,7 +17,7 @@ How it could work:
 - List every file that is not ignored, whatever its type, in `Repo.ListFilesAsync`.
 - Keep reading restricted to text. `IsAllowed` and `ReadFileAsync` should still refuse
   anything outside `TextExtensions`, because the source API serves what they allow.
-- The page already treats a file it cannot read as a plain box: `CODE_FILE` in `state.js`
+- The page already treats a file it cannot read as a plain box: `CODE_FILE` in `state.ts`
   decides what is fetched for line counts and imports, so other files need no special case.
 - Decide how a non-text file looks. A fixed low height and a neutral colour would do, since
   there is no line count to size it by.

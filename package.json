@@ -8,8 +8,9 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "start": "node --experimental-transform-types src/server/Server.ts",
-    "typecheck": "tsc --noEmit",
+    "start": "npm run build && node --experimental-transform-types src/server/Server.ts",
+    "build": "tsc -p tsconfig.web.json",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "node --test --experimental-transform-types tests/*.test.ts"
   },
   "devDependencies": {
