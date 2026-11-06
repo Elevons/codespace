@@ -12,17 +12,23 @@ const LocalHosts = new Set(['localhost', '127.0.0.1', '[::1]'])
 /**
  * Says why a request may not change anything, or null when it may. Reading is open, as it is
  * for the map itself; changing the view or the architecture file is for a tool or page on
- * this machine only. The server listens on the network, and a proxy such as Tailscale Serve
- * forwards from this machine, so the host name has to be local as well as the address.
+ * this machine only, unless the server was started to allow changes from anywhere. The server
+ * listens on the network, and a proxy such as Tailscale Serve forwards from this machine, so
+ * the host name has to be local as well as the address.
  * @param request the incoming request
+ * @param anywhere whether changes from any machine are allowed, as started with --allow-writes
  */
-export function RefuseWrite(request: IncomingMessage): string | null
+export function RefuseWrite(request: IncomingMessage, anywhere = false): string | null
 {
-    if (!LoopbackAddresses.has(request.socket.remoteAddress ?? '')) return 'Changes are only accepted from the machine running Codespace.'
-    const host = (request.headers.host ?? '').replace(/:\d+$/, '').toLowerCase()
-    if (!LocalHosts.has(host)) return `Changes are only accepted when Codespace is reached as localhost (this request used "${host}").`
+    if (!anywhere)
+    {
+        if (!LoopbackAddresses.has(request.socket.remoteAddress ?? '')) return 'Changes are only accepted from the machine running Codespace. Start it with --allow-writes to change that.'
+        const host = (request.headers.host ?? '').replace(/:\d+$/, '').toLowerCase()
+        if (!LocalHosts.has(host)) return `Changes are only accepted when Codespace is reached as localhost (this request used "${host}"). Start it with --allow-writes to change that.`
+    }
     const origin = request.headers.origin
-    if (origin !== undefined && new URL(origin).host !== request.headers.host) return 'Cross-site requests are refused.'
+    const target = (request.headers['x-forwarded-host'] ?? request.headers.host ?? '').toString()
+    if (origin !== undefined && new URL(origin).host !== target) return 'Cross-site requests are refused.'
     if (!(request.headers['content-type'] ?? '').startsWith('application/json')) return 'Send JSON.'
     return null
 }

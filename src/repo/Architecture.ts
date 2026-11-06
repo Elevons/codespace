@@ -28,6 +28,8 @@ export interface IArchitecture
     layers: string[]
     /** What is known about each file, by repository-relative path. */
     files: Record<string, IFileEntry>
+    /** What each folder is for, in a sentence, by repository-relative path. */
+    folders: Record<string, string>
     /** Things worth fixing in the file that did not stop it being read. */
     warnings: string[]
     /** Why the file could not be read at all, or empty. */
@@ -41,6 +43,8 @@ export interface IArchitecturePatch
     layers?: string[]
     /** Changes to individual files by path. A field set to null is removed. */
     files?: Record<string, { layer?: string | null, tags?: string[] | null, summary?: string | null }>
+    /** Changes to folder summaries by path. Null removes one. */
+    folders?: Record<string, { summary?: string | null }>
     /** Entries to move to a new path, for a file that was moved or renamed. Applied first. */
     renames?: Array<{ from: string, to: string }>
 }
@@ -67,7 +71,7 @@ export class Architecture
      */
     public static async ReadAsync(root: string, known: readonly string[]): Promise<IArchitecture>
     {
-        const result: IArchitecture = { layers: [], files: {}, warnings: [], error: '' }
+        const result: IArchitecture = { layers: [], files: {}, folders: {}, warnings: [], error: '' }
 
         // First we read the file, making sure a link cannot point it outside the repository.
         let text: string
@@ -117,6 +121,20 @@ export class Architecture
             if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) { result.warnings.push(`The entry for "${path}" should be an object.`); continue }
             result.files[path] = Architecture.ReadEntry(path, raw as Record<string, unknown>, result)
         }
+
+        // And each folder's summary, against the folders that exist.
+        const folders = Architecture.Folders(known)
+        if (typeof sections.folders === 'object' && sections.folders !== null && !Array.isArray(sections.folders))
+        {
+            for (const [path, raw] of Object.entries(sections.folders as Record<string, unknown>))
+            {
+                const summary = (raw as { summary?: unknown } | null)?.summary
+                if (!folders.has(path)) result.warnings.push(`"${path}" is not a folder in the repository; its entry is ignored.`)
+                else if (typeof summary === 'string' && summary.trim() !== '') result.folders[path] = summary.trim().slice(0, MaxSummary)
+                else result.warnings.push(`The folder "${path}" should have a summary.`)
+            }
+        }
+        else if (sections.folders !== undefined) result.warnings.push('"folders" should be an object keyed by folder path.')
         return result
     }
 
@@ -158,12 +176,18 @@ export class Architecture
         {
             if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`${ArchitecturePath} cannot be changed until it is fixed: ${(error as Error).message}`)
         }
-        const { layers: oldLayers, files: oldFiles, ...others } = raw
+        const { layers: oldLayers, files: oldFiles, folders: oldFolders, ...others } = raw
         let layers = Array.isArray(oldLayers) ? oldLayers.filter((layer): layer is string => typeof layer === 'string') : []
         const files: Record<string, Record<string, unknown>> = {}
         if (typeof oldFiles === 'object' && oldFiles !== null && !Array.isArray(oldFiles))
         {
             for (const [path, entry] of Object.entries(oldFiles)) if (typeof entry === 'object' && entry !== null && !Array.isArray(entry)) files[path] = { ...entry }
+        }
+
+        const folders: Record<string, Record<string, unknown>> = {}
+        if (typeof oldFolders === 'object' && oldFolders !== null && !Array.isArray(oldFolders))
+        {
+            for (const [path, entry] of Object.entries(oldFolders)) if (typeof entry === 'object' && entry !== null && !Array.isArray(entry)) folders[path] = { ...entry }
         }
 
         // Then we apply the change in memory, collecting every problem rather than stopping at the first.
@@ -215,12 +239,22 @@ export class Architecture
             if (Object.keys(entry).length === 0) delete files[path]
             else files[path] = entry
         }
+        const knownFolders = Architecture.Folders(known)
+        for (const [path, change] of Object.entries(patch.folders ?? {}))
+        {
+            if (!knownFolders.has(path)) { problems.push(`"${path}" is not a folder in the repository.`); continue }
+            const summary = change?.summary
+            if (summary === undefined) continue
+            if (summary === null || summary.trim() === '') delete folders[path]
+            else if (summary.length > MaxSummary) problems.push(`"${path}": summary is over ${MaxSummary} characters.`)
+            else folders[path] = { ...folders[path], summary: summary.trim() }
+        }
         if (problems.length > 0) throw new Error(problems.join('\n'))
 
         // Finally we write it whole to a temporary file and move it into place, so a reader never sees half of it.
         await mkdir(join(root, '.codespace'), { recursive: true })
         const temporary = `${target}.${process.pid}.tmp`
-        await writeFile(temporary, Architecture.Serialize(layers, files, others), 'utf8')
+        await writeFile(temporary, Architecture.Serialize(layers, files, folders, others), 'utf8')
         await rename(temporary, target)
         return { architecture: await Architecture.ReadAsync(root, known), notes }
     }
@@ -229,19 +263,36 @@ export class Architecture
      * Writes the file the way it is kept by hand: one entry per file, tags on one line.
      * @param layers the layer order
      * @param files each file's entry, by path
+     * @param folders each folder's entry, by path
      * @param others any other top-level fields the file had, which are kept
      */
-    private static Serialize(layers: readonly string[], files: Record<string, Record<string, unknown>>, others: Record<string, unknown>): string
+    private static Serialize(layers: readonly string[], files: Record<string, Record<string, unknown>>, folders: Record<string, Record<string, unknown>>, others: Record<string, unknown>): string
     {
         const order = ['layer', 'tags', 'summary']
-        const entries = Object.keys(files).sort().map((path) =>
+        const section = (entries: Record<string, Record<string, unknown>>): string =>
         {
-            const entry = files[path]!
-            const keys = [...order.filter((key) => key in entry), ...Object.keys(entry).filter((key) => !order.includes(key))]
-            return `    ${JSON.stringify(path)}: {\n${keys.map((key) => `      ${JSON.stringify(key)}: ${Architecture.Inline(entry[key])}`).join(',\n')}\n    }`
-        })
+            const lines = Object.keys(entries).sort().map((path) =>
+            {
+                const entry = entries[path]!
+                const keys = [...order.filter((key) => key in entry), ...Object.keys(entry).filter((key) => !order.includes(key))]
+                return `    ${JSON.stringify(path)}: {\n${keys.map((key) => `      ${JSON.stringify(key)}: ${Architecture.Inline(entry[key])}`).join(',\n')}\n    }`
+            })
+            return lines.length === 0 ? '{}' : `{\n${lines.join(',\n')}\n  }`
+        }
+        const folderSection = Object.keys(folders).length === 0 ? '' : `,\n  "folders": ${section(folders)}`
         const extra = Object.entries(others).map(([key, value]) => `,\n  ${JSON.stringify(key)}: ${JSON.stringify(value, null, 2).replace(/\n/g, '\n  ')}`).join('')
-        return `{\n  "layers": ${Architecture.Inline(layers)},\n  "files": ${entries.length === 0 ? '{}' : `{\n${entries.join(',\n')}\n  }`}${extra}\n}\n`
+        return `{\n  "layers": ${Architecture.Inline(layers)},\n  "files": ${section(files)}${folderSection}${extra}\n}\n`
+    }
+
+    /**
+     * Lists every folder that holds a file, at any depth. The repository root is not one.
+     * @param known every file in the repository
+     */
+    public static Folders(known: readonly string[]): Set<string>
+    {
+        const folders = new Set<string>()
+        for (const path of known) for (let cut = path.lastIndexOf('/'); cut > 0; cut = path.lastIndexOf('/', cut - 1)) folders.add(path.slice(0, cut))
+        return folders
     }
 
     /**

@@ -1,4 +1,4 @@
-import { S, V3, scene, glowMaterial, materialFor, filePath } from "./state.js";
+import { S, V3, scene, glowMaterial, materialFor, filePath, matchesTagFilter, nodeMatchesTagFilter } from "./state.js";
 import { routeFolderHues, routeRuns, runLine } from "./route.js";
 import type { FileRecord, GraphNode } from "./types.js";
 
@@ -21,12 +21,21 @@ interface Tether
   hue: string;
   routed: boolean;
   faded?: boolean;
+  lit?: boolean;
 }
 
 let edgeLines: BABYLON.Mesh | null = null;
+let tetherLines: BABYLON.Mesh | null = null;
 let edgeShapes: BABYLON.Mesh[] = [];
 let tetherShapes: BABYLON.Mesh[] = [];
 let brokenCount = 0;
+
+/** One solid strand that carries a travelling dot, so the direction of an import reads at a glance. */
+interface Flow { edge: Edge; bow: number; hex: string }
+let flowEdges: Flow[] = [];
+const flowDots: BABYLON.Mesh[] = [];
+const flowHexes: string[] = [];
+let flowTime = 0;
 
 // The point on a gentle arch from a to b, bowed upward so bundles read as strands.
 function archPoint(a: BABYLON.Vector3, b: BABYLON.Vector3, bow: number, t: number): BABYLON.Vector3
@@ -141,6 +150,8 @@ function collectEdges(): Edge[]
     let state = "normal";
     if (S.trace) state = "dim";
     else if (S.selected >= 0) state = user.index === S.selected ? "out" : used.index === S.selected ? "in" : "dim";
+    // The legend's tag filter dims every import that touches neither a matching folder.
+    if (S.tagFilter !== null && state !== "dim" && !nodeMatchesTagFilter(user.index!) && !nodeMatchesTagFilter(used.index!)) state = "dim";
     result.push({
       user: new V3(user.cx, user.topY! + 0.45, user.cz!),
       used: new V3(used.cx, used.topY! + 0.45, used.cz!),
@@ -156,8 +167,8 @@ function collectEdges(): Edge[]
   {
     const topOf = (rec: FileRecord): BABYLON.Vector3 =>
     {
-      const p = rec.mesh.position;
-      return new V3(p.x, p.y + rec.mesh.scaling.y / 2 + 0.03, p.z);
+      const p = rec.shape.position;
+      return new V3(p.x, p.y + rec.shape.scaling.y / 2 + 0.03, p.z);
     };
     for (let i = 0; i + 1 < S.trace.paths.length; i++)
     {
@@ -181,7 +192,7 @@ function collectEdges(): Edge[]
       if (!user || !used) continue;
       const broken = S.LAYERS.length > 0 ? pointsUp(from, to) : S.NODES[user.node].rank < S.NODES[used.node].rank;
       result.push({
-        user: user.mesh.position, used: used.mesh.position,
+        user: user.shape.position, used: used.shape.position,
         broken, state: from === chosen ? "out" : "in", weight: 1,
       });
     }
@@ -197,12 +208,14 @@ function collectTethers(): Tether[]
 {
   const tethers: Tether[] = [];
   const hues = routeFolderHues();
+  const active = S.trace !== null || S.focusSet !== null || S.tagFilter !== null;
   for (const rec of S.fileRecords.values())
   {
     const folder = S.NODES[rec.node];
     if (!folder || folder.topY === undefined) continue;
-    const pos = rec.mesh.position;
-    const bottomY = pos.y - rec.mesh.scaling.y / 2;
+    const lit = matchesTagFilter(rec.path) && (S.trace === null || S.trace.set.has(rec.path)) && (S.focusSet === null || S.focusSet.has(rec.node));
+    const pos = rec.shape.position;
+    const bottomY = pos.y - rec.shape.scaling.y / 2;
     const routed = S.trace !== null && S.trace.trace && S.trace.set.has(rec.path);
     if (routed && rec.terrace)
     {
@@ -211,12 +224,12 @@ function collectTethers(): Tether[]
       const points = [new V3(pos.x, bottomY, pos.z), floor];
       if (V3.Distance(floor, home) > 0.05) points.push(home);
       if (bottomY - folder.topY < 0.05 && points.length < 3) continue;
-      tethers.push({ points, hue: hues.get(rec.node) || "#8b98a8", routed: true });
+      tethers.push({ points, hue: hues.get(rec.node) || "#8b98a8", routed: true, lit: true });
       continue;
     }
     if (bottomY - folder.topY < 0.05) continue;
     tethers.push({ points: [new V3(pos.x, bottomY, pos.z), new V3(pos.x, folder.topY, pos.z)], hue: "#8b98a8",
-      routed: false, faded: S.trace !== null && S.trace.trace });
+      routed: false, faded: S.trace !== null && S.trace.trace, lit: active && lit });
   }
   return tethers;
 }
@@ -226,9 +239,10 @@ function collectTethers(): Tether[]
 function rebuildEdges(): void
 {
   if (edgeLines) edgeLines.dispose();
-  for (const shape of edgeShapes) shape.dispose();
   edgeLines = null;
+  for (const shape of edgeShapes) shape.dispose();
   edgeShapes = [];
+  flowEdges = [];
 
   const edges = collectEdges();
   brokenCount = edges.filter((edge) => edge.broken).length;
@@ -246,6 +260,7 @@ function rebuildEdges(): void
     {
       const hex = state === "trace" ? "#3fb950" : edge.broken ? "#f85149" : state === "out" ? "#58a6ff" : "#d29922";
       addStrand(edge, bow, hex, state === "trace" ? 0.04 : edge.broken && state === "normal" ? 0.035 : 0.05);
+      flowEdges.push({ edge, bow, hex });
       continue;
     }
 
@@ -269,23 +284,55 @@ function rebuildEdges(): void
   }
 
   // The tethers: a file that floats above the ground is tied straight down to its plate.
+  // They are batched into one line system, because a tube and a disc per file was the single
+  // heaviest part of a redraw on a large map. Only a routed file keeps its own tube.
+  if (tetherLines) tetherLines.dispose();
+  tetherLines = null;
   for (const shape of tetherShapes) shape.dispose();
   tetherShapes = [];
-  for (const { points, hue, routed, faded } of collectTethers())
+  const pillarLines: BABYLON.Vector3[][] = [], pillarColors: BABYLON.Color4[][] = [];
+  const FOOT_SEGMENTS = 10;
+  for (const { points, hue, routed, faded, lit } of collectTethers())
   {
-    const tube = BABYLON.MeshBuilder.CreateTube("tether", { path: points, radius: routed ? 0.036 : 0.028, tessellation: 5 }, scene);
-    tube.material = materialFor(hue, routed ? 0.85 : faded ? 0.12 : 0.6, routed ? 0.5 : 0.15);
-    tube.isPickable = false;
-    tetherShapes.push(tube);
+    if (routed)
+    {
+      const tube = BABYLON.MeshBuilder.CreateTube("tether", { path: points, radius: 0.036, tessellation: 5 }, scene);
+      tube.material = materialFor(hue, 0.85, 0.5);
+      tube.isPickable = false;
+      tetherShapes.push(tube);
 
-    // A small flat circle where the pillar meets the floor: for a routed file, the spot it came from.
-    const foot = points[points.length - 1];
-    const disc = BABYLON.MeshBuilder.CreateDisc("tether-foot", { radius: routed ? 0.16 : 0.11, tessellation: 20, sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene);
-    disc.rotation.x = Math.PI / 2;
-    disc.position.set(foot.x, foot.y + 0.006, foot.z);
-    disc.material = materialFor(hue, routed ? 0.95 : faded ? 0.15 : 0.9, routed ? 0.6 : 0.3);
-    disc.isPickable = false;
-    tetherShapes.push(disc);
+      const foot = points[points.length - 1];
+      const disc = BABYLON.MeshBuilder.CreateDisc("tether-foot", { radius: 0.16, tessellation: 16, sideOrientation: BABYLON.Mesh.DOUBLESIDE }, scene);
+      disc.rotation.x = Math.PI / 2;
+      disc.position.set(foot.x, foot.y + 0.006, foot.z);
+      disc.material = materialFor(hue, 0.95, 0.6);
+      disc.isPickable = false;
+      tetherShapes.push(disc);
+      continue;
+    }
+
+    const alpha = faded ? 0.12 : lit ? 0.6 : 0.1;
+    const shade = new BABYLON.Color4(0.55, 0.64, 0.75, alpha);
+    pillarLines.push(points);
+    pillarColors.push(points.map(() => shade));
+    // A thin ring where the pillar meets the floor, only for the files bright enough to read.
+    if (lit && !faded)
+    {
+      const foot = points[points.length - 1];
+      const ring: BABYLON.Vector3[] = [];
+      for (let i = 0; i <= FOOT_SEGMENTS; i++)
+      {
+        const angle = (i / FOOT_SEGMENTS) * Math.PI * 2;
+        ring.push(new V3(foot.x + Math.cos(angle) * 0.11, foot.y + 0.006, foot.z + Math.sin(angle) * 0.11));
+      }
+      pillarLines.push(ring);
+      pillarColors.push(ring.map(() => new BABYLON.Color4(0.55, 0.64, 0.75, Math.min(1, alpha * 1.6))));
+    }
+  }
+  if (pillarLines.length > 0)
+  {
+    tetherLines = BABYLON.MeshBuilder.CreateLineSystem("tethers", { lines: pillarLines, colors: pillarColors, useVertexAlpha: true }, scene);
+    tetherLines.isPickable = false;
   }
 
   // Under the route's lane, a strip on the floor for each run of steps from one folder, in that
@@ -350,6 +397,31 @@ function updateBreaks(): void
     ? "none — every import points down"
     : brokenCount + " import" + (brokenCount === 1 ? "" : "s") + " pointing up";
   note.classList.toggle("bad", brokenCount > 0);
+}
+
+// Moves one small dot along each solid strand, from the imported side to the side that uses it,
+// so an import's direction reads even before you notice the arrowhead.
+export function updateFlow(seconds: number): void
+{
+  flowTime += seconds;
+  const used = Math.min(flowEdges.length, 64);
+  for (let i = 0; i < used; i++)
+  {
+    const { edge, bow, hex } = flowEdges[i];
+    let dot = flowDots[i];
+    if (!dot)
+    {
+      dot = BABYLON.MeshBuilder.CreateSphere("flow", { diameter: 0.14, segments: 6 }, scene);
+      dot.isPickable = false;
+      flowDots.push(dot);
+    }
+    if (flowHexes[i] !== hex) { dot.material = glowMaterial(hex); flowHexes[i] = hex; }
+    const speed = 0.22 + 0.015 * Math.min(20, V3.Distance(edge.used, edge.user));
+    const t = (flowTime * speed + i * 0.137) % 1;
+    dot.position.copyFrom(edgePoint(edge, bow, t));
+    dot.isVisible = true;
+  }
+  for (let i = used; i < flowDots.length; i++) flowDots[i].isVisible = false;
 }
 
 export { rebuildEdges };

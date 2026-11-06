@@ -70,11 +70,25 @@ export interface Box
     terraceSize: BABYLON.Vector3;
 }
 
-/** One file's live record: its mesh and where it is gliding to. */
+/** Where one file's box stands and how big it is this frame. */
+export interface Shape
+{
+    position: BABYLON.Vector3;
+    scaling: BABYLON.Vector3;
+}
+
+/** One file's live record: its box and where it is gliding to. */
 export interface FileRecord
 {
     path: string;
-    mesh: BABYLON.Mesh;
+    /** The box as it stands this frame; drawn by its batch slot, or by `accent` when it has one. */
+    shape: Shape;
+    /** The file's copy in the batched boxes. */
+    slot: number;
+    /** Whether the file is drawn bright, or faded behind the current choice. */
+    lit: boolean;
+    /** A mesh of its own, lent while the file is chosen, hovered, or on a shown route. */
+    accent: BABYLON.Mesh | null;
     node: number;
     file: number;
     /** Where the file rests on its terrace. */
@@ -83,7 +97,12 @@ export interface FileRecord
     target: BABYLON.Vector3;
     /** The size the file is gliding to this frame. */
     targetSize: BABYLON.Vector3;
+    /** Seconds left before the box starts growing in, so a fresh map builds itself in. */
+    delay?: number;
 }
+
+/** What the map colours files by: their role, layer, folder, size, or recent changes. */
+export type ColorBy = "tag" | "layer" | "folder" | "size" | "changes";
 
 /** What the map is asked to show: the files, their notes, and whether it is a numbered route. */
 export interface Trace
@@ -114,6 +133,8 @@ export interface Graph
     tags: Map<string, string[]>;
     layers: Map<string, string>;
     summaries: Map<string, string>;
+    symbols: Map<string, string[]>;
+    changes: Map<string, number>;
     layerOrder: string[] | null;
     notes: string[];
 }

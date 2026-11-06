@@ -1,4 +1,4 @@
-import { S, V3, camera, render, filePath } from "./state.js";
+import { S, V3, camera, renderEdges, filePath } from "./state.js";
 import { escapeHtml, select, selectFile } from "./panels.js";
 import { refreshGraph, setSpin } from "./controls.js";
 import { routeTargets } from "./route.js";
@@ -80,7 +80,7 @@ function show(shown: ShownPayload): void
     trace: shown.trace, title: shown.title, note: shown.note,
   };
   renderShowing();
-  render();
+  renderEdges();
   routeTargets();
   const spots = S.trace.paths.map((path) => S.fileRecords.get(path)).filter((rec): rec is FileRecord => Boolean(rec)).map((rec) => rec.target);
   if (spots.length === 0) return;
@@ -95,7 +95,7 @@ function clear(): void
   S.trace = null;
   routeTargets();
   renderShowing();
-  render();
+  renderEdges();
 }
 
 document.getElementById("showing-clear")!.addEventListener("click", () =>
@@ -141,7 +141,8 @@ events.onmessage = (message) =>
   if (event.type === "show") show(event.shown);
   else if (event.type === "clear") clear();
   else if (event.type === "focus") focus(event.path);
-  else if (event.type === "architecture") { S.graphSignature = ""; refreshGraph().then(renderShowing); }
+  else if (event.type === "architecture") { S.graphSignature = ""; refreshGraph().then(renderShowing); window.dispatchEvent(new Event("codespace:architecture")); }
+  else if (event.type === "repo") location.reload();
 };
 
 // A redraw can change which files exist, so refresh the list's links too.

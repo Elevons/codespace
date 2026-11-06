@@ -67,8 +67,15 @@ declare namespace BABYLON
         toGlobal(width: number, height: number): Viewport;
     }
 
+    class Ray
+    {
+        origin: Vector3;
+        direction: Vector3;
+    }
+
     class Node
     {
+        name: string;
         position: Vector3;
         scaling: Vector3;
         rotation: Vector3;
@@ -76,6 +83,9 @@ declare namespace BABYLON
         parent: Node | null;
         metadata: unknown;
         material: Material | null;
+        isVisible: boolean;
+        isEnabled: boolean;
+        setEnabled(value: boolean): void;
         dispose(): void;
         clone(name: string): Node;
     }
@@ -91,8 +101,14 @@ declare namespace BABYLON
         color: Color3;
         alpha: number;
         static DOUBLESIDE: number;
+        static MergeMeshes(meshes: Mesh[], disposeSource?: boolean, allow32BitsIndices?: boolean): Mesh | null;
         enableEdgesRendering(): void;
         getBoundingInfo(): { boundingBox: { minimumWorld: Vector3; maximumWorld: Vector3 } };
+        alwaysSelectAsActiveMesh: boolean;
+        doNotSyncBoundingInfo: boolean;
+        thinInstanceCount: number;
+        thinInstanceSetBuffer(kind: string, buffer: Float32Array | null, stride?: number, staticBuffer?: boolean): void;
+        thinInstanceBufferUpdated(kind: string): void;
     }
 
     class Material
@@ -116,12 +132,14 @@ declare namespace BABYLON
         resize(): void;
         runRenderLoop(callback: () => void): void;
         getAspectRatio(camera: Camera): number;
+        setHardwareScalingLevel(level: number): void;
     }
 
     class Camera
     {
         fov: number;
         radius: number;
+        position: Vector3;
         viewport: Viewport;
     }
 
@@ -144,6 +162,14 @@ declare namespace BABYLON
         attachControl(element: HTMLElement, noPreventDefault?: boolean): void;
     }
 
+    class GlowLayer
+    {
+        constructor(name: string, scene: Scene, options?: Record<string, unknown>);
+        intensity: number;
+        isEnabled: boolean;
+        addExcludedMesh(mesh: Mesh): void;
+    }
+
     class HemisphericLight
     {
         constructor(name: string, direction: Vector3, scene: Scene);
@@ -163,6 +189,7 @@ declare namespace BABYLON
         onPointerObservable: { add(callback: (info: PointerInfo) => void): void };
         static FOGMODE_EXP2: number;
         pick(x: number, y: number, predicate?: (mesh: Mesh) => boolean): PickingInfo;
+        createPickingRay(x: number, y: number, world: Matrix, camera: Camera): Ray;
         render(): void;
         getTransformMatrix(): Matrix;
     }
@@ -190,6 +217,7 @@ declare namespace BABYLON
     class MeshBuilder
     {
         static CreateBox(name: string, options: Record<string, unknown>, scene: Scene): Mesh;
+        static CreateSphere(name: string, options: Record<string, unknown>, scene: Scene): Mesh;
         static CreateGround(name: string, options: Record<string, unknown>, scene: Scene): Mesh;
         static CreateDisc(name: string, options: Record<string, unknown>, scene: Scene): Mesh;
         static CreateTorus(name: string, options: Record<string, unknown>, scene: Scene): Mesh;

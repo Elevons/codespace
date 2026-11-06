@@ -20,6 +20,12 @@
 </div>
 
 <div class="dock" id="dock-left">
+  <section class="panel" id="searchbar">
+    <label class="sr-only" for="search">Find a file or symbol</label>
+    <input id="search" type="search" placeholder="Find a file or symbol" autocomplete="off" spellcheck="false">
+    <kbd id="search-key">/</kbd>
+    <ol id="search-results" hidden></ol>
+  </section>
   <section class="panel" id="showing" hidden>
     <div id="showing-head">
       <h2 class="panel-title">Showing</h2>
@@ -39,6 +45,7 @@
     <div id="legend-items"></div>
     <div class="breaks"><div class="swatch"><i style="background:#f85149"></i>layer breaks</div>
     <div id="breaks-count">—</div></div>
+    <button id="tag-filter" type="button" hidden></button>
   </section>
   <section class="panel" id="hierarchy">
     <div id="hierarchy-head">
@@ -51,16 +58,68 @@
 
 <div id="dock-bottom">
   <div class="panel bar" id="tools">
+    <button id="repo" type="button" title="Change the repository the map reads">Repo: …</button>
     <button id="spin" class="on">Spin: on</button>
     <button id="reset">Reset view</button>
     <button id="refresh">Refresh</button>
     <button id="live" class="on">Live: on</button>
+    <button id="help-btn" type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
   </div>
   <div class="panel bar" id="controls">
+    <label for="colorby">Colour</label>
+    <select id="colorby">
+      <option value="tag">Tags</option>
+      <option value="layer">Layers</option>
+      <option value="folder">Folders</option>
+      <option value="size">Size</option>
+      <option value="changes">Changes</option>
+    </select>
     <label for="spread">Layer gap</label>
     <input id="spread" type="range" min="0.3" max="6" step="0.1" value="1.2">
+    <button id="glow" class="on" title="Bloom, the only post-processing pass">Glow: on</button>
     <button id="tests" title="Tests, docs, scripts, assets, and loose top-level files">Extras: hidden</button>
+    <button id="ingested" class="on" title="Hide files that have no summary yet, so a partly described repository draws only what is known">Undescribed: hidden</button>
   </div>
+</div>
+
+<div class="panel" id="repo-panel" hidden>
+  <h2 class="panel-title">Repository</h2>
+  <form id="repo-form">
+    <label class="sr-only" for="repo-path">Folder to open</label>
+    <input id="repo-path" type="text" placeholder="/path/to/repo" autocomplete="off" spellcheck="false">
+    <button type="submit">Open</button>
+  </form>
+  <p class="hint" id="repo-error" hidden></p>
+  <div id="repo-browse">
+    <div id="repo-browse-head">
+      <button id="repo-up" type="button" title="The folder above">Up</button>
+      <p class="hint" id="repo-browse-path"></p>
+    </div>
+    <div id="repo-browse-list"></div>
+  </div>
+  <div id="repo-ingest" hidden>
+    <div>
+      <p id="repo-ingest-note"></p>
+      <p class="hint" id="repo-ingest-saved">Your agent saves to .codespace/architecture.json as it goes.</p>
+    </div>
+    <button id="repo-ingest-copy" type="button" title="Copy the prompt to give your agent">Copy agent prompt</button>
+  </div>
+  <textarea id="repo-prompt" class="hint" readonly hidden></textarea>
+  <div id="repo-recent"></div>
+</div>
+
+<div class="panel" id="help" hidden>
+  <h2 class="panel-title">Keys</h2>
+  <dl>
+    <dt><kbd>/</kbd> <kbd>Ctrl</kbd><kbd>K</kbd></dt><dd>find a file or symbol</dd>
+    <dt><kbd>Space</kbd></dt><dd>spin the map</dd>
+    <dt><kbd>F</kbd></dt><dd>frame the chosen block</dd>
+    <dt><kbd>[</kbd> <kbd>]</kbd></dt><dd>step through the folder's files</dd>
+    <dt><kbd>R</kbd></dt><dd>reset the view</dd>
+    <dt><kbd>Esc</kbd></dt><dd>clear the choice and filters</dd>
+    <dt>drag</dt><dd>orbit · right-drag to pan · wheel to zoom</dd>
+  </dl>
+  <p class="hint">Click a tag in the legend to filter the map to it.</p>
 </div>
 
 <script src="https://cdn.babylonjs.com/v9.31.3/babylon.js"></script>

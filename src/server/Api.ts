@@ -1,10 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { Architecture, type IArchitecturePatch } from '../repo/Architecture.ts'
 import { Graph } from '../repo/Graph.ts'
+import { StatusAsync } from '../repo/Ingest.ts'
+import { PromptFor } from '../cli/Cli.ts'
 import { ReadJsonAsync, RefuseWrite } from './Guard.ts'
-import { CreateTools, HttpCall, Respond, type IRpcMessage, type ITool } from '../mcp/McpTools.ts'
-import type { Repo } from '../repo/Repo.ts'
 import type { IShownFile, View } from './View.ts'
+import type { Workspace } from './Workspace.ts'
 
 /** The most files one show request may name. */
 const MaxShown = 60
@@ -18,25 +19,31 @@ const MaxNote = 1500
 export class Api
 {
     /** The repository being mapped. */
-    private readonly repo: Repo
+    private readonly workspace: Workspace
 
     /** What the map is showing, and the pages watching it. */
     private readonly view: View
 
-    /** The MCP tools, which reach these same endpoints over loopback. */
-    private readonly tools: readonly ITool[]
+
+    /** Whether changes are accepted from any machine, as started with --allow-writes. */
+    private readonly allowWrites: boolean
+
+    /** Where the ingest CLI lives, so the page can copy commands that work. */
+    private readonly cli: string
 
     /**
      * Prepares the endpoints.
-     * @param repo the repository being mapped
+     * @param workspace the repository being mapped
      * @param view what the map is showing
-     * @param baseUrl where this server can be reached from the machine it runs on, for the MCP tools
+     * @param allowWrites whether changes are accepted from any machine, as started with --allow-writes
+     * @param cli the absolute path of the ingest CLI
      */
-    public constructor(repo: Repo, view: View, baseUrl: string)
+    public constructor(workspace: Workspace, allowWrites = false, cli = 'src/cli/Cli.ts')
     {
-        this.repo = repo
-        this.view = view
-        this.tools = CreateTools(HttpCall(baseUrl, 'Codespace could not reach itself.'))
+        this.workspace = workspace
+        this.allowWrites = allowWrites
+        this.cli = cli
+        this.view = workspace.view
     }
 
     /**
@@ -53,19 +60,27 @@ export class Api
 
         if (path === '/api/architecture' && reading)
         {
-            Api.SendJson(response, 200, await Architecture.ReadAsync(this.repo.Root, await this.repo.ListFilesAsync()))
+            const repo = this.workspace.repo
+            Api.SendJson(response, 200, await Architecture.ReadAsync(repo.Root, await repo.ListFilesAsync()))
         }
         else if (path === '/api/graph' && reading)
         {
-            const graph = await Graph.BuildAsync(this.repo)
+            const graph = await Graph.BuildAsync(this.workspace.repo)
             Api.SendJson(response, 200, { edges: graph.Edges(url.searchParams.get('folder') ?? '') })
         }
-        else if (path === '/mcp') await this.HandleMcpAsync(request, response)
+        else if (path === '/api/ingest/status' && reading)
+        {
+            const repo = this.workspace.repo
+            Api.SendJson(response, 200, {
+                ...await StatusAsync(repo, await Architecture.ReadAsync(repo.Root, await repo.ListFilesAsync())),
+                prompt: PromptFor(this.cli, repo.Root),
+            })
+        }
         else if (path === '/api/view' && reading) Api.SendJson(response, 200, { shown: this.view.Shown })
         else if (path === '/api/view/events' && reading) this.view.Subscribe(response)
         else if ((path === '/api/architecture' || path === '/api/view') && request.method === 'POST')
         {
-            const refusal = RefuseWrite(request)
+            const refusal = RefuseWrite(request, this.allowWrites)
             if (refusal !== null) { Api.SendJson(response, 403, { error: refusal }); return true }
             let body: Record<string, unknown>
             try { body = await ReadJsonAsync(request) }
@@ -82,38 +97,14 @@ export class Api
     }
 
     /**
-     * Speaks MCP over HTTP, so an agent can use the tools with nothing to start but this server.
-     * Each POST carries one JSON-RPC message and gets its answer back as JSON.
-     * @param request the incoming request
-     * @param response the response to write
-     */
-    private async HandleMcpAsync(request: IncomingMessage, response: ServerResponse): Promise<void>
-    {
-        if (request.method !== 'POST')
-        {
-            response.writeHead(405, { Allow: 'POST', 'Content-Type': 'application/json; charset=utf-8' })
-            response.end(JSON.stringify({ error: 'The MCP endpoint takes POSTs of JSON-RPC messages.' }))
-            return
-        }
-        // The tools can change the architecture file, so this is held to the same rule as any change.
-        const refusal = RefuseWrite(request)
-        if (refusal !== null) { Api.SendJson(response, 403, { error: refusal }); return }
-        let message: IRpcMessage
-        try { message = await ReadJsonAsync(request) as IRpcMessage }
-        catch { Api.SendJson(response, 400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }); return }
-        const reply = await Respond(message, this.tools)
-        if (reply === null) { response.writeHead(202); response.end() }
-        else Api.SendJson(response, 200, reply)
-    }
-
-    /**
      * Changes the architecture file, and tells the pages to read it again.
      * @param response the response to write
      * @param body the change, as sent
      */
     private async UpdateArchitectureAsync(response: ServerResponse, body: Record<string, unknown>): Promise<void>
     {
-        const updated = await Architecture.UpdateAsync(this.repo.Root, await this.repo.ListFilesAsync(), body as IArchitecturePatch)
+        const repo = this.workspace.repo
+        const updated = await Architecture.UpdateAsync(repo.Root, await repo.ListFilesAsync(), body as IArchitecturePatch)
         this.view.ArchitectureChanged()
         Api.SendJson(response, 200, updated)
     }
@@ -125,7 +116,7 @@ export class Api
      */
     private async ChangeViewAsync(response: ServerResponse, body: Record<string, unknown>): Promise<void>
     {
-        const known = new Set(await this.repo.ListFilesAsync())
+        const known = new Set(await this.workspace.repo.ListFilesAsync())
 
         if (body.action === 'clear')
         {

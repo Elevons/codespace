@@ -6,8 +6,8 @@ import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Api } from '../src/server/Api.ts'
-import { Repo } from '../src/repo/Repo.ts'
 import { View } from '../src/server/View.ts'
+import { Workspace } from '../src/server/Workspace.ts'
 
 /** Starts the endpoints over a small repository and returns a way to call them. */
 async function start(): Promise<{ root: string, view: View, port: number, stop: () => Promise<void> }>
@@ -18,8 +18,8 @@ async function start(): Promise<{ root: string, view: View, port: number, stop: 
     await writeFile(join(root, 'src', 'b.ts'), 'export const b = 1\n')
     await mkdir(join(root, '.codespace'))
     await writeFile(join(root, '.codespace', 'architecture.json'), JSON.stringify({ layers: ['base', 'ui'], files: { 'src/a.ts': { layer: 'base' }, 'src/b.ts': { layer: 'ui' } } }))
-    const repo = await Repo.OpenAsync(root)
-    const view = new View()
+    const workspace = await Workspace.OpenAsync(root)
+    const view = workspace.view
     let api: Api
     const server: Server = createServer((req, res) =>
     {
@@ -27,8 +27,7 @@ async function start(): Promise<{ root: string, view: View, port: number, stop: 
     })
     await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
     const port = (server.address() as AddressInfo).port
-    // The API reaches its own MCP tools over loopback, so it needs the port it ended up on.
-    api = new Api(repo, view, `http://127.0.0.1:${port}`)
+    api = new Api(workspace)
     return { root, view, port, stop: () => new Promise((done) => { server.closeAllConnections(); server.close(() => done()) }) }
 }
 
@@ -146,29 +145,3 @@ test('Changing the architecture tells watching pages to read it again', async ()
     finally { await stop(); await rm(root, { recursive: true, force: true }) }
 })
 
-test('MCP is served from the main server, over HTTP, with nothing else running', async () =>
-{
-    const { root, port, stop } = await start()
-    try
-    {
-        const hello = await send(port, 'POST', '/mcp', { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '0' } } })
-        assert.equal(hello.status, 200)
-        assert.equal(hello.body.result.serverInfo.name, 'codespace')
-
-        const listed = await send(port, 'POST', '/mcp', { jsonrpc: '2.0', id: 2, method: 'tools/list' })
-        assert.ok(listed.body.result.tools.some((tool: { name: string }) => tool.name === 'update_architecture'))
-
-        // The tools reach the same endpoints over loopback, so a change made through MCP lands.
-        const moved = await send(port, 'POST', '/mcp', { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'update_architecture', arguments: { files: { 'src/b.ts': { layer: 'base' } } } } })
-        assert.equal(moved.body.result.isError, undefined)
-        assert.equal((await send(port, 'GET', '/api/architecture')).body.files['src/b.ts'].layer, 'base')
-
-        // A notification gets no answer.
-        const notified = await send(port, 'POST', '/mcp', { jsonrpc: '2.0', method: 'notifications/initialized' })
-        assert.equal(notified.status, 202)
-
-        assert.equal((await send(port, 'GET', '/mcp')).status, 405)
-        assert.equal((await send(port, 'POST', '/mcp', { jsonrpc: '2.0', id: 4, method: 'initialize' }, { Host: 'example.com' })).status, 403)
-    }
-    finally { await stop(); await rm(root, { recursive: true, force: true }) }
-})

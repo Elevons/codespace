@@ -13,13 +13,22 @@ export interface RouteRun
 // order, each block held at its own layer's height. The lane sits outside the city's footprint, so
 // every block's straight floor strand drops through empty space instead of an unrelated block.
 // Files outside the route (and the map when no route is shown) rest back on their own terrace.
+// Whether the last frame lifted files onto the route lane, so a settled map can skip this work.
+let lifted = false;
+
 function routeTargets(): void
 {
-  for (const rec of S.fileRecords.values()) rec.target.copyFrom(rec.terrace);
-
   const trace = S.trace;
-  if (!trace || !trace.trace || trace.paths.length < 2) return;
-  const recs = trace.paths.map((path) => S.fileRecords.get(path)).filter((rec): rec is FileRecord => Boolean(rec));
+  const lifting = trace !== null && trace.trace && trace.paths.length >= 2;
+
+  // With no route shown, and none shown last frame, every file is already home.
+  if (!lifting && !lifted) return;
+  lifted = lifting;
+
+  for (const rec of S.fileRecords.values()) rec.target.copyFrom(rec.terrace);
+  if (!lifting) return;
+
+  const recs = trace!.paths.map((path) => S.fileRecords.get(path)).filter((rec): rec is FileRecord => Boolean(rec));
   if (recs.length < 2) return;
 
   // The plan's middle and its front edge, read from every file's resting spot.
@@ -95,7 +104,7 @@ function runLine(run: RouteRun): BABYLON.Vector3[]
 {
   const folder = S.NODES[run.node];
   const y = (folder && folder.topY !== undefined ? folder.topY : 0) + 0.012;
-  const points = run.recs.map((rec) => new V3(rec.mesh.position.x, y, rec.mesh.position.z));
+  const points = run.recs.map((rec) => new V3(rec.shape.position.x, y, rec.shape.position.z));
   const first = points[0], last = points[points.length - 1];
   const along = points.length > 1 ? last.subtract(first) : new V3(1, 0, 0);
   if (along.lengthSquared() < 1e-6) along.set(1, 0, 0);

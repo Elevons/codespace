@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readdir, readFile, realpath, stat } from 'node:fs/promises'
 import { extname, join, relative, resolve, sep } from 'node:path'
 
@@ -45,7 +46,14 @@ function globToRegExp(glob: string): RegExp
         const ch = glob[index]!
         if (ch === '*')
         {
-            if (glob[index + 1] === '*') { out += '.*'; index++ }
+            if (glob[index + 1] === '*')
+            {
+                // A double star spans folders. "**/" matches zero or more of them, as git
+                // rules do, so a bare child like "dev/node_modules" still matches the
+                // pattern "dev/**/node_modules" and its whole subtree is skipped.
+                if (glob[index + 2] === '/') { out += '(?:.*/)?'; index += 2 }
+                else { out += '.*'; index++ }
+            }
             else out += '[^/]*'
         }
         else if (ch === '?') out += '[^/]'
@@ -126,6 +134,30 @@ export class Repo
         await this.CollectAsync(this.Root, '', files)
         files.sort()
         return files
+    }
+
+    /**
+     * A cheap change stamp for the whole repository: a hash of its file list and each file's
+     * size and modification time. Reading this costs a stat per file, not a read, so a page
+     * that polls can tell nothing has changed and skip reading every source file again.
+     */
+    public async FingerprintAsync(): Promise<string>
+    {
+        const files = await this.ListFilesAsync()
+        const stamps = await Promise.all(files.map(async (file) =>
+        {
+            try
+            {
+                const info = await stat(join(this.Root, file))
+                return `${file}:${info.size}:${info.mtimeMs}`
+            }
+            catch
+            {
+                // A file that vanished mid-walk changes the list on the next poll.
+                return `${file}:gone`
+            }
+        }))
+        return createHash('sha1').update(stamps.join('\n')).digest('hex')
     }
 
     /**

@@ -1,10 +1,11 @@
-import { CODE_FILE } from "./state.js";
+import { CODE_FILE, S } from "./state.js";
 import type { Graph, GraphNode } from "./types.js";
 
-/** One declaration a source file lists: its name and the source it spans. */
+/** One declaration a source file lists: its name, the line it starts on, and the source it spans. */
 export interface SymbolInfo
 {
   name: string;
+  line: number;
   code: string;
 }
 
@@ -119,21 +120,33 @@ function symbolsOf(text: string): { functions: SymbolInfo[]; classes: SymbolInfo
         (match = /^(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=(?!=)[^=]*=>/.exec(line)) ||
         (match = /^(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?function\b/.exec(line)))
     {
-      functions.push({ name: match[1], code: symbolBlock(lines, i) });
+      functions.push({ name: match[1], line: i + 1, code: symbolBlock(lines, i) });
       return;
     }
-    if ((match = /^class\s+([A-Za-z_$][\w$]*)/.exec(line))) { classes.push({ name: match[1], code: symbolBlock(lines, i) }); return; }
-    if ((match = /^(?:const|let|var)\s+([A-Za-z_$][\w$]*)/.exec(line))) { variables.push({ name: match[1], code: symbolBlock(lines, i) }); return; }
+    if ((match = /^class\s+([A-Za-z_$][\w$]*)/.exec(line))) { classes.push({ name: match[1], line: i + 1, code: symbolBlock(lines, i) }); return; }
+    if ((match = /^(?:const|let|var)\s+([A-Za-z_$][\w$]*)/.exec(line))) { variables.push({ name: match[1], line: i + 1, code: symbolBlock(lines, i) }); return; }
   });
   return { functions, classes, variables };
 }
 // Reads the whole codebase through the server and turns it into nodes and edges.
 async function loadGraph(): Promise<Graph>
 {
+  // The architecture file is read first: it decides what the map draws, and a big repository
+  // draws far faster when the files nobody has described yet are left out.
+  const architecture = await fetch("/api/architecture", { cache: "no-cache" })
+    .then((response) => response.ok ? response.json() : null)
+    .catch(() => null) || { layers: [], files: {}, folders: {}, warnings: [], error: "" };
+  const described = new Set(Object.entries(architecture.files as Record<string, { layer?: string, tags?: string[], summary?: string }>)
+    .filter(([, entry]) => entry.layer !== undefined || (entry.tags?.length ?? 0) > 0 || entry.summary !== undefined)
+    .map(([path]) => path));
+
   const listingResponse = await fetch("/api/files", { cache: "no-cache" });
   if (!listingResponse.ok) throw new Error("file list " + listingResponse.status);
   const listing = await listingResponse.json();
-  const paths: string[] = listing.files || [];
+  const known: string[] = listing.files || [];
+  const filtering = S.ingestOnly && described.size > 0 && described.size < known.length;
+  const paths = filtering ? known.filter((path) => described.has(path)) : known;
+  S.hiddenFiles = filtering ? known.length - paths.length : 0;
 
   // One node per folder, linked into a tree: the root at the top, each folder
   // holding its own files and its subfolders.
@@ -187,19 +200,31 @@ async function loadGraph(): Promise<Graph>
   }
   foldChains(root);
 
-  // Read the code files for their imports; every other type is shown, not scanned.
+  // Read the code files for their imports; every other type is shown, not scanned. The reads
+  // are capped so a large repository does not open every connection at once.
   const codeText = new Map<string, string>();
-  await Promise.all(paths.filter((path) => CODE_FILE.test(path)).map((path) =>
-    fetch("/api/source?path=" + encodeURIComponent(path), { cache: "no-cache" })
-      .then((response) => response.ok ? response.text() : "")
-      .then((text) => { codeText.set(path, text); })
-      .catch(() => {})));
+  await mapLimit(paths.filter((path) => CODE_FILE.test(path)), 12, async (path) =>
+  {
+    try
+    {
+      const response = await fetch("/api/source?path=" + encodeURIComponent(path), { cache: "no-cache" });
+      if (response.ok) codeText.set(path, await response.text());
+    }
+    catch { /* an unreadable file is simply shown, not scanned */ }
+  });
 
   const counts = new Map<string, number>();
-  const known = new Set(paths);
+  const knownSet = new Set(paths);
   const fileEdges: [string, string][] = [];
   const lines = new Map<string, number>();
+  // The names each code file declares, so search can find a symbol, not only a path.
+  const symbols = new Map<string, string[]>();
   for (const [path, text] of codeText) lines.set(path, text.split("\n").length);
+  for (const [path, text] of codeText)
+  {
+    const found = symbolsOf(text);
+    symbols.set(path, [...found.functions, ...found.classes, ...found.variables].map((item) => item.name));
+  }
   paths.forEach((path) =>
   {
     const text = codeText.get(path);
@@ -209,7 +234,7 @@ async function loadGraph(): Promise<Graph>
     for (const spec of parseImports(text))
     {
       const resolved = resolveRelative(realFrom, spec);
-      const target = resolveFile(resolved, known);
+      const target = resolveFile(resolved, knownSet);
       if (target !== null && target !== path) fileEdges.push([path, target]);
       const to = nodeIdFor(dirOf(resolved));
       if (!to || to === from || !folderNodes.has(to)) continue;
@@ -218,10 +243,6 @@ async function loadGraph(): Promise<Graph>
     }
   });
 
-  // What the architecture file says about each file (its layer, tags, and summary), and the layer order.
-  const architecture = await fetch("/api/architecture", { cache: "no-cache" })
-    .then((response) => response.ok ? response.json() : null)
-    .catch(() => null) || { layers: [], files: {}, warnings: [], error: "" };
   const tags = new Map<string, string[]>();
   const layers = new Map<string, string>();
   const summaries = new Map<string, string>();
@@ -231,8 +252,20 @@ async function loadGraph(): Promise<Graph>
     if (entry.layer) layers.set(path, entry.layer);
     if (entry.summary) summaries.set(path, entry.summary);
   }
+  for (const [path, entry] of Object.entries(architecture.folders ?? {}) as [string, { summary?: string }][])
+  {
+    if (entry.summary) summaries.set(path, entry.summary);
+  }
   const layerOrder = architecture.layers.length > 0 ? architecture.layers : null;
   const notes = architecture.error ? [architecture.error] : architecture.warnings;
+
+  // How many lines each file has changed since HEAD, for the changes colouring. A repository that
+  // is not under git, or has no git on the machine, simply has no changes.
+  const changes = new Map<string, number>();
+  const changeReport = await fetch("/api/changes", { cache: "no-cache" })
+    .then((response) => response.ok ? response.json() : null)
+    .catch(() => null) as { files?: Record<string, number> } | null;
+  for (const [path, count] of Object.entries(changeReport?.files ?? {})) changes.set(path, count);
 
   const nodes = Array.from(folderNodes.values());
   nodes.forEach((node) => node.files.sort());
@@ -243,7 +276,7 @@ async function loadGraph(): Promise<Graph>
     return [parts[0], parts[1], count];
   });
 
-  return { nodes, edges, fileEdges, lines, tags, layers, summaries, layerOrder, notes };
+  return { nodes, edges, fileEdges, lines, tags, layers, summaries, symbols, changes, layerOrder, notes };
 }
 // The file an import names: as written, or with the extension or index file it leaves off.
 function resolveFile(resolved: string, known: Set<string>): string | null
@@ -263,6 +296,8 @@ async function loadRepo(): Promise<void>
     if (!response.ok) return;
     const repo = await response.json();
     const name = repo.name || "Codespace";
+    S.repoName = name;
+    S.repoRoot = repo.root ?? "";
     document.title = name + " — 3D code map";
   }
   catch
@@ -271,4 +306,34 @@ async function loadRepo(): Promise<void>
   }
 }
 
-export { displayName, labelOf, loadGraph, loadRepo, symbolsOf };
+// Runs one async job per item, with at most `limit` in flight at once, and keeps the order.
+async function mapLimit<T, R>(items: T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]>
+{
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () =>
+  {
+    while (next < items.length)
+    {
+      const index = next++;
+      results[index] = await run(items[index]!);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+// The repository's change stamp, or null when the server has no fingerprint endpoint.
+async function loadFingerprint(): Promise<string | null>
+{
+  try
+  {
+    const response = await fetch("/api/fingerprint", { cache: "no-cache" });
+    if (!response.ok) return null;
+    const body = await response.json() as { fingerprint?: unknown };
+    return typeof body.fingerprint === "string" ? body.fingerprint : null;
+  }
+  catch { return null; }
+}
+
+export { displayName, labelOf, loadFingerprint, loadGraph, loadRepo, symbolsOf };

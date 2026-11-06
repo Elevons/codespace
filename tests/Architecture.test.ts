@@ -72,7 +72,7 @@ test('Architecture is empty without a file, and says so for a broken one', async
     try
     {
         const absent = await Architecture.ReadAsync(none, ['src/a.ts'])
-        assert.deepEqual(absent, { layers: [], files: {}, warnings: [], error: '' })
+        assert.deepEqual(absent, { layers: [], files: {}, folders: {}, warnings: [], error: '' })
         assert.match((await Architecture.ReadAsync(broken, ['src/a.ts'])).error, /not valid JSON/)
         assert.match((await Architecture.ReadAsync(wrongShape, ['src/a.ts'])).error, /must be a JSON object/)
     }
@@ -101,6 +101,38 @@ test('Architecture refuses a file that is a link out of the repository', async (
         await rm(root, { recursive: true, force: true })
         await rm(outside, { recursive: true, force: true })
     }
+})
+
+test('Architecture reads folder summaries, and reports folders that are not there', async () =>
+{
+    const root = await makeRepo(JSON.stringify({ layers: [], files: {}, folders: { src: { summary: '  The source.  ' }, 'src/gone': { summary: 'Nowhere.' }, lib: {} } }))
+    const known = ['src/a.ts', 'src/b.ts', 'lib/x.ts']
+    try
+    {
+        const result = await Architecture.ReadAsync(root, known)
+        assert.deepEqual(result.folders, { src: 'The source.' })
+        assert.match(result.warnings.join(' '), /"src\/gone" is not a folder/)
+        assert.match(result.warnings.join(' '), /folder "lib" should have a summary/)
+    }
+    finally { await rm(root, { recursive: true, force: true }) }
+})
+
+test('UpdateAsync writes folder summaries, and clearing one removes it', async () =>
+{
+    const root = await makeRepo(JSON.stringify({ layers: [], files: { 'src/a.ts': { summary: 'Does a.' } } }))
+    const known = ['src/a.ts', 'src/b.ts']
+    try
+    {
+        await Architecture.UpdateAsync(root, known, { folders: { src: { summary: 'The source.' } } })
+        assert.deepEqual((await Architecture.ReadAsync(root, known)).folders, { src: 'The source.' })
+        const text = await readFile(join(root, '.codespace', 'architecture.json'), 'utf8')
+        assert.match(text, /"folders": \{\n    "src": \{\n      "summary": "The source."\n    \}\n  \}/)
+
+        await assert.rejects(Architecture.UpdateAsync(root, known, { folders: { ghost: { summary: 'x' } } }), /is not a folder/)
+        await Architecture.UpdateAsync(root, known, { folders: { src: { summary: null } } })
+        assert.deepEqual((await Architecture.ReadAsync(root, known)).folders, {})
+    }
+    finally { await rm(root, { recursive: true, force: true }) }
 })
 
 test('UpdateAsync moves a file to a layer, edits fields, and writes the file in a stable format', async () =>

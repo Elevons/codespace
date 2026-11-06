@@ -6,10 +6,15 @@
       "tags": ["config"],
       "summary": "This repository's architecture: its layers, and each file's layer, tags, and summary, which the map reads."
     },
+    "AGENTS.md": {
+      "layer": "meta",
+      "tags": ["config"],
+      "summary": "What an agent working here should know first: the commands, the architecture-file rule, and the ingest loop."
+    },
     "README.md": {
       "layer": "meta",
       "tags": ["config"],
-      "summary": "What Codespace is, how to run it, and how an agent drives the map over MCP."
+      "summary": "What Codespace is, how to run it, and the CLI an agent uses to describe a repository."
     },
     "docs/FUTURE.md": {
       "layer": "meta",
@@ -41,6 +46,16 @@
       "tags": ["data"],
       "summary": "The slice of the Babylon.js global the page uses, so the browser code type-checks."
     },
+    "public/batch.ts": {
+      "layer": "viz",
+      "tags": ["ui"],
+      "summary": "Draws many copies of one shape in a single call, each copy with its own spot, size, and colour."
+    },
+    "public/boxes.ts": {
+      "layer": "viz",
+      "tags": ["ui"],
+      "summary": "Draws every file box as a batched crowd, lends standout files a mesh of their own, and finds the box under the pointer."
+    },
     "public/city.ts": {
       "layer": "viz",
       "tags": ["core"],
@@ -49,27 +64,27 @@
     "public/controls.ts": {
       "layer": "ui",
       "tags": ["orchestrate"],
-      "summary": "Wires the buttons, slider, and extras toggle, and polls the repository to redraw the map when it changes."
+      "summary": "Wires the buttons, slider, search, shortcuts, and colour menu, and polls the repository, redrawing only when its fingerprint moves."
     },
     "public/edges.ts": {
       "layer": "viz",
       "tags": ["ui"],
-      "summary": "Draws imports: bundled strands between folders, direct strands for a chosen file, and pillars from lifted files to the floor."
+      "summary": "Draws imports as bundled strands with moving direction dots, plus pillars from lifted files to the floor."
     },
     "public/highlight.ts": {
       "layer": "viz",
       "tags": ["ui"],
-      "summary": "Paints files and folder tiles to match the current selection and hover."
+      "summary": "Paints files and folder tiles to match the selection, hover, and tag filter."
     },
     "public/index.html": {
       "layer": "ui",
       "tags": ["ui"],
-      "summary": "The page: the canvas, the panels, and the controls the map is drawn into."
+      "summary": "The page: the canvas, the search box, the panels, and the controls the map is drawn into."
     },
     "public/labels.ts": {
       "layer": "viz",
       "tags": ["ui"],
-      "summary": "Places the HTML name labels over the 3D scene without letting them overlap."
+      "summary": "Places the HTML name, tag, layer, and step labels over the 3D scene without letting them overlap."
     },
     "public/main.ts": {
       "layer": "ui",
@@ -79,7 +94,7 @@
     "public/meshes.ts": {
       "layer": "viz",
       "tags": ["ui"],
-      "summary": "Builds the 3D shapes (file boxes, folder tiles, layer planes, ground grid) and moves the camera."
+      "summary": "Lays out each file's record, the folder tiles, layer planes, and ground grid, grows new boxes in, and glides the camera."
     },
     "public/pads.ts": {
       "layer": "viz",
@@ -89,12 +104,17 @@
     "public/panels.ts": {
       "layer": "ui",
       "tags": ["ui"],
-      "summary": "Fills the info, legend, and folders panels, lists a chosen file's functions and variables, and opens a chosen symbol's source."
+      "summary": "Fills the info, legend, and folders panels, with breadcrumbs, repository stats, tag filtering, and a highlighted code view."
+    },
+    "public/repo-switch.ts": {
+      "layer": "ui",
+      "tags": ["ui"],
+      "summary": "The Repo picker: open another folder, list recent ones, and show how much is left to describe."
     },
     "public/repo.ts": {
       "layer": "base",
       "tags": ["core", "io"],
-      "summary": "Reads the repository through the server into folder nodes, import edges, line counts, tags, layers, and summaries."
+      "summary": "Reads the repository through the server into folder nodes, import edges, line counts, symbols, tags, layers, summaries, and changed lines."
     },
     "public/route.ts": {
       "layer": "viz",
@@ -104,7 +124,7 @@
     "public/state.ts": {
       "layer": "base",
       "tags": ["core", "data"],
-      "summary": "The shared world: constants, the Babylon scene and camera, every mutable value the other modules read, and the path of a file within a folder."
+      "summary": "The shared world: constants, the Babylon scene and camera, colours, every mutable value the other modules read, and the path of a file within a folder."
     },
     "public/style.css": {
       "layer": "ui",
@@ -114,22 +134,17 @@
     "public/types.ts": {
       "layer": "base",
       "tags": ["data"],
-      "summary": "The shapes the page shares: the folder tree, each file's record, and what a tool asks the map to show."
+      "summary": "The shapes the page shares: the folder tree, each file's record, the colouring mode, and what a tool asks the map to show."
     },
     "public/view.ts": {
       "layer": "ui",
       "tags": ["ui", "io"],
       "summary": "Listens for what tools ask the map to show, lights those files up, and lists them with their explanations."
     },
-    "src/mcp/Mcp.ts": {
+    "src/cli/Cli.ts": {
       "layer": "base",
       "tags": ["entry", "io"],
-      "summary": "The stdio fallback for agents that cannot use HTTP MCP: it turns tool calls into requests to the running Codespace."
-    },
-    "src/mcp/McpTools.ts": {
-      "layer": "base",
-      "tags": ["core", "io"],
-      "summary": "The MCP tools both transports share, and the JSON-RPC answers to them: read the map, shape the architecture, and point at files."
+      "summary": "The commands an agent runs to describe a repository: what is left, the next batch to read, and applying each batch."
     },
     "src/repo/Architecture.ts": {
       "layer": "base",
@@ -139,17 +154,22 @@
     "src/repo/Graph.ts": {
       "layer": "base",
       "tags": ["core"],
-      "summary": "Reads the relative imports between code files into a graph the tools can query."
+      "summary": "Reads the imports between code files, relative for TypeScript and JavaScript and by namespace for C#, into a graph the tools can query."
+    },
+    "src/repo/Ingest.ts": {
+      "layer": "base",
+      "tags": ["core", "io"],
+      "summary": "Chooses what an agent reads next to describe the codebase: files without a summary, then folders, settling generated code on the way."
     },
     "src/repo/Repo.ts": {
       "layer": "base",
       "tags": ["core", "io"],
-      "summary": "Reads a folder as a repository: lists its files, honours .gitignore, and reads source safely."
+      "summary": "Reads a folder as a repository: lists its files, honours .gitignore, reads source safely, and stamps what changed."
     },
     "src/server/Api.ts": {
       "layer": "base",
       "tags": ["orchestrate", "io"],
-      "summary": "The endpoints tools and the page use: read the architecture and graph, change the architecture, control what the map shows, and speak MCP at /mcp."
+      "summary": "The endpoints the page uses: the architecture, the import graph, the ingest status, and what the map shows."
     },
     "src/server/Guard.ts": {
       "layer": "base",
@@ -159,12 +179,17 @@
     "src/server/Server.ts": {
       "layer": "base",
       "tags": ["entry", "io"],
-      "summary": "Serves the page, the repository API, and the MCP endpoint at /mcp, which starts with the server."
+      "summary": "Serves the page, the repository, changes, and fingerprint API, and the MCP endpoint at /mcp, which starts with the server."
     },
     "src/server/View.ts": {
       "layer": "base",
       "tags": ["core"],
       "summary": "Holds what the map is asked to show and streams changes to every page that is watching."
+    },
+    "src/server/Workspace.ts": {
+      "layer": "base",
+      "tags": ["core", "io"],
+      "summary": "Holds the repository being read and the recent ones, so the map can switch between them without restarting."
     },
     "tests/Api.test.ts": {
       "layer": "meta",
@@ -176,15 +201,30 @@
       "tags": ["test"],
       "summary": "Tests that the architecture file is read and trimmed, and that stale or malformed entries are reported."
     },
-    "tests/Mcp.test.ts": {
+    "tests/Graph.test.ts": {
       "layer": "meta",
       "tags": ["test"],
-      "summary": "Tests that the MCP server speaks the protocol, turns tool calls into requests, and says how to start Codespace when it is down."
+      "summary": "Tests the import graph: C# files linked by the namespaces their using directives name, and TypeScript by relative specifier."
+    },
+    "tests/Guard.test.ts": {
+      "layer": "meta",
+      "tags": ["test"],
+      "summary": "Tests who may change anything: this machine or localhost by default, anyone with --allow-writes, never cross-site."
+    },
+    "tests/Ingest.test.ts": {
+      "layer": "meta",
+      "tags": ["test"],
+      "summary": "Tests that ingest settles generated files, hands out files with their imports, then folders deepest first."
     },
     "tests/Repo.test.ts": {
       "layer": "meta",
       "tags": ["test"],
       "summary": "Tests that Repo lists readable files, refuses paths and symlinks outside the repository, and follows .gitignore."
+    },
+    "tests/Workspace.test.ts": {
+      "layer": "meta",
+      "tags": ["test"],
+      "summary": "Tests that a workspace opens, switches, and keeps repositories recent without moving when a folder cannot be opened."
     },
     "tsconfig.json": {
       "layer": "meta",
@@ -195,6 +235,32 @@
       "layer": "meta",
       "tags": ["config"],
       "summary": "The TypeScript compiler settings for the browser code in public/; npm run build emits their JavaScript beside them."
+    }
+  },
+  "folders": {
+    ".codespace": {
+      "summary": "Codespace metadata, written by the map and its tools rather than by hand."
+    },
+    "docs": {
+      "summary": "How the architecture file works, the review rubric, and ideas deliberately deferred."
+    },
+    "public": {
+      "summary": "The browser side: the 3D city, its panels, and the controls that drive it."
+    },
+    "src": {
+      "summary": "The server side: reading repositories, the architecture file, the ingest commands, and the HTTP server."
+    },
+    "src/cli": {
+      "summary": "The commands an agent runs to describe a repository."
+    },
+    "src/repo": {
+      "summary": "Reads and checks a repository: its files, imports, architecture file, and what to ingest next."
+    },
+    "src/server": {
+      "summary": "Serves the page and the endpoints the map and the tools use, changing files only from this machine."
+    },
+    "tests": {
+      "summary": "Tests for the repository reading, the architecture file, ingest, the workspace, the guard, and the API."
     }
   }
 }

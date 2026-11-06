@@ -75,3 +75,48 @@ test('Repo follows the repository .gitignore, so it shows what git keeps', async
         await rm(root, { recursive: true, force: true })
     }
 })
+
+test('Repo treats a gitignore "**/" as zero or more folders, like git', async () =>
+{
+    // First we make a repository that hides node_modules under dev with a "**/" rule.
+    const root = await mkdtemp(join(tmpdir(), 'codespace-'))
+    try
+    {
+        await mkdir(join(root, 'dev', 'node_modules'), { recursive: true })
+        await mkdir(join(root, 'dev', 'src'), { recursive: true })
+        await writeFile(join(root, 'dev', 'node_modules', 'Skip.ts'), 'export const skip = 1\n')
+        await writeFile(join(root, 'dev', 'src', 'Keep.ts'), 'export const keep = 1\n')
+        await writeFile(join(root, '.gitignore'), '/dev/**/node_modules/\n')
+
+        // Then we open it: the immediate child node_modules is hidden, its sibling is kept.
+        const repo = await Repo.OpenAsync(root)
+        assert.deepEqual(await repo.ListFilesAsync(), ['dev/src/Keep.ts'])
+    }
+    finally
+    {
+        await rm(root, { recursive: true, force: true })
+    }
+})
+
+test('Repo fingerprints its files and notices a change', async () =>
+{
+    // First we make a repository with one readable file.
+    const root = await mkdtemp(join(tmpdir(), 'codespace-'))
+    try
+    {
+        await writeFile(join(root, 'a.ts'), 'export const a = 1\n')
+        const repo = await Repo.OpenAsync(root)
+
+        // Then we check the stamp is steady while nothing changes...
+        const first = await repo.FingerprintAsync()
+        assert.equal(await repo.FingerprintAsync(), first)
+
+        // ...and moves when a file does.
+        await writeFile(join(root, 'a.ts'), 'export const a = 2\nexport const b = 3\n')
+        assert.notEqual(await repo.FingerprintAsync(), first)
+    }
+    finally
+    {
+        await rm(root, { recursive: true, force: true })
+    }
+})

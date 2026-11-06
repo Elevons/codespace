@@ -31,6 +31,7 @@ export type ViewEvent =
     | { type: 'clear' }
     | { type: 'focus', path: string }
     | { type: 'architecture' }
+    | { type: 'repo' }
 
 /** What the map is currently being asked to show, and the pages watching it. */
 export class View
@@ -71,6 +72,12 @@ export class View
     public Focus(path: string): void
     {
         this.Broadcast({ type: 'focus', path })
+    }
+
+    /** Tells the pages the map now reads another repository, so they start again. */
+    public RepoChanged(): void
+    {
+        this.Broadcast({ type: 'repo' })
     }
 
     /** Tells the pages the architecture file changed, so they read it again. */

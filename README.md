@@ -19,17 +19,55 @@ npm start -- --repo /path/to/repo
 `--repo` defaults to the current folder. `CODESPACE_REPO`, `PORT`, and `HOST` do
 the same from the environment.
 
+Add `--allow-writes` (or `CODESPACE_ALLOW_WRITES=1`) to accept changes from other
+machines too — needed when you watch from a laptop over the network or through a
+proxy such as Tailscale Serve. Without it, only this machine can change anything.
+
+A big repository draws only the files that already have an architecture entry until it is
+fully described — the *Undescribed: hidden* button in the bottom bar draws them all.
+
+## Using the map
+
+- **Find anything.** Press `/` or Ctrl/Cmd+K and type part of a file path, folder, or
+  declared function; Enter flies to it and opens its code. Esc closes the search.
+- **Click a block** to trace a folder, or a box to see the file's symbols, line counts,
+  and what it uses. The breadcrumb at the top walks back up.
+- **Filter by role.** Click a tag in the legend to dim everything that does not carry it;
+  click it again (or Esc) to clear.
+- **Colour by** tags, layers, folders, size, or recent changes. *Changes* colours each file
+  by the lines it has changed since HEAD, and the changes endpoint needs the map to be
+  reading a git checkout with `git` on the machine.
+- **Stand back.** *Layer gap* pulls the layer planes apart; *Extras* shows tests, docs,
+  and scripts; hidden folders can be toggled in the Folders panel. *Glow* switches bloom
+  (the page's only post-processing pass) off if a slow machine wants the frames back;
+  a software renderer starts with it off and at a slightly lower resolution.
+- **Keys:** `Space` spin · `F` frame the chosen block · `[` `]` step through a folder's
+  files · `R` reset · `Esc` clear · `?` shortcut card.
+- **Point it somewhere else.** *Repo* in the bottom bar opens the folder picker: walk the
+  machine's folders with *Up* and the list, type a path (`~/` works), or pick a recent
+  repository. Opening another one reloads the map onto it, and the agent prompt it copies
+  names the new path, so an agent can describe it without restarting anything.
+- **Share a view.** The chosen file is kept in the address bar (`#public/main.ts`), so a
+  reload or a pasted link opens the same place.
+
+While *Live* is on, the 15-second poll redraws the map after edits. A file whose line
+count changed gets a green ring on its folder's floor, so an agent's progress is visible
+without refreshing.
+
 ## What is here
 
 - `src/repo/Repo.ts` — reads a folder as a repository: file list, safe reads, ignored
-  folders.
-- `src/server/Server.ts` — the page, the file list, and the source API.
+  folders, and a cheap change fingerprint.
+- `src/server/Server.ts` — the page, the file list, the source API, the changed-line counts, the change fingerprint, and switching repositories.
+- `src/server/Workspace.ts` — the repository being read, and the recent ones the page can switch back to.
 - `src/repo/Architecture.ts` — reads, checks, and safely changes a repository's `.codespace/architecture.json`.
-- `src/server/Api.ts` — the endpoints tools use: the architecture, the import graph, and what the map shows.
+- `src/server/Api.ts` — the endpoints the page uses: the architecture, the import graph, the ingest status, and what the map shows.
 - `src/server/View.ts` — what the map is asked to show, streamed to every open page.
-- `src/repo/Graph.ts` — the relative imports between code files, for the tools.
+- `src/repo/Graph.ts` — the imports between code files, relative for TypeScript and
+  JavaScript and by namespace for C#, for the tools.
+- `src/repo/Ingest.ts` — what an agent reads next to describe a codebase: files without a summary, then folders.
 - `src/server/Guard.ts` — who may change anything: this machine only.
-- `src/mcp/Mcp.ts` — the MCP server agents connect to.
+- `src/cli/Cli.ts` — the commands an agent runs to describe a repository, with no server or MCP.
 - `public/index.html` — the map page: the scene and its controls.
 - `public/main.ts` — the entry: pointer interaction, the render loop, and boot.
 - `public/state.ts` — the shared world: constants, the Babylon scene, and the live state.
@@ -38,54 +76,55 @@ the same from the environment.
 - `public/meshes.ts` — builds the boxes and grid, and moves the camera.
 - `public/highlight.ts`, `public/edges.ts`, `public/labels.ts`, `public/route.ts`, `public/pads.ts` — the selection glow, the import strands, the names, the route lane, and the layer rings.
 - `public/view.ts` — the Showing panel, and what tools ask the map to light up or focus.
-- `public/panels.ts` — the summary, info, folders, and legend panels.
-- `public/controls.ts` — the buttons, the live poll, and refresh.
+- `public/repo-switch.ts` — the Repo picker: open another folder, list recent ones, and show how much is left to describe.
+- `public/panels.ts` — the summary, info, folders, and legend panels, the breadcrumbs, and the highlighted code view.
+- `public/controls.ts` — the buttons, search, keyboard shortcuts, colour menu, live poll, and refresh.
 - `public/style.css` — the page styles.
 - `public/types.ts` — the shapes the page shares between its modules: the folder tree, each file's record, and what a tool asks to show.
 - `public/babylon.d.ts` — the slice of the Babylon.js global the page uses, so the browser code type-checks.
 - `tsconfig.web.json` — the compiler settings for the browser code; `npm run build` compiles `public/*.ts` to `.js` beside them.
+- `AGENTS.md` — what a coding agent should know first: the commands, the architecture-file rule, and the ingest loop.
 - `docs/review-rubric.md` — the code-health review rubric.
 - `docs/FUTURE.md` — ideas deliberately deferred, written so they can be picked up later.
 - `docs/architecture.md` — the architecture file: its fields, the tag vocabulary, and the rules for generated code.
 - `.codespace/architecture.json` — this repository's own layers, tags, and summaries, which the map reads.
 
-## Driving the map from an agent
+## Ingesting a codebase from an agent
 
-A coding agent that is looking at the repository can reshape and explain the map through
-Codespace's MCP server. It never touches the code: it reads the map's data, edits the
-architecture file, and points at things.
-
-The MCP server is part of the main server: `npm start` brings it up at `/mcp`, so there is
-nothing separate to run. Register that URL once with Claude Code:
+Any coding agent with a shell can describe a repository. There is no MCP server and no client
+to install: `src/cli/Cli.ts` reads the repository, writes its architecture file, and the map
+picks the change up while it runs.
 
 ```sh
-claude mcp add --scope user --transport http codespace http://127.0.0.1:5190/mcp
+# which repository, and how much is left to describe
+node --experimental-transform-types src/cli/Cli.ts status --repo /path/to/repo
+
+# the next files (or folders) with their source, imports, and importers
+node --experimental-transform-types src/cli/Cli.ts next --repo /path/to/repo --size 12
+
+# write each batch back: a JSON file, or - to read it from stdin
+node --experimental-transform-types src/cli/Cli.ts apply --file batch.json --repo /path/to/repo
 ```
 
-Any MCP client that speaks HTTP works the same way. For a client that can only launch a
-stdio program, `src/mcp/Mcp.ts` is a fallback that talks to the running server over HTTP:
+`apply` takes the same shape the architecture file uses:
+`{"files": {"src/a.ts": {"summary": "...", "tags": ["core"], "layer": "base"}}, "folders": {"src": {"summary": "..."}}}`.
+Repeat `next` then `apply` until `next` reports `"remaining": 0`; folders come last. Generated
+and vendored files are summarized for you and never handed back. `--size` is at most 40.
 
-```sh
-claude mcp add --scope user codespace -- node --experimental-transform-types /path/to/Codespace/src/mcp/Mcp.ts
-```
+Every batch is written as soon as it is applied, so there is nothing to save afterwards and an
+interrupted run picks up where it stopped. A batch only ever holds files and folders that still
+lack a summary, so re-running never overwrites what is already written, by hand or otherwise.
+The file does not exist until the first batch is written; opening a repository creates nothing.
 
-`CODESPACE_URL` points the stdio fallback at a server that is not on
-`http://127.0.0.1:5190`.
-
-| Tool | What it does |
-| --- | --- |
-| `get_architecture` | The layers, each file's layer, tags and summary, any warnings, and the files with no layer or no summary yet. Start here. |
-| `get_import_graph` | The imports between files, and which break the layers. |
-| `get_view` | What the map is currently showing. |
-| `update_architecture` | Move files between layers, retag them, write summaries, reorder or add layers, or move an entry after a rename. All or nothing: any invalid part writes nothing and lists the problems. |
-| `show_files` | Light up files. With `trace`, draw a numbered route through them in order, and put each step's explanation in the Showing panel beside the map. |
-| `focus` | Select a file or folder and bring the camera to it. |
-| `clear_view` | Stop showing what `show_files` lit up. |
+`AGENTS.md` here spells the loop out for an agent working in this repository. For another one,
+the Repo picker's **Copy agent prompt** hands over the same commands with that repository's path
+filled in. Codespace has no model of its own: writing summaries and tags is judgment, which the
+agent does.
 
 Changes show up in every open page at once. Reading is open, like the rest of the map, but
 anything that changes something is accepted only from this machine and only when Codespace
-is reached as `localhost`, even though the server listens on the network. A page opened
-through a proxy such as Tailscale Serve can watch, but not change.
+is reached as `localhost`, even though the server listens on the network, unless it was started
+with `--allow-writes`.
 
 ## How it draws the city
 
@@ -96,7 +135,13 @@ same footprint, as tall as its line count. Imports between folders are drawn as 
 that follow the folder tree, so imports between the same regions gather into bundles;
 selecting a file draws its own imports directly. A reload — or the 15-second poll — redraws it as the code changes.
 
+The poll first asks for a change fingerprint (a hash of the file list and each file's size and
+modification time); when it has not moved, the map reads no source at all. Imports and pale
+pillars are batched into line systems, the strands and labels redraw at a capped rate while
+boxes move, and a settled map rebuilds nothing.
+
 ## Limits
 
-Import edges are read from TypeScript and JavaScript. Other languages are shown
-but their imports are not resolved yet. The map reads one repository at a time.
+Import edges are read from TypeScript and JavaScript, by relative specifier, and from
+C#, by namespace. Other languages are shown but their imports are not resolved yet.
+The map reads one repository at a time.

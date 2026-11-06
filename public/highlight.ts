@@ -1,19 +1,33 @@
-import { S, colorFor, materialFor, fileColor } from "./state.js";
-import { routeFolderHues } from "./route.js";
+import { S, materialFor, fileColor, matchesTagFilter } from "./state.js";
+import { placeBox, paintBox, releaseAccents, accent, retireAccents } from "./boxes.js";
 import type { FileRecord } from "./types.js";
 
-// Whether a file stays bright under the current choice: the files being shown (S.trace) when there are some
-// showing some, else the chosen folder and its neighbours.
+// Whether a file stays bright under the current choice: the files being shown (S.trace) when there are some,
+// the chosen folder and its neighbours otherwise, and always the legend's tag filter when one is on.
 function isLit(rec: FileRecord): boolean
 {
+  if (!matchesTagFilter(rec.path)) return false;
   if (S.trace) return S.trace.set.has(rec.path);
   if (S.focusSet) return S.focusSet.has(rec.node);
   return true;
 }
 
-// Paints every file and folder tile for the current choice.
+// Parsed colours, kept: a repaint touches every file, and parsing hex each time adds up.
+const parsed = new Map<string, BABYLON.Color3>();
+function colorOf(hex: string): BABYLON.Color3
+{
+  let color = parsed.get(hex);
+  if (!color) { color = BABYLON.Color3.FromHexString(hex); parsed.set(hex, color); }
+  return color;
+}
+
+// Paints every file for the current choice. The crowd is tinted in its batch; the few files
+// that stand out (chosen, hovered, the start of a route, the files shown) get a mesh of their own.
 function applyHighlight(): void
 {
+  releaseAccents();
+  // A traced route keeps its first file brightest; the rest of the route stays shown.
+  const start = S.trace !== null && S.trace.trace ? S.trace.paths[0] : null;
   for (const rec of S.fileRecords.values())
   {
     const n = S.NODES[rec.node];
@@ -21,34 +35,18 @@ function applyHighlight(): void
     const lit = isLit(rec);
     const hovered = rec.path === S.hoveredPath;
     const shown = S.trace !== null && S.trace.set.has(rec.path);
-    // A traced route keeps its first file brightest; the rest of the route stays shown.
-    const start = S.trace !== null && S.trace.trace ? S.trace.paths[0] : null;
     const emphasise = start !== null && rec.path === start;
-    const glow = chosen ? 0.85 : emphasise ? 1 : shown ? 0.55 : hovered ? 0.55 : 0.28;
-    rec.mesh.material = materialFor(fileColor(rec.path, n.layer), lit ? 1 : 0.12, glow);
-    rec.mesh.renderOutline = chosen || emphasise;
-  }
-  const shownNodes = new Set<number>();
-  if (S.trace) for (const rec of S.fileRecords.values()) if (S.trace.set.has(rec.path)) shownNodes.add(rec.node);
-  // On a route, each folder holding one of its files wears that folder's route colour.
-  const hues = routeFolderHues();
-  for (const plate of S.plates)
-  {
-    const n = S.NODES[(plate.metadata as { node: number }).node];
-    const dim = S.trace ? !shownNodes.has(n.index!) : S.focusSet !== null && !S.focusSet.has(n.index!);
-    const chosen = n.index === S.selected;
-    const hue = hues.get(n.index!);
-    if (hue && !chosen)
+    const hex = fileColor(rec.path, n.layer);
+    rec.lit = lit;
+    if (chosen || emphasise || shown || hovered)
     {
-      plate.material = materialFor(hue, 0.22, 0.35);
-      const edge = BABYLON.Color3.FromHexString(hue);
-      plate.edgesColor = new BABYLON.Color4(edge.r, edge.g, edge.b, 1);
-      continue;
+      const glow = chosen ? 0.85 : emphasise ? 1 : 0.55;
+      accent(rec, materialFor(hex, lit ? 1 : 0.12, glow), chosen || emphasise);
     }
-    plate.material = materialFor(colorFor(n.layer), dim ? 0.05 : chosen ? 0.4 : 0.16, chosen ? 0.4 : 0.1);
-    const edge = BABYLON.Color3.FromHexString(chosen ? "#58a6ff" : colorFor(n.layer));
-    plate.edgesColor = new BABYLON.Color4(edge.r, edge.g, edge.b, dim ? 0.12 : chosen ? 1 : 0.55);
+    else paintBox(rec, colorOf(hex));
+    placeBox(rec);
   }
+  retireAccents();
 }
 
 export { applyHighlight };

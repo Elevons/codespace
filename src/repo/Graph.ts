@@ -1,8 +1,11 @@
 import { dirname, posix } from 'node:path'
 import type { Repo } from './Repo.ts'
 
-/** The files whose imports are read. */
+/** The files whose imports are read as TypeScript or JavaScript, by relative specifier. */
 const CodeFile = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/
+
+/** The files whose imports are read as C#, by namespace. */
+const CSharpFile = /\.cs$/
 
 /** The largest file read for its imports, in characters. */
 const MaxFileChars = 400_000
@@ -31,20 +34,52 @@ export class Graph
         const files = await repo.ListFilesAsync()
         const known = new Set(files)
         const imports = new Map<string, string[]>()
+
+        // C# imports name namespaces, not files, so first we index which files declare each one
+        // and which namespaces each file uses, reading every C# file once for both.
+        const declared = new Map<string, string[]>()
+        const csharpUses = new Map<string, string[]>()
         for (const path of files)
         {
-            if (!CodeFile.test(path)) continue
-            const text = await repo.ReadFileAsync(path).catch(() => '')
+            if (!CSharpFile.test(path)) continue
+            const text = (await repo.ReadFileAsync(path).catch(() => '')).slice(0, MaxFileChars)
+            csharpUses.set(path, Graph.CSharpUses(text))
+            const namespace = Graph.CSharpNamespace(text)
+            if (namespace !== null) declared.set(namespace, [...(declared.get(namespace) ?? []), path])
+        }
+
+        for (const path of files)
+        {
             const targets = new Set<string>()
-            for (const specifier of Graph.ParseSpecifiers(text.slice(0, MaxFileChars)))
+            if (CSharpFile.test(path))
             {
-                const folder = dirname(path) === '.' ? '' : dirname(path)
-                const target = Graph.Resolve(posix.join(folder, specifier), known)
-                if (target !== null && target !== path) targets.add(target)
+                // A C# file imports every file that declares a namespace it names.
+                for (const namespace of csharpUses.get(path) ?? [])
+                    for (const target of declared.get(namespace) ?? []) if (target !== path) targets.add(target)
             }
+            else if (CodeFile.test(path))
+            {
+                const text = await repo.ReadFileAsync(path).catch(() => '')
+                for (const specifier of Graph.ParseSpecifiers(text.slice(0, MaxFileChars)))
+                {
+                    const folder = dirname(path) === '.' ? '' : dirname(path)
+                    const target = Graph.Resolve(posix.join(folder, specifier), known)
+                    if (target !== null && target !== path) targets.add(target)
+                }
+            }
+            else continue
             imports.set(path, [...targets].sort())
         }
         return new Graph(imports)
+    }
+
+    /**
+     * Lists what one file imports, among the repository's files.
+     * @param path the importing file
+     */
+    public ImportsOf(path: string): string[]
+    {
+        return [...(this.imports.get(path) ?? [])]
     }
 
     /**
@@ -61,6 +96,29 @@ export class Graph
             for (const to of targets) if (from.startsWith(prefix) || to.startsWith(prefix)) edges.push([from, to])
         }
         return edges
+    }
+
+    /**
+     * Reads the namespace a C# file declares, or null when it declares none.
+     * @param text the source text
+     */
+    private static CSharpNamespace(text: string): string | null
+    {
+        const match = /\bnamespace\s+([A-Za-z_][\w.]*)/.exec(text)
+        return match === null ? null : match[1]!
+    }
+
+    /**
+     * Reads every namespace a C# file names in a `using` directive: plain, `static`, `global`,
+     * or an alias, where the right-hand namespace is the one that matters.
+     * @param text the source text
+     */
+    private static CSharpUses(text: string): string[]
+    {
+        const uses = new Set<string>()
+        const pattern = /\busing\s+(?:static\s+)?([A-Za-z_][\w.]*)\s*(?:=\s*([A-Za-z_][\w.]*))?\s*;/g
+        for (const match of text.matchAll(pattern)) uses.add(match[2] ?? match[1]!)
+        return [...uses]
     }
 
     /**

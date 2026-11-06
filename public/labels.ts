@@ -1,4 +1,4 @@
-import { S, V3, scene, camera, canvas, labelLayer, colorFor, filePath } from "./state.js";
+import { S, V3, scene, camera, canvas, labelLayer, colorFor, filePath, matchesTagFilter, nodeMatchesTagFilter } from "./state.js";
 import { labelOf } from "./repo.js";
 import { routeFolderHues, routeRuns, runLine } from "./route.js";
 
@@ -31,14 +31,15 @@ function collectLabels(): LabelItem[]
   {
     if (n.hidden || n.cx === undefined) return;
     const hue = hues.get(i);
+    const filtered = !nodeMatchesTagFilter(i);
     const labelled = hue !== undefined || i === S.selected || (S.focusSet !== null && S.focusSet.has(i)) || (n.level ?? 0) <= 1;
     if (!labelled) return;
     const pos = new V3(n.cx, n.topY! + 0.5, n.cz!);
-    const dim = S.focusSet !== null && !S.focusSet.has(i) && hue === undefined;
-    wanted.push({ key: "d" + i, text: labelOf(n), pos, cls: i === S.selected ? "folder sel" : hue ? "folder routed" : "folder",
+    const dim = filtered || (S.focusSet !== null && !S.focusSet.has(i) && hue === undefined);
+    wanted.push({ key: "d" + i, text: labelOf(n), pos, cls: i === S.selected ? "folder sel" : hue && !filtered ? "folder routed" : "folder",
       caption: "",
-      priority: i === S.selected || hue ? 2 : dim ? 5 : 3,
-      color: i === S.selected ? "" : hue || colorFor(n.layer), opacity: dim ? 0.3 : 1 });
+      priority: i === S.selected || (hue && !filtered) ? 2 : dim ? 5 : 3,
+      color: i === S.selected ? "" : filtered ? "#6e7681" : hue || colorFor(n.layer), opacity: dim ? 0.25 : 1 });
   });
 
   // Each floor strip under the route's lane is named for its folder at its leading end.
@@ -60,23 +61,37 @@ function collectLabels(): LabelItem[]
     if (railed && shown && !hovered) continue;
     const named = shown || hovered || (near && rec.node === S.selected);
     if (!named) continue;
-    const pos = rec.mesh.position.clone();
-    pos.y += rec.mesh.scaling.y / 2 + 0.12;
+    // While the legend filters to one tag, dim every other file's name out of the way.
+    if (!hovered && !matchesTagFilter(rec.path)) continue;
+    const pos = rec.shape.position.clone();
+    pos.y += rec.shape.scaling.y / 2 + 0.12;
     const name = rec.path.split("/").pop()!;
     const chosenFile = rec.node === S.selected && rec.file === S.selectedFile;
     const tags = S.FILE_TAGS.get(rec.path);
+    // Only the file you chose or point at gets the tags line; the rest stay to one row.
+    const caption = (chosenFile || hovered) && tags ? tags.join(" · ") : "";
     wanted.push({ key: "f" + rec.path, text: name, pos,
-      caption: tags ? tags.join(" · ") : "",
+      caption,
       priority: hovered ? 0 : chosenFile ? 1 : 4,
       cls: hovered ? "file hover" : "file", color: "", opacity: 1 });
   }
-  // Layer band names at the plane's corner, when the repository declares layers.
+  // Layer band names at the corner of each plane nearest the camera, so they stay on screen.
   for (const plane of S.layerPlanes)
   {
     const info = plane.getBoundingInfo().boundingBox;
     const meta = plane.metadata as { layer: string; rank: number };
+    const corners = [
+      new V3(info.minimumWorld.x, plane.position.y, info.minimumWorld.z),
+      new V3(info.minimumWorld.x, plane.position.y, info.maximumWorld.z),
+      new V3(info.maximumWorld.x, plane.position.y, info.minimumWorld.z),
+      new V3(info.maximumWorld.x, plane.position.y, info.maximumWorld.z),
+    ];
+    const corner = corners.reduce((best, at) => V3.DistanceSquared(at, camera.position) < V3.DistanceSquared(best, camera.position) ? at : best);
+    // Lift the name a little above its plane and in from the corner, so it never sits under a dock.
+    const cx = (info.minimumWorld.x + info.maximumWorld.x) / 2;
+    const cz = (info.minimumWorld.z + info.maximumWorld.z) / 2;
     wanted.push({ key: "L" + meta.rank, text: "layer · " + meta.layer,
-      pos: new V3(info.minimumWorld.x, plane.position.y, info.minimumWorld.z),
+      pos: new V3(corner.x + (cx - corner.x) * 0.16, plane.position.y + 1.6, corner.z + (cz - corner.z) * 0.16),
       cls: "layer", caption: "", color: "", opacity: 1, priority: 0 });
   }
   return wanted.sort((a, b) => a.priority - b.priority);
@@ -174,7 +189,7 @@ function updateRail(width: number, height: number, transform: BABYLON.Matrix, vi
   {
     const rec = S.fileRecords.get(path);
     if (!rec) continue;
-    const p = V3.Project(rec.mesh.position, BABYLON.Matrix.IdentityReadOnly, transform, viewport);
+    const p = V3.Project(rec.shape.position, BABYLON.Matrix.IdentityReadOnly, transform, viewport);
     if (p.z < 0 || p.z > 1) continue;
     spots.set(path, { x: p.x, y: p.y });
   }
@@ -239,7 +254,16 @@ function updateLabels(): void
   for (const item of collectLabels())
   {
     const p = V3.Project(item.pos, BABYLON.Matrix.IdentityReadOnly, transform, viewport);
-    if (p.z < 0 || p.z > 1 || p.x < -80 || p.x > width + 80 || p.y < -30 || p.y > height + 30) continue;
+    const onScreen = p.z >= 0 && p.z <= 1 && p.x >= -80 && p.x <= width + 80 && p.y >= -30 && p.y <= height + 30;
+    if (item.cls !== "layer" && !onScreen) continue;
+    // A layer's name is a legend, so it stays in view and out from under the docks even when
+    // the corner it names has swung off the side of the screen.
+    if (item.cls === "layer")
+    {
+      const [left, right] = openSpan(width);
+      p.x = Math.max(left + 60, Math.min(right - 60, p.x));
+      p.y = Math.max(24, Math.min(height - 90, p.y));
+    }
     // Try the label with its caption, nudged a little up or down if its spot is crowded;
     // failing that, the name alone; failing that, it is left off this frame.
     const nameHalf = item.text.length * (item.cls.startsWith("file") ? 3.1 : 3.5) + 6;

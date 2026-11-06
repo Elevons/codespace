@@ -1,4 +1,4 @@
-import { S, V3, FILE_SIZE, FILE_H, TILE_GAP, MARGIN, PLATE_H, FLOOR_STEP, AREA_PER_WEIGHT, isCode, linesOf, render, filePath } from "./state.js";
+import { S, V3, FILE_SIZE, FILE_H, TILE_GAP, MARGIN, PLATE_H, FLOOR_STEP, AREA_PER_WEIGHT, isCode, linesOf, renderEdges, filePath } from "./state.js";
 import { syncMeshes } from "./meshes.js";
 import type { Entry, GraphNode } from "./types.js";
 
@@ -23,7 +23,7 @@ function build(): void
   const width = Math.sqrt(area * 1.5);
   placeNode(root, { x: -width / 2, z: -area / width / 2, w: width, d: area / width }, 0);
   syncMeshes();
-  render();
+  renderEdges();
 }
 
 // Marks each folder hidden if it, or any folder above it, is in the hidden set.

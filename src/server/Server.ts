@@ -1,9 +1,14 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { readFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { readdir, readFile } from 'node:fs/promises'
 import { extname, join, normalize, resolve, sep } from 'node:path'
+import { promisify } from 'node:util'
 import { Api } from './Api.ts'
-import { Repo } from '../repo/Repo.ts'
-import { View } from './View.ts'
+import { ReadJsonAsync, RefuseWrite } from './Guard.ts'
+import { Workspace } from './Workspace.ts'
+
+/** Runs a command without a shell and resolves with its standard output. */
+const Run = promisify(execFile)
 
 /** The content type sent for each static file type. */
 const ContentTypes: Readonly<Record<string, string>> = {
@@ -21,8 +26,8 @@ const ContentTypes: Readonly<Record<string, string>> = {
 /** Serves the map page and the small JSON API that feeds it. */
 export class Server
 {
-    /** The repository the map is reading. */
-    private readonly repo: Repo
+    /** The repository the map is reading, and the ones it can switch to. */
+    private readonly workspace: Workspace
 
     /** The folder holding the map page and its index. */
     private readonly publicRoot: string
@@ -30,15 +35,19 @@ export class Server
     /** The endpoints tools use to read the architecture and change what the map shows. */
     private readonly api: Api
 
+    /** Whether changes are accepted from any machine, as started with --allow-writes. */
+    public allowWrites: boolean
+
     /**
      * Prepares one server.
-     * @param repo the repository to read
+     * @param workspace the repository to read
      * @param publicRoot the folder holding the page and index
      * @param api the endpoints for tools
      */
-    private constructor(repo: Repo, publicRoot: string, api: Api)
+    private constructor(workspace: Workspace, publicRoot: string, api: Api)
     {
-        this.repo = repo
+        this.workspace = workspace
+        this.allowWrites = false
         this.publicRoot = publicRoot
         this.api = api
     }
@@ -49,11 +58,14 @@ export class Server
      * @param publicRoot the folder holding the page and index
      * @param port the port to listen on
      * @param host the address to bind
+     * @param allowWrites whether changes are accepted from any machine, as started with --allow-writes
      */
-    public static async StartAsync(repoPath: string, publicRoot: string, port: number, host: string): Promise<void>
+    public static async StartAsync(repoPath: string, publicRoot: string, port: number, host: string, allowWrites = false): Promise<void>
     {
-        const repo = await Repo.OpenAsync(repoPath)
-        const server = new Server(repo, publicRoot, new Api(repo, new View(), `http://127.0.0.1:${port}`))
+        const workspace = await Workspace.OpenAsync(repoPath)
+        const cli = join(publicRoot, '..', 'src', 'cli', 'Cli.ts')
+        const server = new Server(workspace, publicRoot, new Api(workspace, allowWrites, cli))
+        server.allowWrites = allowWrites
 
         const http = createServer((request, response) =>
         {
@@ -65,10 +77,10 @@ export class Server
         })
 
         await new Promise<void>((done) => http.listen(port, host, done))
-        console.log(`Codespace reading ${repo.Name} at ${repo.Root}`)
+        console.log(`Codespace reading ${workspace.repo.Name} at ${workspace.repo.Root}`)
         console.log(`Open http://localhost:${port}`)
-        console.log(`MCP for agents: http://127.0.0.1:${port}/mcp`)
         if (host === '0.0.0.0') console.log(`On the LAN, open http://<this machine>:${port}`)
+        if (allowWrites) console.log('Changes are accepted from any machine that can reach it (--allow-writes).')
     }
 
     /**
@@ -85,13 +97,33 @@ export class Server
 
         if (url.pathname === '/api/repo')
         {
-            Server.SendJson(response, 200, { name: this.repo.Name, root: this.repo.Root })
+            if (request.method === 'GET' || request.method === 'HEAD') Server.SendJson(response, 200, this.workspace.Info)
+            else if (request.method === 'POST') await this.SwitchRepoAsync(request, response)
+            else Server.SendJson(response, 405, { error: 'The repository endpoint takes GET or POST.' })
+            return
+        }
+
+        if (url.pathname === '/api/browse')
+        {
+            await this.SendBrowseAsync(response, url.searchParams.get('path'))
             return
         }
 
         if (url.pathname === '/api/files')
         {
-            Server.SendJson(response, 200, { files: await this.repo.ListFilesAsync() })
+            Server.SendJson(response, 200, { files: await this.workspace.repo.ListFilesAsync() })
+            return
+        }
+
+        if (url.pathname === '/api/changes')
+        {
+            Server.SendJson(response, 200, await Server.ReadChangesAsync(this.workspace.repo.Root))
+            return
+        }
+
+        if (url.pathname === '/api/fingerprint')
+        {
+            Server.SendJson(response, 200, { fingerprint: await this.workspace.repo.FingerprintAsync() })
             return
         }
 
@@ -102,6 +134,60 @@ export class Server
         }
 
         await this.SendStaticAsync(response, pathname)
+    }
+
+    /**
+     * Points the map at another repository, which every open page then reloads to show.
+     * @param request the incoming request
+     * @param response the response to write
+     */
+    private async SwitchRepoAsync(request: IncomingMessage, response: ServerResponse): Promise<void>
+    {
+        const refusal = RefuseWrite(request, this.allowWrites)
+        if (refusal !== null) { Server.SendJson(response, 403, { error: refusal }); return }
+        let body: Record<string, unknown>
+        try { body = await ReadJsonAsync(request) }
+        catch (error) { Server.SendJson(response, 400, { error: (error as Error).message }); return }
+        if (typeof body.path !== 'string' || body.path.trim() === '')
+        {
+            Server.SendJson(response, 400, { error: 'Give the folder to open as "path".' })
+            return
+        }
+        try
+        {
+            const info = await this.workspace.SwitchAsync(body.path)
+            console.log(`Codespace now reading ${info.name} at ${info.root}`)
+            Server.SendJson(response, 200, info)
+        }
+        catch (error) { Server.SendJson(response, 400, { error: `${body.path.trim()} could not be opened: ${(error as Error).message}` }) }
+    }
+
+    /**
+     * Lists the folders inside one folder of the machine running Codespace, so the page can walk
+     * to a repository instead of the person typing its path from memory.
+     * @param response the response to write
+     * @param path the folder to list, or empty for the repository being read
+     */
+    private async SendBrowseAsync(response: ServerResponse, path: string | null): Promise<void>
+    {
+        const target = Workspace.ResolvePath(path === null || path.trim() === '' ? this.workspace.repo.Root : path)
+        try
+        {
+            const entries = await readdir(target, { withFileTypes: true })
+            const names = new Set(entries.map((entry) => entry.name))
+            const parent = resolve(target) === resolve(target, '..') ? null : resolve(target, '..')
+            const folders = entries
+                .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+                .map((entry) => ({ name: entry.name, path: join(target, entry.name) }))
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .slice(0, 300)
+            const repository = names.has('.git') || names.has('.codespace')
+            Server.SendJson(response, 200, { path: target, parent, repository, folders })
+        }
+        catch (error)
+        {
+            Server.SendJson(response, 400, { error: `${target} cannot be listed: ${(error as Error).message}` })
+        }
     }
 
     /**
@@ -119,7 +205,7 @@ export class Server
 
         try
         {
-            const text = await this.repo.ReadFileAsync(path)
+            const text = await this.workspace.repo.ReadFileAsync(path)
             response.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' })
             response.end(text)
         }
@@ -160,6 +246,33 @@ export class Server
     }
 
     /**
+     * Counts the lines each file has changed since HEAD, for the map's changes colouring.
+     * A repository that is not under git, or a machine without git, reports no changes.
+     * @param root the repository's root folder
+     */
+    private static async ReadChangesAsync(root: string): Promise<{ files: Record<string, number> }>
+    {
+        try
+        {
+            const { stdout } = await Run('git', ['-C', root, 'diff', '--numstat', 'HEAD'], { maxBuffer: 32 * 1024 * 1024 })
+            const files: Record<string, number> = {}
+            for (const line of stdout.split('\n'))
+            {
+                const [added, deleted, ...rest] = line.split('\t')
+                if (rest.length === 0 || !/^\d+$/.test(added!) || !/^\d+$/.test(deleted!)) continue
+                const path = rest.join('\t')
+                const count = Number(added) + Number(deleted)
+                if (count > 0) files[path] = count
+            }
+            return { files }
+        }
+        catch
+        {
+            return { files: {} }
+        }
+    }
+
+    /**
      * Sends one JSON response.
      * @param response the response to write
      * @param status the HTTP status
@@ -192,5 +305,5 @@ const repoArg = Server.ReadOption(args, '--repo') ?? process.env.CODESPACE_REPO 
 const port = Number(Server.ReadOption(args, '--port') ?? process.env.PORT ?? 5190)
 const host = process.env.HOST ?? '0.0.0.0'
 const publicRoot = join(import.meta.dirname, '..', '..', 'public')
-
-await Server.StartAsync(repoArg, publicRoot, port, host)
+const allowWrites = args.includes('--allow-writes') || process.env.CODESPACE_ALLOW_WRITES === '1'
+await Server.StartAsync(repoArg, publicRoot, port, host, allowWrites)
