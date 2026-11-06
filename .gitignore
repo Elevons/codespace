@@ -1,0 +1,4 @@
+node_modules/
+public/vectors/chunks.json
+.env
+.DS_Store

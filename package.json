@@ -1,0 +1,19 @@
+{
+  "name": "codespace",
+  "private": true,
+  "version": "0.0.0",
+  "description": "A 3D code map that can be pointed at any repository.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "start": "node --experimental-transform-types src/Server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-transform-types tests/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  }
+}

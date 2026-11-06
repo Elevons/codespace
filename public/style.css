@@ -1,0 +1,94 @@
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1117; color: #e6edf3;
+    font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  #scene { display: block; width: 100vw; height: 100vh; touch-action: none; cursor: grab; }
+  #scene:active { cursor: grabbing; }
+
+  /* Names placed over the scene each frame; they never take the pointer. */
+  #labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  .label { position: absolute; left: 0; top: 0; white-space: nowrap; border-radius: 5px;
+    font: 11px ui-monospace, Menlo, monospace; will-change: transform; }
+  .label.folder { padding: 2px 6px; background: rgba(13,17,23,.78); text-align: center; }
+  .label small { display: block; font: 10px ui-sans-serif, system-ui, sans-serif; color: #c9d1d9; }
+  .label.folder.sel small { color: #e6edf3; }
+  .label.folder.sel { background: rgba(31,111,235,.94); color: #fff; font-weight: 600; }
+  .label.file { padding: 1px 4px; font-size: 9.5px; color: #aab6c4; background: rgba(13,17,23,.7); }
+  .label.file.hover { color: #fff; background: rgba(48,54,61,.92); font-size: 10.5px; }
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: #8b91ad; font-size: 13px; pointer-events: none; }
+  #legend .breaks { margin-top: 8px; padding-top: 8px; border-top: 1px solid #30363d; }
+  #breaks-count { color: #6e7681; }
+  #breaks-count.bad { color: #f85149; }
+
+  .panel { position: fixed; background: rgba(22,27,34,.88); border: 1px solid #30363d;
+    border-radius: 10px; backdrop-filter: blur(8px); box-shadow: 0 8px 30px rgba(0,0,0,.45); }
+
+  /* The legend sits top right; the click-a-block panel sits top left. */
+  #legend { top: 14px; right: 14px; padding: 10px 14px; font-size: 12px; }
+  #legend h2 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: #9aa4b2; }
+  .swatch { display: flex; align-items: center; gap: 8px; margin: 3px 0; color: #c9d1d9; }
+  .swatch i { width: 12px; height: 12px; border-radius: 3px; }
+
+  #info { left: 14px; top: 14px; width: 344px; max-height: calc(100vh - 96px); overflow: auto; padding: 14px 16px; }
+  #info h3 { margin: 0 0 2px; font-size: 14px; font-family: ui-monospace, Menlo, monospace; }
+  #info .layer { font-size: 11px; text-transform: uppercase; letter-spacing: .7px; color: #9aa4b2; }
+  #info h4 { margin: 12px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .7px; }
+  #info h4.out { color: #58a6ff; }
+  #info h4.in { color: #d29922; }
+  #info ul { margin: 0; padding: 0; list-style: none; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  #info li { padding: 2px 0; color: #c9d1d9; display: flex; justify-content: space-between; gap: 10px; }
+  #info li span.n { color: #6e7681; }
+  #info .hint { color: #6e7681; font-style: italic; }
+
+  /* The chosen file, at the top of the info panel. */
+  #info .chosen-file { margin: -2px 0 12px; padding: 10px 12px; border: 1px solid #1f6feb;
+    border-radius: 8px; background: rgba(31,111,235,.12); }
+  #info .chosen-name { font: 600 13px ui-monospace, Menlo, monospace; color: #e6edf3; }
+  #info .chosen-meta { margin: 2px 0 0; font-size: 11.5px; color: #9aa4b2; }
+
+  #tools { left: 14px; bottom: 14px; padding: 8px; display: flex; gap: 8px; }
+  #tools button { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 7px;
+    padding: 7px 12px; font-size: 12px; cursor: pointer; }
+  #tools button:hover { background: #30363d; }
+  #tools button.on { background: #1f6feb; border-color: #1f6feb; }
+
+  /* Bottom control bar: the layer-spread slider and the extras toggle. */
+  #controls { right: 14px; bottom: 14px; display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+  #controls label { font-size: 12px; color: #9aa4b2; white-space: nowrap; }
+  #controls input[type="range"] { width: 150px; accent-color: #1f6feb; }
+  #controls button { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 7px;
+    padding: 7px 12px; font-size: 12px; cursor: pointer; }
+  #controls button:hover { background: #30363d; }
+  #controls button.on { background: #1f6feb; border-color: #1f6feb; }
+
+  /* The folders panel, down the right side under the legend, sized to its list. */
+  #hierarchy { right: 14px; top: 150px; width: 300px; max-height: calc(100vh - 230px); overflow: hidden;
+    display: flex; flex-direction: column; }
+  #hierarchy-head { display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; border-bottom: 1px solid #30363d; }
+  #hierarchy-head h3 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .7px; color: #9aa4b2; }
+  #hierarchy-toggle { display: none; background: #21262d; border: 1px solid #30363d; color: #e6edf3;
+    border-radius: 7px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+  #hierarchy.collapsed #hierarchy-tree { display: none; }
+  #hierarchy-tree { min-height: 0; overflow: auto; padding: 8px 12px 12px; }
+  .hrow { display: flex; align-items: center; gap: 8px; padding: 3px 0;
+    font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #c9d1d9; cursor: pointer; }
+  .hrow input { accent-color: #1f6feb; }
+  .hrow span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hrow.hidden span { color: #6e7681; text-decoration: line-through; }
+
+  /* Phones: give the scene the room, and fold the panels down to fit a narrow screen. */
+  @media (max-width: 720px)
+  {
+    #legend { display: none; }
+    #info { left: 8px; right: 8px; top: 8px; width: auto; max-height: 24vh; padding: 10px 12px; }
+    #info h3 { font-size: 13px; }
+    #hierarchy { left: 8px; right: 8px; top: auto; bottom: 96px; width: auto; max-height: 44vh; }
+    #hierarchy-toggle { display: block; }
+    #tools { left: 8px; right: 8px; bottom: 52px; justify-content: center; flex-wrap: wrap; }
+    #tools button { padding: 6px 10px; font-size: 11.5px; }
+    #controls { left: 8px; right: 8px; transform: none; bottom: 8px; justify-content: center; flex-wrap: wrap; gap: 6px; }
+    #controls button { padding: 6px 9px; font-size: 11.5px; }
+    #controls input[type="range"] { flex: 1; width: auto; }
+  }
