@@ -1,4 +1,4 @@
-import { S, V3, scene, glowMaterial, materialFor, filePath, matchesTagFilter, nodeMatchesTagFilter } from "./state.js";
+import { S, V3, scene, glowMaterial, materialFor, filePath, matchesFilters, nodeMatchesFilters, hasFilters } from "./state.js";
 import { routeFolderHues, routeRuns, runLine } from "./route.js";
 import type { FileRecord, GraphNode } from "./types.js";
 
@@ -28,7 +28,6 @@ let edgeLines: BABYLON.Mesh | null = null;
 let tetherLines: BABYLON.Mesh | null = null;
 let edgeShapes: BABYLON.Mesh[] = [];
 let tetherShapes: BABYLON.Mesh[] = [];
-let brokenCount = 0;
 
 /** One solid strand that carries a travelling dot, so the direction of an import reads at a glance. */
 interface Flow { edge: Edge; bow: number; hex: string }
@@ -111,21 +110,6 @@ function edgePoint(edge: Edge, bow: number, t: number): BABYLON.Vector3
   return edge.route ? splinePoint(edge.route, t) : archPoint(edge.used, edge.user, bow, t);
 }
 
-// The folder pairs, as "user\u0001used" ids, that have an import pointing up the declared layers:
-// a file in a lower layer using one in a higher. Kept until the graph is read again.
-let breakCache: { edges: [string, string][] | null; layers: string[] | null; pairs: Set<string> } =
-  { edges: null, layers: null, pairs: new Set() };
-function brokenPairs(): Set<string>
-{
-  if (breakCache.edges === S.FILE_EDGES && breakCache.layers === S.LAYERS) return breakCache.pairs;
-  const folderOf = new Map<string, string>();
-  S.NODES.forEach((n, nodeIndex) => n.files.forEach((name, fileIndex) => folderOf.set(filePath(nodeIndex, fileIndex), n.id)));
-  const pairs = new Set<string>();
-  for (const [from, to] of S.FILE_EDGES) if (pointsUp(from, to)) pairs.add(folderOf.get(from) + "\u0001" + folderOf.get(to));
-  breakCache = { edges: S.FILE_EDGES, layers: S.LAYERS, pairs };
-  return pairs;
-}
-
 // Whether one file using another points up the layers the repository declares.
 function pointsUp(userPath: string, usedPath: string): boolean
 {
@@ -137,7 +121,8 @@ function pointsUp(userPath: string, usedPath: string): boolean
 // points up the layers — something lower down using something built on top of it —
 // is a break: the one kind that means the layers are tangled. With layers declared, that is
 // read from the layer each file is given in the architecture file; without, a folder using
-// one nested deeper is a break.
+// one nested deeper is a break. With layers declared, breaks are drawn per file by
+// collectBreaks instead, so folder strands stay plain.
 function collectEdges(): Edge[]
 {
   const result: Edge[] = [];
@@ -146,15 +131,15 @@ function collectEdges(): Edge[]
   {
     const user = byId.get(from), used = byId.get(to);
     if (!user || !used || user.hidden || used.hidden || user.cx === undefined || used.cx === undefined) continue;
-    const broken = S.LAYERS.length > 0 ? brokenPairs().has(from + "\u0001" + to) : user.rank < used.rank;
+    const broken = S.LAYERS.length === 0 && user.rank < used.rank;
     let state = "normal";
     if (S.trace) state = "dim";
     else if (S.selected >= 0) state = user.index === S.selected ? "out" : used.index === S.selected ? "in" : "dim";
-    // The legend's tag filter dims every import that touches neither a matching folder.
-    if (S.tagFilter !== null && state !== "dim" && !nodeMatchesTagFilter(user.index!) && !nodeMatchesTagFilter(used.index!)) state = "dim";
+    // A tag filter dims every import that touches neither a matching folder.
+    if (hasFilters() && state !== "dim" && !nodeMatchesFilters(user.index!) && !nodeMatchesFilters(used.index!)) state = "dim";
     result.push({
-      user: new V3(user.cx, user.topY! + 0.45, user.cz!),
-      used: new V3(used.cx, used.topY! + 0.45, used.cz!),
+      user: new V3(user.cx, user.topY! + 0.02, user.cz!),
+      used: new V3(used.cx, used.topY! + 0.02, used.cz!),
       route: bundleRoute(used, user, 0.5),
       broken, state, weight: count,
     });
@@ -200,6 +185,38 @@ function collectEdges(): Edge[]
   return result;
 }
 
+/** One file import that points up the layers, from the user's tether foot to the used file's. */
+interface Break { user: BABYLON.Vector3; used: BABYLON.Vector3; lit: boolean }
+
+// Where a file's tether meets its folder's plate: the spot under its box, on the floor.
+function footOf(rec: FileRecord): BABYLON.Vector3 | null
+{
+  const folder = S.NODES[rec.node];
+  if (!folder || folder.topY === undefined) return null;
+  return new V3(rec.shape.position.x, folder.topY + 0.012, rec.shape.position.z);
+}
+
+// Every file import that points up the declared layers, foot to foot on the folder plates. The
+// chosen file's own breaks are left out, since collectEdges already draws them as solid strands.
+function collectBreaks(): Break[]
+{
+  const result: Break[] = [];
+  if (S.LAYERS.length === 0) return result;
+  const chosen = S.selected >= 0 && S.selectedFile >= 0 ? filePath(S.selected, S.selectedFile) : null;
+  for (const [from, to] of S.FILE_EDGES)
+  {
+    if (from === chosen || to === chosen || !pointsUp(from, to)) continue;
+    const user = S.fileRecords.get(from), used = S.fileRecords.get(to);
+    if (!user || !used) continue;
+    const a = footOf(user), b = footOf(used);
+    if (!a || !b) continue;
+    const lit = (matchesFilters(from) || matchesFilters(to)) && S.trace === null &&
+      (S.focusSet === null || S.focusSet.has(user.node) || S.focusSet.has(used.node));
+    result.push({ user: a, used: b, lit });
+  }
+  return result;
+}
+
 // A straight strand from a file down to its folder's floor. A file on a route has been drawn out
 // to a clear lane off the city, so its strand drops plumb in the lane and then runs along the floor
 // back to the spot it normally stands on, in its folder's route colour, so each lifted file still
@@ -208,12 +225,12 @@ function collectTethers(): Tether[]
 {
   const tethers: Tether[] = [];
   const hues = routeFolderHues();
-  const active = S.trace !== null || S.focusSet !== null || S.tagFilter !== null;
+  const active = S.trace !== null || S.focusSet !== null || hasFilters();
   for (const rec of S.fileRecords.values())
   {
     const folder = S.NODES[rec.node];
     if (!folder || folder.topY === undefined) continue;
-    const lit = matchesTagFilter(rec.path) && (S.trace === null || S.trace.set.has(rec.path)) && (S.focusSet === null || S.focusSet.has(rec.node));
+    const lit = matchesFilters(rec.path) && (S.trace === null || S.trace.set.has(rec.path)) && (S.focusSet === null || S.focusSet.has(rec.node));
     const pos = rec.shape.position;
     const bottomY = pos.y - rec.shape.scaling.y / 2;
     const routed = S.trace !== null && S.trace.trace && S.trace.set.has(rec.path);
@@ -245,8 +262,6 @@ function rebuildEdges(): void
   flowEdges = [];
 
   const edges = collectEdges();
-  brokenCount = edges.filter((edge) => edge.broken).length;
-  updateBreaks();
   const lines: BABYLON.Vector3[][] = [], colors: BABYLON.Color4[][] = [];
   const SEGMENTS = 16;
   for (const edge of edges)
@@ -254,8 +269,8 @@ function rebuildEdges(): void
     const length = V3.Distance(edge.user, edge.used);
     const bow = edge.bow !== undefined ? edge.bow : Math.min(6, 0.25 * length + 0.3);
     const state = edge.state;
-    const solid = state === "out" || state === "in" || state === "trace" || (edge.broken && state !== "dim");
 
+    const solid = state === "out" || state === "in" || state === "trace" || (edge.broken && state !== "dim");
     if (solid)
     {
       const hex = state === "trace" ? "#3fb950" : edge.broken ? "#f85149" : state === "out" ? "#58a6ff" : "#d29922";
@@ -276,6 +291,14 @@ function rebuildEdges(): void
     }
     lines.push(points);
     colors.push(shades);
+  }
+  // Layer breaks: a thin red line from tether foot to tether foot, brightening toward the file
+  // that uses the import, so direction reads without an arrowhead per line.
+  for (const { user, used, lit } of collectBreaks())
+  {
+    const base = lit ? 0.85 : 0.08;
+    lines.push([used, user]);
+    colors.push([new BABYLON.Color4(0.97, 0.32, 0.29, base * 0.35), new BABYLON.Color4(0.97, 0.32, 0.29, base)]);
   }
   if (lines.length > 0)
   {
@@ -386,17 +409,6 @@ function addStrand(edge: Edge, bow: number, hex: string, radius: number): void
   head.rotationQuaternion = rq;
   BABYLON.Quaternion.FromUnitVectorsToRef(V3.Up(), direction, rq);
   edgeShapes.push(head);
-}
-
-// Shows how many imports break the downward-only rule, in the legend.
-function updateBreaks(): void
-{
-  const note = document.getElementById("breaks-count");
-  if (!note) return;
-  note.textContent = brokenCount === 0
-    ? "none — every import points down"
-    : brokenCount + " import" + (brokenCount === 1 ? "" : "s") + " pointing up";
-  note.classList.toggle("bad", brokenCount > 0);
 }
 
 // Moves one small dot along each solid strand, from the imported side to the side that uses it,

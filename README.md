@@ -24,29 +24,45 @@ machines too — needed when you watch from a laptop over the network or through
 proxy such as Tailscale Serve. Without it, only this machine can change anything.
 
 A big repository draws only the files that already have an architecture entry until it is
-fully described — the *Undescribed: hidden* button in the bottom bar draws them all.
+fully described — the *Described only* toggle in the Outliner's grouping menu draws them all.
 
 ## Using the map
 
 - **Find anything.** Press `/` or Ctrl/Cmd+K and type part of a file path, folder, or
-  declared function; Enter flies to it and opens its code. Esc closes the search.
+  declared function; the Outliner filters in place and lists matching symbols under their
+  file. The arrow keys pick a match and Enter chooses it. Double-click a file row to open its
+  code, or choose it to fly there.
 - **Click a block** to trace a folder, or a box to see the file's symbols, line counts,
   and what it uses. The breadcrumb at the top walks back up.
-- **Filter by role.** Click a tag in the legend to dim everything that does not carry it;
-  click it again (or Esc) to clear.
-- **Colour by** tags, layers, folders, size, or recent changes. *Changes* colours each file
-  by the lines it has changed since HEAD, and the changes endpoint needs the map to be
-  reading a git checkout with `git` on the machine.
+- **One outliner for everything.** A filter strip at the top lists every system and layer with a
+  live count. Clicking a chip narrows the scene to that value, and chips combine: systems and
+  layers are independent slices. Only matching files are drawn, with just the folders and layer
+  planes that still hold one, and the planes close up so no empty layer leaves a gap. The tree
+  below lists each folder once; the *List by* switch can instead flatten files under system or
+  layer groups. Click a group to fold it. Every file row carries a tag badge and coloured dots for
+  its system and layer, and clicking a dot switches that value in the strip. Choosing a file
+  anywhere opens its folder and scrolls it into view. An eye on a folder row hides its subtree in
+  the scene, and a file's own eye hides or restores just that file. Folding every group leaves open any
+  folder above an eye-hidden row, so you can always find it again. *Hide all* and *Show all*
+  below the tree act on every file at once, and *Show all* also turns Extras on so nothing stays
+  hidden. Until a repository declares systems, the System chips and grouping stay hidden.
+- **Tag filters.** A file's tag badge filters by role. Layers are shared, so one layer can hold
+  files from several systems.
+- **Colour by** tags, systems, layers, folders, size, or recent changes. *Changes* colours
+  each file by the lines it has changed since HEAD, and the changes endpoint needs the map to
+  be reading a git checkout with `git` on the machine.
 - **Stand back.** *Layer gap* pulls the layer planes apart; *Extras* shows tests, docs,
-  and scripts; hidden folders can be toggled in the Folders panel. *Glow* switches bloom
-  (the page's only post-processing pass) off if a slow machine wants the frames back;
-  a software renderer starts with it off and at a slightly lower resolution.
+  and scripts. *Glow* switches bloom (the page's only post-processing pass) off if a slow
+  machine wants the frames back; a software renderer starts with it off and at a slightly
+  lower resolution.
 - **Keys:** `Space` spin · `F` frame the chosen block · `[` `]` step through a folder's
   files · `R` reset · `Esc` clear · `?` shortcut card.
 - **Point it somewhere else.** *Repo* in the bottom bar opens the folder picker: walk the
   machine's folders with *Up* and the list, type a path (`~/` works), or pick a recent
   repository. Opening another one reloads the map onto it, and the agent prompt it copies
-  names the new path, so an agent can describe it without restarting anything.
+  names the new path, so an agent can describe it without restarting anything. *Delete
+  architecture* removes the repository's `.codespace` folder, so it can be described again
+  from nothing.
 - **Share a view.** The chosen file is kept in the address bar (`#public/main.ts`), so a
   reload or a pasted link opens the same place.
 
@@ -58,27 +74,31 @@ without refreshing.
 
 - `src/repo/Repo.ts` — reads a folder as a repository: file list, safe reads, ignored
   folders, and a cheap change fingerprint.
-- `src/server/Server.ts` — the page, the file list, the source API, the changed-line counts, the change fingerprint, and switching repositories.
+- `src/server/Server.ts` — the page (compressed, with validators), the installed Babylon at a versioned address, `/api/bootstrap`, the source API, the changed-line counts, and switching repositories.
 - `src/server/Workspace.ts` — the repository being read, and the recent ones the page can switch back to.
 - `src/repo/Architecture.ts` — reads, checks, and safely changes a repository's `.codespace/architecture.json`.
 - `src/server/Api.ts` — the endpoints the page uses: the architecture, the import graph, the ingest status, and what the map shows.
 - `src/server/View.ts` — what the map is asked to show, streamed to every open page.
+- `src/repo/Snapshot.ts` — one cached read of a repository's files, imports, line counts, and declared names, rebuilt only when a file changes.
 - `src/repo/Graph.ts` — the imports between code files, relative for TypeScript and
   JavaScript and by namespace for C#, for the tools.
-- `src/repo/Ingest.ts` — what an agent reads next to describe a codebase: files without a summary, then folders.
+- `src/repo/Ingest.ts` — what an agent reads next to describe a codebase: files whose entry is incomplete, then folders.
 - `src/server/Guard.ts` — who may change anything: this machine only.
 - `src/cli/Cli.ts` — the commands an agent runs to describe a repository, with no server or MCP.
 - `public/index.html` — the map page: the scene and its controls.
 - `public/main.ts` — the entry: pointer interaction, the render loop, and boot.
 - `public/state.ts` — the shared world: constants, the Babylon scene, and the live state.
-- `public/repo.ts` — reads the live repository into nodes and edges.
+- `public/repo.ts` — reads the live repository into nodes and edges, taking the import graph from the server.
+- `public/symbols.ts` — reads the declarations a source file lists, for the code panel and search.
+- `public/filter.ts` — the pure rules behind the systems/layers filter and the outliner search.
 - `public/city.ts` — lays out the map as a treemap: each folder a tile, each file a box of the same footprint, as tall as its line count.
 - `public/meshes.ts` — builds the boxes and grid, and moves the camera.
 - `public/highlight.ts`, `public/edges.ts`, `public/labels.ts`, `public/route.ts`, `public/pads.ts` — the selection glow, the import strands, the names, the route lane, and the layer rings.
 - `public/view.ts` — the Showing panel, and what tools ask the map to light up or focus.
 - `public/repo-switch.ts` — the Repo picker: open another folder, list recent ones, and show how much is left to describe.
-- `public/panels.ts` — the summary, info, folders, and legend panels, the breadcrumbs, and the highlighted code view.
-- `public/controls.ts` — the buttons, search, keyboard shortcuts, colour menu, live poll, and refresh.
+- `public/panels.ts` — the info panel, the Outliner tree, its search and filters, the breadcrumbs, and the highlighted code view.
+- `public/controls.ts` — the buttons, Outliner interactions, keyboard shortcuts, colour menu, live poll, and refresh.
+- `public/mobile.ts` — the phone layout: moves the panels into one sheet behind a tab bar.
 - `public/style.css` — the page styles.
 - `public/types.ts` — the shapes the page shares between its modules: the folder tree, each file's record, and what a tool asks to show.
 - `public/babylon.d.ts` — the slice of the Babylon.js global the page uses, so the browser code type-checks.
@@ -87,7 +107,7 @@ without refreshing.
 - `docs/review-rubric.md` — the code-health review rubric.
 - `docs/FUTURE.md` — ideas deliberately deferred, written so they can be picked up later.
 - `docs/architecture.md` — the architecture file: its fields, the tag vocabulary, and the rules for generated code.
-- `.codespace/architecture.json` — this repository's own layers, tags, and summaries, which the map reads.
+- `.codespace/architecture.json` — this repository's own layers, systems, tags, and summaries, which the map reads.
 
 ## Ingesting a codebase from an agent
 
@@ -107,13 +127,13 @@ node --experimental-transform-types src/cli/Cli.ts apply --file batch.json --rep
 ```
 
 `apply` takes the same shape the architecture file uses:
-`{"files": {"src/a.ts": {"summary": "...", "tags": ["core"], "layer": "base"}}, "folders": {"src": {"summary": "..."}}}`.
+`{"systems": {"server": {"summary": "..."}}, "files": {"src/a.ts": {"summary": "...", "system": "server", "tags": ["core"], "layer": "repo"}}, "folders": {"src": {"summary": "..."}}}`. Layers and systems are declared once and shared: a layer may hold files from several systems.
 Repeat `next` then `apply` until `next` reports `"remaining": 0`; folders come last. Generated
 and vendored files are summarized for you and never handed back. `--size` is at most 40.
 
 Every batch is written as soon as it is applied, so there is nothing to save afterwards and an
 interrupted run picks up where it stopped. A batch only ever holds files and folders that still
-lack a summary, so re-running never overwrites what is already written, by hand or otherwise.
+lack a summary, a system, a layer, or tags, so re-running never overwrites what is already written, by hand or otherwise.
 The file does not exist until the first batch is written; opening a repository creates nothing.
 
 `AGENTS.md` here spells the loop out for an agent working in this repository. For another one,
@@ -128,12 +148,15 @@ with `--allow-writes`.
 
 ## How it draws the city
 
-The page reads the repository live from `/api/files` and `/api/source`, following
+The page reads the repository live from one `/api/bootstrap` request (started before Babylon finishes downloading, and answered with just a stamp when nothing has changed), and `/api/source` for a file's text, following
 the repository's own `.gitignore` (and a built-in list when it has none) to skip
 what git ignores. Each folder becomes a tile holding its files, and every file is a box of the
 same footprint, as tall as its line count. Imports between folders are drawn as strands
 that follow the folder tree, so imports between the same regions gather into bundles;
-selecting a file draws its own imports directly. A reload — or the 15-second poll — redraws it as the code changes.
+selecting a file draws its own imports directly. A layer break — a file importing one on a
+higher layer — is a thin red line on the folder plates, from the importing file's tether foot
+to the imported file's, brightest at the end that uses it. A reload — or the 15-second poll —
+redraws it as the code changes.
 
 The poll first asks for a change fingerprint (a hash of the file list and each file's size and
 modification time); when it has not moved, the map reads no source at all. Imports and pale

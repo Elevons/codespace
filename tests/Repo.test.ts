@@ -1,14 +1,14 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, symlink, writeFile } from 'node:fs/promises'
+import { makeTemp, removeTemp } from './support.ts'
 import { join } from 'node:path'
 import { Repo } from '../src/repo/Repo.ts'
 
 test('Repo lists readable files and refuses a path outside the repository', async () =>
 {
     // First we make a small repository with one readable file and one ignored folder.
-    const root = await mkdtemp(join(tmpdir(), 'codespace-'))
+    const root = await makeTemp('codespace-')
     try
     {
         await mkdir(join(root, 'src'))
@@ -28,15 +28,15 @@ test('Repo lists readable files and refuses a path outside the repository', asyn
     }
     finally
     {
-        await rm(root, { recursive: true, force: true })
+        await removeTemp(root)
     }
 })
 
 test('Repo refuses to read a symlink that points outside the repository', async () =>
 {
     // First we make a repository holding a symlink to a file in a different folder.
-    const root = await mkdtemp(join(tmpdir(), 'codespace-'))
-    const outside = await mkdtemp(join(tmpdir(), 'codespace-out-'))
+    const root = await makeTemp('codespace-')
+    const outside = await makeTemp('codespace-out-')
     try
     {
         await writeFile(join(outside, 'secret.ts'), 'export const secret = 1\n')
@@ -49,15 +49,15 @@ test('Repo refuses to read a symlink that points outside the repository', async 
     }
     finally
     {
-        await rm(root, { recursive: true, force: true })
-        await rm(outside, { recursive: true, force: true })
+        await removeTemp(root)
+        await removeTemp(outside)
     }
 })
 
 test('Repo follows the repository .gitignore, so it shows what git keeps', async () =>
 {
     // First we make a repository whose .gitignore hides one folder and not another.
-    const root = await mkdtemp(join(tmpdir(), 'codespace-'))
+    const root = await makeTemp('codespace-')
     try
     {
         await mkdir(join(root, 'packages'))
@@ -72,14 +72,14 @@ test('Repo follows the repository .gitignore, so it shows what git keeps', async
     }
     finally
     {
-        await rm(root, { recursive: true, force: true })
+        await removeTemp(root)
     }
 })
 
 test('Repo treats a gitignore "**/" as zero or more folders, like git', async () =>
 {
     // First we make a repository that hides node_modules under dev with a "**/" rule.
-    const root = await mkdtemp(join(tmpdir(), 'codespace-'))
+    const root = await makeTemp('codespace-')
     try
     {
         await mkdir(join(root, 'dev', 'node_modules'), { recursive: true })
@@ -94,14 +94,14 @@ test('Repo treats a gitignore "**/" as zero or more folders, like git', async ()
     }
     finally
     {
-        await rm(root, { recursive: true, force: true })
+        await removeTemp(root)
     }
 })
 
 test('Repo fingerprints its files and notices a change', async () =>
 {
     // First we make a repository with one readable file.
-    const root = await mkdtemp(join(tmpdir(), 'codespace-'))
+    const root = await makeTemp('codespace-')
     try
     {
         await writeFile(join(root, 'a.ts'), 'export const a = 1\n')
@@ -117,6 +117,6 @@ test('Repo fingerprints its files and notices a change', async () =>
     }
     finally
     {
-        await rm(root, { recursive: true, force: true })
+        await removeTemp(root)
     }
 })

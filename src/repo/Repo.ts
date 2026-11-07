@@ -143,6 +143,15 @@ export class Repo
      */
     public async FingerprintAsync(): Promise<string>
     {
+        return (await this.StampAsync()).fingerprint
+    }
+
+    /**
+     * Lists the files and stamps them in one walk, so a caller that needs both does not list twice.
+     * @returns the sorted file list and the change stamp over it
+     */
+    public async StampAsync(): Promise<{ files: string[], fingerprint: string }>
+    {
         const files = await this.ListFilesAsync()
         const stamps = await Promise.all(files.map(async (file) =>
         {
@@ -157,7 +166,7 @@ export class Repo
                 return `${file}:gone`
             }
         }))
-        return createHash('sha1').update(stamps.join('\n')).digest('hex')
+        return { files, fingerprint: createHash('sha1').update(stamps.join('\n')).digest('hex') }
     }
 
     /**

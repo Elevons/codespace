@@ -31,7 +31,7 @@ export interface IIngestFile
 {
     /** Its repository-relative path. */
     path: string
-    /** What its entry still lacks: "summary", "layer", or "tags". */
+    /** What its entry still lacks: "summary", "system", "layer", or "tags". */
     missing: string[]
     /** Its text, cut to a readable length. */
     source: string
@@ -57,7 +57,7 @@ export interface IIngestStatus
 {
     /** Files that still need a summary. */
     files: number
-    /** Files whose entry is missing a layer or tags. */
+    /** Files whose entry is missing a system, a layer, or tags. */
     incomplete: number
     /** Folders that still need a summary. */
     folders: number
@@ -65,7 +65,7 @@ export interface IIngestStatus
     remaining: number
 }
 
-/** What `get_ingest_batch` answers. */
+/** What `next` answers. */
 export interface IIngestBatch
 {
     /** Files that still need a summary, for the agent to read. */
@@ -74,9 +74,11 @@ export interface IIngestBatch
     folders: IIngestFolder[]
     /** Generated files that were summarized here, so the agent need not read them. */
     skipped: Array<{ path: string, summary: string }>
-    /** The layer names declared in the architecture file; empty means none are declared yet. */
+    /** The layer names declared in the architecture file; empty means none are declared yet. Layers are shared by every system. */
     layers: string[]
-    /** Files and folders still not fully described after this batch. */
+    /** The system names declared in the architecture file; empty means none are declared yet. */
+    systems: string[]
+    /** Files and folders still to describe, including those this batch hands out. */
     remaining: number
 }
 
@@ -108,6 +110,23 @@ interface IPlan
 }
 
 /**
+ * What one file's entry still lacks: "summary", "system", "layer", or "tags". A system the
+ * architecture does not declare counts as missing, since the map refuses to place the file.
+ * @param architecture what the architecture file says
+ * @param path the file's repository-relative path
+ */
+function Lacks(architecture: IArchitecture, path: string): string[]
+{
+    const entry = architecture.files[path]
+    const lacks: string[] = []
+    if (entry?.summary === undefined) lacks.push('summary')
+    if (entry?.system === undefined || !(entry.system in architecture.systems)) lacks.push('system')
+    if (entry?.layer === undefined) lacks.push('layer')
+    if ((entry?.tags?.length ?? 0) === 0) lacks.push('tags')
+    return lacks
+}
+
+/**
  * Works out what still needs a summary: files without one, and folders without one.
  * @param repo the repository being mapped
  * @param architecture what the architecture file says
@@ -127,9 +146,8 @@ async function PlanAsync(repo: Repo, architecture: IArchitecture): Promise<IPlan
         if (fixed !== null) { if (!summaries.has(path)) skipped.push({ path, summary: fixed }); continue }
         if (!summaries.has(path)) { pending.push(path); continue }
 
-        // A file that is summarized but has no layer or tags comes back for a second pass.
-        const entry = architecture.files[path]
-        if (entry?.layer === undefined || (entry.tags?.length ?? 0) === 0) incomplete.push(path)
+        // A file that is summarized but has no system, layer, or tags comes back for a second pass.
+        if (Lacks(architecture, path).some((field) => field !== 'summary')) incomplete.push(path)
     }
 
     const folders = [...Architecture.Folders(known)].filter((path) => architecture.folders[path] === undefined)
@@ -164,19 +182,12 @@ export async function NextBatchAsync(repo: Repo, architecture: IArchitecture, gr
     for (const [path, entry] of Object.entries(architecture.files)) if (entry.summary !== undefined) summaries.set(path, entry.summary)
     const remaining = pending.length + incomplete.length + folders.length
     const layers = architecture.layers
+    const systems = Object.keys(architecture.systems)
 
     /** What one file's entry still lacks. */
-    const missing = (path: string): string[] =>
-    {
-        const entry = architecture.files[path]
-        const lacks: string[] = []
-        if (entry?.summary === undefined) lacks.push('summary')
-        if (entry?.layer === undefined) lacks.push('layer')
-        if ((entry?.tags?.length ?? 0) === 0) lacks.push('tags')
-        return lacks
-    }
+    const missing = (path: string): string[] => Lacks(architecture, path)
 
-    // Files come first: undescribed ones, then those whose entry is missing a layer or tags. A folder
+    // Files come first: undescribed ones, then those whose entry is missing a system, layer, or tags. A folder
     // is only ready once every file under it has been described.
     const pool = [...pending, ...incomplete]
     if (pool.length > 0)
@@ -194,7 +205,7 @@ export async function NextBatchAsync(repo: Repo, architecture: IArchitecture, gr
             const full = await repo.ReadFileAsync(path).catch(() => '')
             files.push({ path, missing: missing(path), source: full.slice(0, MaxFileChars), truncated: full.length > MaxFileChars, imports: graph.ImportsOf(path), usedBy: usedBy.get(path) ?? [] })
         }
-        return { files, folders: [], skipped, layers, remaining }
+        return { files, folders: [], skipped, layers, systems, remaining }
     }
 
     // Then folders, deepest first, with what is inside them already summarized.
@@ -214,5 +225,5 @@ export async function NextBatchAsync(repo: Repo, architecture: IArchitecture, gr
             .map((folder) => ({ path: folder, summary: architecture.folders[folder] ?? '' }))
         return { path, children: [...childFolders, ...children].sort((a, b) => (a.path < b.path ? -1 : 1)) }
     })
-    return { files: [], folders: batch, skipped, layers, remaining }
+    return { files: [], folders: batch, skipped, layers, systems, remaining }
 }

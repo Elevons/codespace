@@ -1,14 +1,14 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+
 import { join } from 'node:path'
 import { Workspace } from '../src/server/Workspace.ts'
+import { makeTemp, removeTemp } from './support.ts'
 
 test('A workspace opens one repository, switches to another, and keeps them recent', async () =>
 {
-    const first = await mkdtemp(join(tmpdir(), 'codespace-switch-a-'))
-    const second = await mkdtemp(join(tmpdir(), 'codespace-switch-b-'))
+    const first = await makeTemp('codespace-switch-a-')
+    const second = await makeTemp('codespace-switch-b-')
     try
     {
         const workspace = await Workspace.OpenAsync(first)
@@ -26,19 +26,19 @@ test('A workspace opens one repository, switches to another, and keeps them rece
     }
     finally
     {
-        await rm(first, { recursive: true, force: true })
-        await rm(second, { recursive: true, force: true })
+        await removeTemp(first)
+        await removeTemp(second)
     }
 })
 
 test('Opening a folder that is not there fails without moving the map', async () =>
 {
-    const root = await mkdtemp(join(tmpdir(), 'codespace-switch-keep-'))
+    const root = await makeTemp('codespace-switch-keep-')
     try
     {
         const workspace = await Workspace.OpenAsync(root)
         await assert.rejects(workspace.SwitchAsync(join(root, 'nowhere')), /ENOENT|no such file/)
         assert.equal(workspace.repo.Root, root)
     }
-    finally { await rm(root, { recursive: true, force: true }) }
+    finally { await removeTemp(root) }
 })

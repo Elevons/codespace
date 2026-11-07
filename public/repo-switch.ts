@@ -2,6 +2,8 @@
 // how much of the codebase is still undescribed. Describing it is the agent's job, with the CLI, so
 // this panel offers the command prompt rather than calling a model itself.
 
+import { copyText } from "./state.js";
+
 /** What the server says about the repository it reads, and the recent ones. */
 interface IRepoInfo
 {
@@ -51,6 +53,11 @@ const recent = byId<HTMLDivElement>("repo-recent");
 const upButton = byId<HTMLButtonElement>("repo-up");
 const browsePath = byId<HTMLParagraphElement>("repo-browse-path");
 const browseList = byId<HTMLDivElement>("repo-browse-list");
+const deleteButton = byId<HTMLButtonElement>("repo-delete-architecture");
+const deleteConfirm = byId<HTMLDivElement>("repo-delete-confirm");
+const deleteQuestion = byId<HTMLParagraphElement>("repo-delete-question");
+const deleteYes = byId<HTMLButtonElement>("repo-delete-yes");
+const deleteCancel = byId<HTMLButtonElement>("repo-delete-cancel");
 
 /** The prompt handed to an agent, as the server words it, naming the CLI commands. */
 let ingestPrompt = "";
@@ -159,7 +166,10 @@ function renderRecent(): void
 async function refreshInfo(): Promise<void>
 {
   info = await fetch("/api/repo", { cache: "no-cache" }).then((response) => response.json());
-  button.textContent = "Repo: " + info!.name;
+  const name = document.createElement("span");
+  name.className = "repo-name";
+  name.textContent = info!.name;
+  button.replaceChildren("Repo", name);
   button.title = info!.root + " — click to open another repository";
   pathInput.placeholder = info!.root;
   renderRecent();
@@ -191,6 +201,34 @@ async function open(path: string): Promise<void>
   }
 }
 
+/**
+ * Deletes the repository's .codespace folder, so its layers, systems, and summaries are gone and an
+ * agent can describe the codebase again from nothing. The map reloads onto the now-bare repository.
+ */
+async function deleteArchitecture(): Promise<void>
+{
+  errorNote.hidden = true;
+  deleteYes.disabled = true;
+  deleteCancel.disabled = true;
+  try
+  {
+    const response = await fetch("/api/architecture", { method: "DELETE", headers: { "Content-Type": "application/json" } });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.error ?? "The architecture folder could not be deleted.");
+    location.reload();
+  }
+  catch (error)
+  {
+    errorNote.textContent = error instanceof Error ? error.message : String(error);
+    errorNote.hidden = false;
+  }
+  finally
+  {
+    deleteYes.disabled = false;
+    deleteCancel.disabled = false;
+  }
+}
+
 /** Shows the panel over the map, ready to take a path. */
 function showPanel(): void
 {
@@ -210,6 +248,7 @@ function hidePanel(): void
 {
   panel.hidden = true;
   button.classList.remove("on");
+  askDelete(false);
   if (statusTimer !== null) { clearInterval(statusTimer); statusTimer = null; }
 }
 
@@ -229,32 +268,23 @@ form.addEventListener("submit", (event) =>
 upButton.addEventListener("click", () => { if (browsingParent !== null) void browse(browsingParent); });
 
 /**
- * Puts text on the clipboard. The Clipboard API needs a secure page, which a map watched over
- * plain http on the network is not, so a hidden box and the old copy command stand in for it.
- * @param text what to copy
+ * Swaps the delete button for an in-panel question, or back. A native confirm box is not used,
+ * since embedded previews may never show it and the click would silently do nothing.
+ * @param asking whether to show the question
  */
-async function copyText(text: string): Promise<boolean>
+function askDelete(asking: boolean): void
 {
-  try
-  {
-    if (navigator.clipboard !== undefined && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; }
-  }
-  catch { /* fall through to the old way */ }
-  try
-  {
-    const area = document.createElement("textarea");
-    area.value = text;
-    area.setAttribute("readonly", "");
-    area.style.position = "fixed";
-    area.style.opacity = "0";
-    document.body.append(area);
-    area.select();
-    const copied = document.execCommand("copy");
-    area.remove();
-    return copied;
-  }
-  catch { return false; }
+  deleteButton.hidden = asking;
+  deleteConfirm.hidden = !asking;
+  if (!asking) return;
+  const where = info === null ? ".codespace" : info.root.replace(/\/+$/, "") + "/.codespace";
+  deleteQuestion.textContent = `Delete ${where}? Its layers, systems, and summaries are lost, so the repository can be described again from nothing.`;
+  deleteCancel.focus();
 }
+
+deleteButton.addEventListener("click", () => askDelete(true));
+deleteCancel.addEventListener("click", () => askDelete(false));
+deleteYes.addEventListener("click", () => void deleteArchitecture());
 
 copyButton.addEventListener("click", async () =>
 {

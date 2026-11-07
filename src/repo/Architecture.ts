@@ -1,18 +1,20 @@
-import { mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { join, sep } from 'node:path'
 
 /** Where a repository's architecture file lives, relative to its root. */
-export const ArchitecturePath = '.codespace/architecture.json'
+const ArchitecturePath = '.codespace/architecture.json'
 
 /** The longest summary kept, in characters. */
 const MaxSummary = 600
 
 /** The tags the map knows how to colour. Others are allowed, and shown grey. */
-export const TagVocabulary: readonly string[] = ['entry', 'orchestrate', 'core', 'data', 'io', 'ui', 'config', 'test']
+const TagVocabulary: readonly string[] = ['entry', 'orchestrate', 'core', 'data', 'io', 'ui', 'config', 'test']
 
 /** What the architecture file says about one file. */
-export interface IFileEntry
+interface IFileEntry
 {
+    /** The system the file belongs to. */
+    system?: string
     /** The layer the file belongs to. */
     layer?: string
     /** The role tags it carries, primary first. */
@@ -21,11 +23,20 @@ export interface IFileEntry
     summary?: string
 }
 
+/** What the architecture file says about one system: a slice of the repository that shares layers. */
+interface ISystemEntry
+{
+    /** What the system is for, in a sentence. */
+    summary?: string
+}
+
 /** A repository's architecture, as the map reads it. */
 export interface IArchitecture
 {
-    /** The layer names, bottom plane first. */
+    /** The layer names, bottom plane first. Layers are shared by every system. */
     layers: string[]
+    /** The systems, by name. A system groups files without owning its own layers. */
+    systems: Record<string, ISystemEntry>
     /** What is known about each file, by repository-relative path. */
     files: Record<string, IFileEntry>
     /** What each folder is for, in a sentence, by repository-relative path. */
@@ -39,10 +50,12 @@ export interface IArchitecture
 /** A change to the architecture file. Nothing in it is required. */
 export interface IArchitecturePatch
 {
-    /** The new layer order, replacing the old one. */
+    /** The new layer order, replacing the old one. Layers are shared by every system. */
     layers?: string[]
+    /** Systems to add, change, or remove. Null removes one that no file uses. */
+    systems?: Record<string, { summary?: string | null } | null>
     /** Changes to individual files by path. A field set to null is removed. */
-    files?: Record<string, { layer?: string | null, tags?: string[] | null, summary?: string | null }>
+    files?: Record<string, { system?: string | null, layer?: string | null, tags?: string[] | null, summary?: string | null }>
     /** Changes to folder summaries by path. Null removes one. */
     folders?: Record<string, { summary?: string | null }>
     /** Entries to move to a new path, for a file that was moved or renamed. Applied first. */
@@ -50,7 +63,7 @@ export interface IArchitecturePatch
 }
 
 /** The result of a change that was made. */
-export interface IUpdated
+interface IUpdated
 {
     /** The architecture as it now reads. */
     architecture: IArchitecture
@@ -71,7 +84,7 @@ export class Architecture
      */
     public static async ReadAsync(root: string, known: readonly string[]): Promise<IArchitecture>
     {
-        const result: IArchitecture = { layers: [], files: {}, folders: {}, warnings: [], error: '' }
+        const result: IArchitecture = { layers: [], systems: {}, files: {}, folders: {}, warnings: [], error: '' }
 
         // First we read the file, making sure a link cannot point it outside the repository.
         let text: string
@@ -107,6 +120,27 @@ export class Architecture
             }
         }
         else if (sections.layers !== undefined) result.warnings.push('"layers" should be a list of layer names.')
+
+        // Systems are declared by name, each with an optional summary; they do not own layers.
+        if (typeof sections.systems === 'object' && sections.systems !== null && !Array.isArray(sections.systems))
+        {
+            for (const [rawName, rawEntry] of Object.entries(sections.systems as Record<string, unknown>))
+            {
+                const name = rawName.trim()
+                if (name === '') { result.warnings.push('"systems" holds an empty name; it is ignored.'); continue }
+                if (typeof rawEntry !== 'object' || rawEntry === null || Array.isArray(rawEntry))
+                {
+                    result.warnings.push(`The system "${name}" should be an object with a summary.`)
+                    continue
+                }
+                const entry: ISystemEntry = {}
+                const summary = (rawEntry as { summary?: unknown }).summary
+                if (typeof summary === 'string' && summary.trim() !== '') entry.summary = summary.trim().slice(0, MaxSummary)
+                else if (summary !== undefined) result.warnings.push(`The system "${name}" should have a text summary.`)
+                result.systems[name] = entry
+            }
+        }
+        else if (sections.systems !== undefined) result.warnings.push('"systems" should be an object keyed by system name.')
 
         const files = typeof sections.files === 'object' && sections.files !== null && !Array.isArray(sections.files)
             ? sections.files as Record<string, unknown>
@@ -154,6 +188,18 @@ export class Architecture
     }
 
     /**
+     * Deletes a repository's architecture folder, so the map draws it with no layers, systems, or
+     * summaries, as a repository that was never described. Nothing else in the repository is touched.
+     * @param root the repository's real path
+     */
+    public static async DeleteAsync(root: string): Promise<void>
+    {
+        // The path is fixed and inside the repository. A symlink of that name is removed, not followed,
+        // so this can never delete through it.
+        await rm(join(root, '.codespace'), { recursive: true, force: true })
+    }
+
+    /**
      * Makes one change to the file.
      * @param root the repository's real path
      * @param known every file in the repository
@@ -176,8 +222,17 @@ export class Architecture
         {
             if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`${ArchitecturePath} cannot be changed until it is fixed: ${(error as Error).message}`)
         }
-        const { layers: oldLayers, files: oldFiles, folders: oldFolders, ...others } = raw
+        const { layers: oldLayers, systems: oldSystems, files: oldFiles, folders: oldFolders, ...others } = raw
         let layers = Array.isArray(oldLayers) ? oldLayers.filter((layer): layer is string => typeof layer === 'string') : []
+        const systems: Record<string, Record<string, unknown>> = {}
+        if (typeof oldSystems === 'object' && oldSystems !== null && !Array.isArray(oldSystems))
+        {
+            for (const [name, entry] of Object.entries(oldSystems))
+            {
+                if (typeof entry === 'object' && entry !== null && !Array.isArray(entry)) systems[name] = { ...entry }
+                else if (name.trim() !== '') systems[name] = {}
+            }
+        }
         const files: Record<string, Record<string, unknown>> = {}
         if (typeof oldFiles === 'object' && oldFiles !== null && !Array.isArray(oldFiles))
         {
@@ -210,10 +265,48 @@ export class Architecture
             else layers = wanted
         }
 
+        // A system is a name and an optional summary. Layers stay global, so a layer can appear in several systems.
+        for (const [rawName, change] of Object.entries(patch.systems ?? {}))
+        {
+            const name = typeof rawName === 'string' ? rawName.trim() : ''
+            if (name === '') { problems.push('A system needs a non-empty name.'); continue }
+            if (change === null)
+            {
+                // The files this patch leaves in the system: a file in this same patch that names it
+                // stays, whether or not it was there before, and a file that moves away is free.
+                const projected = (path: string): string | undefined =>
+                {
+                    const fileChange = patch.files?.[path]
+                    if (fileChange !== undefined && fileChange.system !== undefined) return fileChange.system ?? undefined
+                    const system = files[path]?.system
+                    return typeof system === 'string' ? system : undefined
+                }
+                const users = [...exists].filter((path) => projected(path) === name)
+                if (users.length > 0) problems.push(`Cannot remove system "${name}": ${users.length} file${users.length === 1 ? ' is' : 's are'} still in it (${users.slice(0, 3).join(', ')}${users.length > 3 ? ', …' : ''}).`)
+                else delete systems[name]
+                continue
+            }
+            const entry = systems[name] ?? {}
+            if (change.summary !== undefined)
+            {
+                if (change.summary === null || change.summary.trim() === '') delete entry.summary
+                else if (change.summary.length > MaxSummary) problems.push(`The system "${name}": summary is over ${MaxSummary} characters.`)
+                else entry.summary = change.summary.trim()
+            }
+            systems[name] = entry
+        }
+
         for (const [path, change] of Object.entries(patch.files ?? {}))
         {
             if (!exists.has(path)) { problems.push(`"${path}" is not a file in the repository.`); continue }
             const entry = files[path] ?? {}
+            if (change.system !== undefined)
+            {
+                if (change.system === null) delete entry.system
+                else if (change.system.trim() === '') problems.push(`"${path}": system must be a non-empty name.`)
+                else if (!(change.system.trim() in systems)) problems.push(`"${path}": system "${change.system.trim()}" is not in systems (${Object.keys(systems).join(', ') || 'none'}). Add it to "systems" first.`)
+                else entry.system = change.system.trim()
+            }
             if (change.layer !== undefined)
             {
                 if (change.layer === null) delete entry.layer
@@ -254,7 +347,7 @@ export class Architecture
         // Finally we write it whole to a temporary file and move it into place, so a reader never sees half of it.
         await mkdir(join(root, '.codespace'), { recursive: true })
         const temporary = `${target}.${process.pid}.tmp`
-        await writeFile(temporary, Architecture.Serialize(layers, files, folders, others), 'utf8')
+        await writeFile(temporary, Architecture.Serialize(layers, systems, files, folders, others), 'utf8')
         await rename(temporary, target)
         return { architecture: await Architecture.ReadAsync(root, known), notes }
     }
@@ -262,26 +355,31 @@ export class Architecture
     /**
      * Writes the file the way it is kept by hand: one entry per file, tags on one line.
      * @param layers the layer order
+     * @param systems each system's entry, in the order they were declared
      * @param files each file's entry, by path
      * @param folders each folder's entry, by path
      * @param others any other top-level fields the file had, which are kept
      */
-    private static Serialize(layers: readonly string[], files: Record<string, Record<string, unknown>>, folders: Record<string, Record<string, unknown>>, others: Record<string, unknown>): string
+    private static Serialize(layers: readonly string[], systems: Record<string, Record<string, unknown>>, files: Record<string, Record<string, unknown>>, folders: Record<string, Record<string, unknown>>, others: Record<string, unknown>): string
     {
-        const order = ['layer', 'tags', 'summary']
-        const section = (entries: Record<string, Record<string, unknown>>): string =>
+        const order = ['system', 'layer', 'tags', 'summary']
+        const section = (entries: Record<string, Record<string, unknown>>, declared = false): string =>
         {
-            const lines = Object.keys(entries).sort().map((path) =>
+            const keysOf = declared ? Object.keys(entries) : Object.keys(entries).sort()
+            const lines = keysOf.map((path) =>
             {
                 const entry = entries[path]!
                 const keys = [...order.filter((key) => key in entry), ...Object.keys(entry).filter((key) => !order.includes(key))]
-                return `    ${JSON.stringify(path)}: {\n${keys.map((key) => `      ${JSON.stringify(key)}: ${Architecture.Inline(entry[key])}`).join(',\n')}\n    }`
+                const body = keys.length === 0 ? '{}' : `{\n${keys.map((key) => `      ${JSON.stringify(key)}: ${Architecture.Inline(entry[key])}`).join(',\n')}\n    }`
+                return `    ${JSON.stringify(path)}: ${body}`
             })
             return lines.length === 0 ? '{}' : `{\n${lines.join(',\n')}\n  }`
         }
+        // Systems keep the order they were declared in, so the map's deck of cards stays stable.
+        const systemSection = Object.keys(systems).length === 0 ? '' : `,\n  "systems": ${section(systems, true)}`
         const folderSection = Object.keys(folders).length === 0 ? '' : `,\n  "folders": ${section(folders)}`
         const extra = Object.entries(others).map(([key, value]) => `,\n  ${JSON.stringify(key)}: ${JSON.stringify(value, null, 2).replace(/\n/g, '\n  ')}`).join('')
-        return `{\n  "layers": ${Architecture.Inline(layers)},\n  "files": ${section(files)}${folderSection}${extra}\n}\n`
+        return `{\n  "layers": ${Architecture.Inline(layers)}${systemSection},\n  "files": ${section(files)}${folderSection}${extra}\n}\n`
     }
 
     /**
@@ -313,6 +411,13 @@ export class Architecture
     private static ReadEntry(path: string, raw: Record<string, unknown>, result: IArchitecture): IFileEntry
     {
         const entry: IFileEntry = {}
+        if (typeof raw.system === 'string' && raw.system.trim() !== '')
+        {
+            entry.system = raw.system.trim()
+            if (!(entry.system in result.systems)) result.warnings.push(`"${path}" is in system "${entry.system}", which "systems" does not list.`)
+        }
+        else if (raw.system !== undefined) result.warnings.push(`"${path}": system should be a name.`)
+
         if (typeof raw.layer === 'string' && raw.layer.trim() !== '')
         {
             entry.layer = raw.layer.trim()

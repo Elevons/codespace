@@ -1,4 +1,4 @@
-import { S, V3, FILE_SIZE, FILE_H, TILE_GAP, MARGIN, PLATE_H, FLOOR_STEP, AREA_PER_WEIGHT, isCode, linesOf, renderEdges, filePath } from "./state.js";
+import { S, V3, FILE_SIZE, FILE_H, TILE_GAP, MARGIN, PLATE_H, FLOOR_STEP, AREA_PER_WEIGHT, isCode, inScene, layerRank, linesOf, renderEdges, filePath } from "./state.js";
 import { syncMeshes } from "./meshes.js";
 import type { Entry, GraphNode } from "./types.js";
 
@@ -17,8 +17,16 @@ function build(): void
   const root = S.NODES.find((n) => n.id === "");
   if (!root) return;
 
+  // Folders that hold a file whose own eye brings it back stay open, so that file can still be drawn.
+  keptOpen.clear();
+  for (const path of S.outliner.shownFiles)
+  {
+    for (let cut = path.lastIndexOf("/"); cut > 0; cut = path.lastIndexOf("/", cut - 1)) keptOpen.add(path.slice(0, cut));
+  }
   markHidden(root, false);
+  liveLayers.clear();
   weighNode(root);
+  S.shownLayers = S.LAYERS.filter((layer) => liveLayers.has(layer));
   const area = Math.max(root.weight ?? 0, 1) * AREA_PER_WEIGHT;
   const width = Math.sqrt(area * 1.5);
   placeNode(root, { x: -width / 2, z: -area / width / 2, w: width, d: area / width }, 0);
@@ -26,10 +34,17 @@ function build(): void
   renderEdges();
 }
 
-// Marks each folder hidden if it, or any folder above it, is in the hidden set.
+// The layers that hold at least one drawn file, gathered while the folders are weighed.
+const liveLayers = new Set<string>();
+
+// Folders above a file that is shown on its own, despite a hidden folder around it.
+const keptOpen = new Set<string>();
+
+// Marks each folder hidden if it, or any folder above it, is in the hidden set, unless it holds
+// a file shown on its own; the files' own visibility then decides what is drawn inside it.
 function markHidden(n: GraphNode, parentHidden: boolean): void
 {
-  n.hidden = parentHidden || S.hiddenFolders.has(n.id);
+  n.hidden = (parentHidden || S.hiddenFolders.has(n.id)) && !keptOpen.has(n.id);
   for (const child of n.children) markHidden(child, n.hidden);
 }
 
@@ -43,13 +58,19 @@ function weighNode(n: GraphNode): void
   {
     if (child.hidden) continue;
     weighNode(child);
+    // A folder with nothing left to draw drops out, so a filter shows only what is relevant to it.
+    if (child.entries!.length === 0) { child.hidden = true; continue; }
     n.entries.push({ dir: child, weight: child.weight ?? 0, x: 0, z: 0, w: 0, d: 0 });
   }
   n.files.forEach((name, fileIndex) =>
   {
-    // Loose top-level files (readme, package files) count as extras.
-    if (n.id === "" && !S.extrasShown) return;
-    n.entries!.push({ fileIndex, path: filePath(n.index!, fileIndex), weight: 1, x: 0, z: 0, w: 0, d: 0 });
+    const path = filePath(n.index!, fileIndex);
+    // An eye in the outliner hides a file, its system, its layer, or its folder from the scene,
+    // and a filter chip keeps only the files that match it.
+    if (!inScene(path)) return;
+    const layer = S.FILE_LAYERS.get(path);
+    if (layer !== undefined) liveLayers.add(layer);
+    n.entries!.push({ fileIndex, path, weight: 1, x: 0, z: 0, w: 0, d: 0 });
   });
   const held = n.entries.reduce((sum, entry) => sum + entry.weight, 0);
   n.weight = held + 1.6 * Math.sqrt(held) + 1;
@@ -132,7 +153,7 @@ function placeNode(n: GraphNode, rect: { x: number; z: number; w: number; d: num
       continue;
     }
     const height = isCode(entry.path!) ? Math.min(1.8, 0.22 + linesOf(entry.path!) / 260) : FILE_H * 0.6;
-    const layerIndex = layered && S.FILE_LAYERS.has(entry.path!) ? S.LAYERS.indexOf(S.FILE_LAYERS.get(entry.path!)!) : -1;
+    const layerIndex = layered && S.FILE_LAYERS.has(entry.path!) ? layerRank(S.FILE_LAYERS.get(entry.path!)!) : -1;
     const baseY = layerIndex >= 0 ? Math.max(n.topY!, layerIndex * S.layerGap) : n.topY!;
     const side = Math.min(FILE_SIZE, Math.min(entry.w, entry.d) - 0.2);
     S.boxes.push({

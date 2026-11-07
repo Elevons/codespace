@@ -2,9 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>Codespace — 3D code map</title>
 <link rel="stylesheet" href="style.css">
+<script>
+  // Ask for the repository now, while the scene library is still downloading; the page takes the answer once it has loaded.
+  window.__bootstrap = fetch("/api/bootstrap", { cache: "no-cache" }).then((r) => r.ok ? r.json() : null).catch(() => null);
+</script>
 </head>
 <body>
 <canvas id="scene"></canvas>
@@ -20,12 +24,6 @@
 </div>
 
 <div class="dock" id="dock-left">
-  <section class="panel" id="searchbar">
-    <label class="sr-only" for="search">Find a file or symbol</label>
-    <input id="search" type="search" placeholder="Find a file or symbol" autocomplete="off" spellcheck="false">
-    <kbd id="search-key">/</kbd>
-    <ol id="search-results" hidden></ol>
-  </section>
   <section class="panel" id="showing" hidden>
     <div id="showing-head">
       <h2 class="panel-title">Showing</h2>
@@ -33,42 +31,73 @@
     </div>
     <div id="showing-body"></div>
   </section>
-  <section class="panel" id="info">
+  <section class="panel empty" id="info">
     <h3>Click a block</h3>
     <p class="hint">Trace what a folder imports, and what imports it.</p>
   </section>
 </div>
 
 <div class="dock" id="dock-right">
-  <section class="panel" id="legend">
-    <h2 class="panel-title">Layers</h2>
-    <div id="legend-items"></div>
-    <div class="breaks"><div class="swatch"><i style="background:#f85149"></i>layer breaks</div>
-    <div id="breaks-count">—</div></div>
-    <button id="tag-filter" type="button" hidden></button>
-  </section>
-  <section class="panel" id="hierarchy">
-    <div id="hierarchy-head">
-      <h2 class="panel-title">Folders</h2>
-      <button id="hierarchy-toggle" type="button" aria-expanded="true" aria-controls="hierarchy-tree">Hide</button>
+  <section class="panel" id="outliner">
+    <div id="outliner-head">
+      <h2 class="panel-title" id="outliner-title">Outliner <span id="outliner-count"></span></h2>
+      <button id="outliner-clear" type="button" title="Clear the search, filters, and folds" hidden>Clear</button>
+      <button id="outliner-collapse" class="hicon" type="button" title="Fold every group" aria-label="Fold every group"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7l4-4 4 4M4 13l4-4 4 4"/></svg></button>
+      <button id="outliner-filter" class="hicon" type="button" aria-expanded="false" aria-controls="outliner-options" title="Choose how the tree groups files" aria-label="Grouping options"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1.6"/><circle cx="11" cy="8" r="1.6"/><circle cx="7" cy="12" r="1.6"/></svg></button>
     </div>
-    <div id="hierarchy-tree"></div>
+    <div id="outliner-options" hidden>
+      <div class="ooptrow">
+        <span class="hint">List by</span>
+        <label><input type="radio" name="group" data-group="folder" checked> Folder</label>
+        <label><input type="radio" name="group" data-group="system"> System</label>
+        <label><input type="radio" name="group" data-group="layer"> Layer</label>
+      </div>
+      <div class="ooptrow">
+        <span class="hint">Show</span>
+        <label><input type="checkbox" id="opt-extras"> Extras</label>
+        <label><input type="checkbox" id="opt-ingested" checked> Described only</label>
+      </div>
+    </div>
+    <label id="outliner-search">
+      <span aria-hidden="true">⌕</span>
+      <span class="sr-only">Find a file, folder, or symbol</span>
+      <input id="search" type="search" placeholder="Find files or symbols" autocomplete="off" spellcheck="false">
+      <kbd id="search-key">/</kbd>
+    </label>
+    <div id="outliner-filters">
+      <div class="fgroup" id="filter-group-system">
+        <span class="flabel">Systems</span>
+        <div class="fchips" id="filter-system" role="group" aria-label="Filter by system"></div>
+      </div>
+      <div class="fgroup" id="filter-group-layer">
+        <span class="flabel">Layers</span>
+        <div class="fchips" id="filter-layer" role="group" aria-label="Filter by layer"></div>
+      </div>
+    </div>
+    <div id="outliner-chips" hidden></div>
+    <div id="outliner-tree" role="tree" aria-label="Files"></div>
+    <div id="outliner-bulk">
+      <span id="outliner-file-count">—</span>
+      <button id="outliner-hide-all" type="button" title="Hide every file box in the scene">Hide all</button>
+      <button id="outliner-show-all-files" type="button" title="Show every file box, including extras and hidden groups">Show all</button>
+    </div>
   </section>
 </div>
 
 <div id="dock-bottom">
   <div class="panel bar" id="tools">
     <button id="repo" type="button" title="Change the repository the map reads">Repo: …</button>
-    <button id="spin" class="on">Spin: on</button>
+    <button id="spin" class="on">Spin<span class="state">on</span></button>
     <button id="reset">Reset view</button>
     <button id="refresh">Refresh</button>
-    <button id="live" class="on">Live: on</button>
-    <button id="help-btn" type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
+    <button id="help-btn" type="button" title="Controls and shortcuts (?)" aria-label="Controls and shortcuts">?</button>
+    <button id="live" class="on">Live<span class="state">on</span></button>
   </div>
   <div class="panel bar" id="controls">
     <label for="colorby">Colour</label>
     <select id="colorby">
       <option value="tag">Tags</option>
+      <option value="system">Systems</option>
       <option value="layer">Layers</option>
       <option value="folder">Folders</option>
       <option value="size">Size</option>
@@ -77,10 +106,32 @@
     <label for="spread">Layer gap</label>
     <input id="spread" type="range" min="0.3" max="6" step="0.1" value="1.2">
     <button id="glow" class="on" title="Bloom, the only post-processing pass">Glow: on</button>
-    <button id="tests" title="Tests, docs, scripts, assets, and loose top-level files">Extras: hidden</button>
-    <button id="ingested" class="on" title="Hide files that have no summary yet, so a partly described repository draws only what is known">Undescribed: hidden</button>
   </div>
 </div>
+
+<!-- On a phone the panels above move into one sheet, opened from a tab bar along the bottom (mobile.ts). -->
+<section id="msheet" hidden aria-labelledby="msheet-title">
+  <div id="msheet-head">
+    <span id="msheet-grip" aria-hidden="true"></span>
+    <h2 class="panel-title" id="msheet-title"></h2>
+    <button id="msheet-close" type="button" aria-label="Close, back to the map" title="Back to the map"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
+  </div>
+  <div class="mpane" id="mpane-files" data-pane="files"></div>
+  <div class="mpane" id="mpane-filters" data-pane="filters"></div>
+  <div class="mpane" id="mpane-details" data-pane="details"></div>
+  <div class="mpane" id="mpane-view" data-pane="view"></div>
+</section>
+<div id="mpeek" hidden>
+  <button id="mpeek-open" type="button" title="Show the details"><span id="mpeek-dot"></span><span id="mpeek-text"><b id="mpeek-name"></b><small id="mpeek-sub"></small></span></button>
+  <button id="mpeek-clear" type="button" aria-label="Clear the choice" title="Clear the choice">✕</button>
+</div>
+<nav id="mtabs" aria-label="Panels">
+  <button type="button" data-tab="map" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg><span>Map</span></button>
+  <button type="button" data-tab="files" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v11H3z"/><path d="M7 13h10M7 16h6"/></svg><span>Files</span></button>
+  <button type="button" data-tab="filters" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6 8v6l-4-2v-4z"/></svg><span>Filters</span><i class="mbadge" hidden></i></button>
+  <button type="button" data-tab="details" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg><span>Details</span><i class="mbadge dot" hidden></i></button>
+  <button type="button" data-tab="view" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg><span>View</span></button>
+</nav>
 
 <div class="panel" id="repo-panel" hidden>
   <h2 class="panel-title">Repository</h2>
@@ -106,11 +157,24 @@
   </div>
   <textarea id="repo-prompt" class="hint" readonly hidden></textarea>
   <div id="repo-recent"></div>
+  <div id="repo-delete">
+    <button id="repo-delete-architecture" type="button" title="Delete this repository's .codespace folder">Delete architecture</button>
+    <div id="repo-delete-confirm" hidden>
+      <p id="repo-delete-question">Delete .codespace? Its layers, systems, and summaries are lost.</p>
+      <button id="repo-delete-cancel" type="button">Cancel</button>
+      <button id="repo-delete-yes" type="button">Delete</button>
+    </div>
+  </div>
 </div>
 
 <div class="panel" id="help" hidden>
-  <h2 class="panel-title">Keys</h2>
-  <dl>
+  <h2 class="panel-title">Controls</h2>
+  <dl class="touch-only">
+    <dt>tap</dt><dd>choose a block · tap empty ground to clear</dd>
+    <dt>drag</dt><dd>orbit the map</dd>
+    <dt>two fingers</dt><dd>pan · pinch to zoom</dd>
+  </dl>
+  <dl class="key-only">
     <dt><kbd>/</kbd> <kbd>Ctrl</kbd><kbd>K</kbd></dt><dd>find a file or symbol</dd>
     <dt><kbd>Space</kbd></dt><dd>spin the map</dd>
     <dt><kbd>F</kbd></dt><dd>frame the chosen block</dd>
@@ -119,10 +183,10 @@
     <dt><kbd>Esc</kbd></dt><dd>clear the choice and filters</dd>
     <dt>drag</dt><dd>orbit · right-drag to pan · wheel to zoom</dd>
   </dl>
-  <p class="hint">Click a tag in the legend to filter the map to it.</p>
+  <p class="hint key-only">Filter the map from the Outliner's strip (<kbd>Alt</kbd>-click solos a chip); an eye hides a row in the scene. In search, <kbd>↑</kbd> <kbd>↓</kbd> pick a match, <kbd>Enter</kbd> chooses it, <kbd>Esc</kbd> empties it. In the tree, arrows move and fold, <kbd>Enter</kbd> chooses, <kbd>Shift</kbd><kbd>Enter</kbd> or a double-click opens the source, <kbd>Space</kbd> flips the eye.</p>
 </div>
 
-<script src="https://cdn.babylonjs.com/v9.31.3/babylon.js"></script>
+<script src="/vendor/babylon-9.31.3.js"></script>
 <script type="module" src="main.js"></script>
 </body>
 </html>

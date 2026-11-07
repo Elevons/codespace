@@ -8,10 +8,27 @@ the code.
 
 ```json
 {
-  "layers": ["base", "viz", "ui"],
+  "layers": ["model", "repo", "api", "render", "panels", "shell", "entry"],
+  "systems": {
+    "browser": { "summary": "The page: the 3D city and everything drawn and driven in the browser." },
+    "server": { "summary": "The server side: reading repositories and serving the map." }
+  },
   "files": {
+    "public/main.ts": {
+      "system": "browser",
+      "layer": "entry",
+      "tags": ["entry"],
+      "summary": "Boots the page: pointer interaction, the render loop, and the first load."
+    },
+    "src/server/Server.ts": {
+      "system": "server",
+      "layer": "entry",
+      "tags": ["entry", "io"],
+      "summary": "Serves the page, the repository, changes, and the fingerprint API."
+    },
     "src/repo/Repo.ts": {
-      "layer": "base",
+      "system": "server",
+      "layer": "repo",
       "tags": ["core", "io"],
       "summary": "Reads a folder as a repository: lists its files and reads source safely."
     }
@@ -22,17 +39,23 @@ the code.
 }
 ```
 
+`entry` is used by both systems here; `repo` belongs to one. A system's secondary layers are just
+the layer names its own files use, and another system may share any of them.
+
 The map reads it live: edit the file and the page redraws within its poll interval, or on
-Refresh. A repository without one still draws, with layers coloured by folder.
+Refresh. A repository without one still draws, with layers coloured by folder. The Repo
+panel can delete this folder whole, so a repository can be described again from nothing.
 
 ## Fields
 
 | Field | Means |
 | --- | --- |
-| `layers` | The layer names, bottom plane first. Each is drawn as a plane. |
+| `layers` | The layer names, bottom plane first. Each is drawn as a plane. Layers are shared. |
+| `systems` | An object keyed by system name, each with a `summary`. A system groups files; it does not own layers. Optional. |
 | `files` | An object keyed by repository-relative path, with forward slashes. |
 | `folders` | An object keyed by folder path, each with a `summary`. The repository root is not one. Optional. |
-| `layer` | The layer the file belongs to. Its box rises to that layer's plane. |
+| `system` | The system the file belongs to. One system can use any number of shared layers. |
+| `layer` | The file's level or role in the stack — its job, not its system or folder. Its box rises to that layer's plane. |
 | `tags` | The file's roles, primary first. The first tag sets its colour. |
 | `summary` | One plain sentence on what the file is *for*: what it does and why it exists, not how. |
 | `folders` entry | A `summary` saying what the folder's contents are for, written once its files and folders are described. |
@@ -58,24 +81,53 @@ Every field is optional. A file with no entry sits on the ground, uncoloured by 
    run `node src/cli/Cli.ts apply`, which validates the change and redraws the map.
 2. When you move or rename a file, move its entry's key to the new path. An entry for a
    path that no longer exists is ignored, and the Summary panel warns about it.
-3. Draw tags only from the vocabulary above, and layers only from `layers`.
+3. Draw tags only from the vocabulary above, systems only from `systems`, and layers only from
+   `layers`. A layer may appear in more than one system.
 4. Keep summaries to one sentence.
 5. Entries can be written by an agent in batches: `node src/cli/Cli.ts next` hands back the
-   files and folders still missing a summary, a layer, or tags, and `apply` writes them back.
-   Declare the layers first; a layer not listed in `layers` is refused. Generated and vendored
-   files are summarized for it, so it does not spend effort on lockfiles or built output.
+   files and folders still missing a summary, a system, a layer, or tags, and `apply` writes
+   them back. Declare the systems and layers first; a system or layer not listed is refused.
+   Generated and vendored files are summarized for it, so it does not spend effort on lockfiles
+   or built output.
 
 ## What the map does with it
 
-- Boxes are coloured by their first tag, and the legend lists the tags it finds.
+- Boxes are coloured by their first tag by default; the Colour menu can colour them by system,
+  layer, folder, size, or recent changes.
 - Each layer is a translucent plane with a coloured outline; files rise to their layer, and a
-  vertical line ties each lifted file to its folder.
-- An import that points up the layers (a lower layer using a higher one) is drawn red and
-  counted in the legend.
+  vertical line ties each lifted file to its folder. Because layers are shared, one plane can
+  hold files from several systems.
+- The Outliner is a filter strip over one tree. The strip lists every system and layer with a
+  live count; clicking a chip switches that value on (Alt-click solos it), and the selected systems
+  and layers together decide which files the scene draws. Switching a system on also switches on
+  the layers its files need when the selected layers would leave it empty, and the same for a layer
+  and its systems, so one strip never locks the other out; such a chip is dotted until clicked. A
+  chip with nothing to draw at all (the eyes or the tag filter hide every file in it) is dimmed and
+  cannot be switched on, though a selected one can always be switched off. Non-matching files, then the folders and
+  layer planes left empty, are not drawn. The tree lists each folder once, or flattens files under
+  system or layer groups with the *List by* switch. A group's caret folds it (Alt folds everything
+  inside); clicking a folder row chooses that folder, and clicking it again folds it. A folder's eye
+  hides or shows every file beneath it, whatever hid them, and shows a half state when only some are
+  drawn; a file's own eye hides or restores that one file, even inside a hidden folder. Folding every
+  group keeps open any folder above an eye-hidden file or folder, so a hidden row can always be found
+  again. The search
+  takes several words, each of which must match a file's path or one of its symbols. Every file row
+  carries a tag badge and a system dot and layer dot in the strip's colours. The tree can be driven
+  from the keyboard: arrows move and fold, Enter chooses, Shift+Enter opens the source, Space flips
+  the eye. Until a repository declares systems, the System chips and grouping stay hidden.
+- On a phone (a screen 720px wide or less) the map fills the screen and a tab bar along the bottom
+  opens one sheet at a time: Files (the search and the tree, where tapping a folder folds it),
+  Filters (every system and layer as a large tile, the tag filter, and the view options), Details
+  (what is chosen), and View (the map's controls as big buttons). `public/mobile.ts` moves the same
+  panels into the sheet rather than copying them, and puts them back on a wider screen. Choosing a
+  file closes the sheet so the map can glide to it, and a strip above the tabs names the choice;
+  dragging the sheet's handle down closes it.
+- An import that points up the layers (a lower layer using a higher one) is a thin red line
+  on the folder plates, from the importing file's tether foot to the imported file's.
 - A tool can ask the map to show files with an explanation of each, which appears in the
-  Showing panel; see the README's section on driving the map from an agent.
-- The Summary panel shows the chosen file's summary, or each file's when a folder is chosen,
-  and warns about problems in the file: invalid JSON, entries for files that are gone,
-  layers a file names that `layers` does not list.
+  Showing panel; see the README's section on ingesting a codebase from an agent.
+- The info panel shows the chosen file's summary, or each file's when a folder is chosen, and
+  lists problems found in the architecture file: invalid JSON, entries for files that are gone,
+  and systems or layers a file names that the file does not declare.
 - `.codespace/` is part of the repository, so it is on the map like anything else, as an
   extra: hidden until you turn Extras on, along with `docs` and `tests`.

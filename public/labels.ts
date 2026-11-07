@@ -1,4 +1,4 @@
-import { S, V3, scene, camera, canvas, labelLayer, colorFor, filePath, matchesTagFilter, nodeMatchesTagFilter } from "./state.js";
+import { S, V3, scene, camera, canvas, labelLayer, colorFor, filePath, matchesFilters, nodeMatchesFilters } from "./state.js";
 import { labelOf } from "./repo.js";
 import { routeFolderHues, routeRuns, runLine } from "./route.js";
 
@@ -31,7 +31,7 @@ function collectLabels(): LabelItem[]
   {
     if (n.hidden || n.cx === undefined) return;
     const hue = hues.get(i);
-    const filtered = !nodeMatchesTagFilter(i);
+    const filtered = !nodeMatchesFilters(i);
     const labelled = hue !== undefined || i === S.selected || (S.focusSet !== null && S.focusSet.has(i)) || (n.level ?? 0) <= 1;
     if (!labelled) return;
     const pos = new V3(n.cx, n.topY! + 0.5, n.cz!);
@@ -61,8 +61,8 @@ function collectLabels(): LabelItem[]
     if (railed && shown && !hovered) continue;
     const named = shown || hovered || (near && rec.node === S.selected);
     if (!named) continue;
-    // While the legend filters to one tag, dim every other file's name out of the way.
-    if (!hovered && !matchesTagFilter(rec.path)) continue;
+    // While a tag filter is on, dim every other file's name out of the way.
+    if (!hovered && !matchesFilters(rec.path)) continue;
     const pos = rec.shape.position.clone();
     pos.y += rec.shape.scaling.y / 2 + 0.12;
     const name = rec.path.split("/").pop()!;
@@ -76,7 +76,8 @@ function collectLabels(): LabelItem[]
       cls: hovered ? "file hover" : "file", color: "", opacity: 1 });
   }
   // Layer band names at the corner of each plane nearest the camera, so they stay on screen.
-  for (const plane of S.layerPlanes)
+  const roomy = canvas.clientWidth > 720 && canvas.clientHeight > 500;
+  if (roomy) for (const plane of S.layerPlanes)
   {
     const info = plane.getBoundingInfo().boundingBox;
     const meta = plane.metadata as { layer: string; rank: number };

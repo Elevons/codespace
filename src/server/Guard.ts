@@ -1,4 +1,5 @@
-import type { IncomingMessage } from 'node:http'
+import type { IncomingMessage, ServerResponse } from 'node:http'
+import { gzipSync } from 'node:zlib'
 
 /** The largest request body accepted, in bytes. */
 const MaxBody = 256 * 1024
@@ -8,6 +9,15 @@ const LoopbackAddresses = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 
 /** The host names a page or tool uses to reach this machine's own server. */
 const LocalHosts = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+/** The host suffixes of a private overlay network whose proxy runs on this machine, such as Tailscale. */
+const OverlayHostSuffixes = ['.ts.net']
+
+/** Whether a host name reaches this machine's own server, as localhost or through an overlay proxy on it. */
+function IsOwnHost(host: string): boolean
+{
+    return LocalHosts.has(host) || OverlayHostSuffixes.some((suffix) => host.endsWith(suffix))
+}
 
 /**
  * Says why a request may not change anything, or null when it may. Reading is open, as it is
@@ -31,6 +41,47 @@ export function RefuseWrite(request: IncomingMessage, anywhere = false): string 
     if (origin !== undefined && new URL(origin).host !== target) return 'Cross-site requests are refused.'
     if (!(request.headers['content-type'] ?? '').startsWith('application/json')) return 'Send JSON.'
     return null
+}
+
+/**
+ * Says why a request may not browse the machine's folders, or null when it may. The picker lists
+ * folders outside the repository, so it stays on this machine even when writes are allowed from
+ * anywhere.
+ * @param request the incoming request
+ */
+export function RefuseRemoteRead(request: IncomingMessage): string | null
+{
+    if (!LoopbackAddresses.has(request.socket.remoteAddress ?? '')) return 'The folder picker is only available on the machine running Codespace.'
+    const host = (request.headers.host ?? '').replace(/:\d+$/, '').toLowerCase()
+    if (!IsOwnHost(host)) return `The folder picker is only available on this machine, as localhost or its tailnet name (this request used "${host}").`
+    return null
+}
+
+/** The smallest JSON body worth compressing, in bytes. */
+const MinCompressed = 1024
+
+/**
+ * Writes one JSON response.
+ * @param response the response to write
+ * @param status the HTTP status
+ * @param body the value to send as JSON
+ * @param request when given, a body the caller accepts compressed is sent gzipped
+ */
+export function SendJson(response: ServerResponse, status: number, body: unknown, request?: IncomingMessage): void
+{
+    const headers: Record<string, string> = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-cache' }
+    let payload = Buffer.from(JSON.stringify(body))
+    if (request !== undefined)
+    {
+        headers.Vary = 'Accept-Encoding'
+        if (payload.length >= MinCompressed && /\bgzip\b/.test(String(request.headers['accept-encoding'] ?? '')))
+        {
+            payload = gzipSync(payload)
+            headers['Content-Encoding'] = 'gzip'
+        }
+    }
+    response.writeHead(status, headers)
+    response.end(payload)
 }
 
 /**

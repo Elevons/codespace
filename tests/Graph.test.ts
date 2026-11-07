@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { makeTemp, removeTemp } from './support.ts'
 import { join } from 'node:path'
 import { Graph } from '../src/repo/Graph.ts'
 import { Repo } from '../src/repo/Repo.ts'
@@ -9,7 +9,7 @@ import { Repo } from '../src/repo/Repo.ts'
 test('Graph links C# files by the namespaces they use', async () =>
 {
     // First we make a repository of C# files that name each other's namespaces.
-    const root = await mkdtemp(join(tmpdir(), 'codespace-graph-'))
+    const root = await makeTemp('codespace-graph-')
     try
     {
         await mkdir(join(root, 'App'))
@@ -30,13 +30,13 @@ test('Graph links C# files by the namespaces they use', async () =>
         assert.deepEqual(graph.ImportsOf('App/Service.cs'), [])
         assert.deepEqual(graph.Edges(), [['App/Program.cs', 'App/Service.cs']])
     }
-    finally { await rm(root, { recursive: true, force: true }) }
+    finally { await removeTemp(root) }
 })
 
 test('Graph reads static, global, and alias C# using directives', async () =>
 {
     // First we make one C# file that reaches a sibling through each directive form.
-    const root = await mkdtemp(join(tmpdir(), 'codespace-graph-'))
+    const root = await makeTemp('codespace-graph-')
     try
     {
         await writeFile(join(root, 'Core.cs'), 'namespace App.Core;\npublic class Core { }\n')
@@ -48,13 +48,13 @@ test('Graph reads static, global, and alias C# using directives', async () =>
         const graph = await Graph.BuildAsync(repo)
         assert.deepEqual(graph.ImportsOf('Program.cs'), ['Core.cs'])
     }
-    finally { await rm(root, { recursive: true, force: true }) }
+    finally { await removeTemp(root) }
 })
 
 test('Graph still links TypeScript imports by relative specifier', async () =>
 {
     // First we make a small TypeScript pair, so the C# path does not disturb the old one.
-    const root = await mkdtemp(join(tmpdir(), 'codespace-graph-'))
+    const root = await makeTemp('codespace-graph-')
     try
     {
         await writeFile(join(root, 'a.ts'), "import { b } from './b.ts'\nexport const a = b\n")
@@ -65,5 +65,5 @@ test('Graph still links TypeScript imports by relative specifier', async () =>
         const graph = await Graph.BuildAsync(repo)
         assert.deepEqual(graph.ImportsOf('a.ts'), ['b.ts'])
     }
-    finally { await rm(root, { recursive: true, force: true }) }
+    finally { await removeTemp(root) }
 })

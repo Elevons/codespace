@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { RefuseWrite } from '../src/server/Guard.ts'
+import { RefuseRemoteRead, RefuseWrite } from '../src/server/Guard.ts'
 
 /** A request as the guard sees it, from this machine over localhost unless overridden. */
 function request(overrides: Record<string, unknown> = {}): Parameters<typeof RefuseWrite>[0]
@@ -40,4 +40,12 @@ test('Behind a proxy, the forwarded host is what the origin is compared with', (
 {
     const forwarded = request({ headers: { host: '127.0.0.1:5190', 'x-forwarded-host': 'my-laptop.tail1234.ts.net', origin: 'https://my-laptop.tail1234.ts.net', 'content-type': 'application/json' } })
     assert.equal(RefuseWrite(forwarded, true), null)
+})
+
+test('The folder picker is only available on this machine, over localhost or its tailnet name', () =>
+{
+    assert.equal(RefuseRemoteRead(request()), null)
+    assert.equal(RefuseRemoteRead(request({ headers: { host: 'my-laptop.tail1234.ts.net' } })), null)
+    assert.match(RefuseRemoteRead(request({ socket: { remoteAddress: '192.168.1.20' } }))!, /machine running Codespace/)
+    assert.match(RefuseRemoteRead(request({ headers: { host: 'evil.example' } }))!, /on this machine/)
 })

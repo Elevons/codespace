@@ -92,7 +92,7 @@ function buildLayerPlanes(): void
   const depth = bounds ? bounds.max.z - bounds.min.z + 6 : 12;
   const cx = bounds ? (bounds.min.x + bounds.max.x) / 2 : 0;
   const cz = bounds ? (bounds.min.z + bounds.max.z) / 2 : 0;
-  S.LAYERS.forEach((name, index) =>
+  S.shownLayers.forEach((name, index) =>
   {
     const plane = BABYLON.MeshBuilder.CreateGround("layer:" + name, { width, height: depth }, scene);
     plane.position.set(cx, index * S.layerGap, cz);

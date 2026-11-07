@@ -71,7 +71,7 @@ export interface Box
 }
 
 /** Where one file's box stands and how big it is this frame. */
-export interface Shape
+interface Shape
 {
     position: BABYLON.Vector3;
     scaling: BABYLON.Vector3;
@@ -101,8 +101,33 @@ export interface FileRecord
     delay?: number;
 }
 
-/** What the map colours files by: their role, layer, folder, size, or recent changes. */
-export type ColorBy = "tag" | "layer" | "folder" | "size" | "changes";
+/** What the map colours files by: their role, layer, system, folder, size, or recent changes. */
+export type ColorBy = "tag" | "layer" | "system" | "folder" | "size" | "changes";
+
+/** One axis a filter or group row can name: a system, a layer, or a folder. */
+export type GroupAxis = "system" | "layer" | "folder";
+
+/** How the outliner lists files: in the folder tree, or flat under one group per system or layer. */
+export type GroupMode = "folder" | "system" | "layer";
+
+/** The outliner's view state: what it filters to, how it lists files, and what the scene hides. */
+export interface OutlinerState
+{
+  /** The text the outliner's search box holds. */
+  query: string;
+  /** The systems switched on in the filter strip; empty means every system. */
+  systems: Set<string>;
+  /** The layers switched on in the filter strip; empty means every layer. */
+  layers: Set<string>;
+  /** How the tree lists files. */
+  group: GroupMode;
+  /** Files hidden from the 3D scene by an eye in the outliner. */
+  hiddenFiles: Set<string>;
+  /** Files shown in the 3D scene even when an eye hides their folder. */
+  shownFiles: Set<string>;
+  /** Which group rows are folded shut, keyed by "axis:value". */
+  collapsed: Set<string>;
+}
 
 /** What the map is asked to show: the files, their notes, and whether it is a numbered route. */
 export interface Trace
@@ -126,12 +151,16 @@ export interface CamGoal
 /** The graph read from the server: nodes, edges, and the architecture's tags and layers. */
 export interface Graph
 {
+    /** The repository's change stamp this was read at. */
+    fingerprint: string;
     nodes: GraphNode[];
     edges: [string, string, number][];
     fileEdges: [string, string][];
     lines: Map<string, number>;
     tags: Map<string, string[]>;
     layers: Map<string, string>;
+    systems: Map<string, string>;
+    systemOrder: string[];
     summaries: Map<string, string>;
     symbols: Map<string, string[]>;
     changes: Map<string, number>;

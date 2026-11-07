@@ -1,3 +1,26 @@
+import { scene } from "./state.js";
+
+// A batch's shared look: white copies tinted per slot, with a quiet glow and the one alpha.
+export function batchOf(mesh: BABYLON.Mesh, emissive: number, alpha: number): Batch
+{
+  const material = new BABYLON.StandardMaterial(mesh.name, scene);
+  material.diffuseColor = BABYLON.Color3.White();
+  material.emissiveColor = new BABYLON.Color3(emissive, emissive, emissive);
+  material.specularColor = new BABYLON.Color3(0.06, 0.06, 0.06);
+  material.alpha = alpha;
+  mesh.material = material;
+  return new Batch(mesh);
+}
+
+// Parsed colours, kept: a repaint touches every file, and parsing hex each time adds up.
+const parsedColors = new Map<string, BABYLON.Color3>();
+export function colorOf(hex: string): BABYLON.Color3
+{
+  let color = parsedColors.get(hex);
+  if (!color) { color = BABYLON.Color3.FromHexString(hex); parsedColors.set(hex, color); }
+  return color;
+}
+
 /**
  * Many copies of one shape drawn in a single call: a Babylon mesh with thin instances, one
  * slot per copy, each slot with its own spot, size, and colour. A thousand file boxes cost one

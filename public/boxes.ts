@@ -1,5 +1,5 @@
 import { S, scene, camera, glow } from "./state.js";
-import { Batch } from "./batch.js";
+import { Batch, batchOf } from "./batch.js";
 import type { FileRecord } from "./types.js";
 
 /**
@@ -14,19 +14,13 @@ const pool: BABYLON.Mesh[] = [];
 let poolUsed = 0;
 
 // The batch of one look: white boxes tinted per copy, with the quiet glow every box had.
+// The bloom is kept for what matters; the crowd stays matte and costs no extra glow pass.
 function makeBatch(name: string, alpha: number): Batch
 {
   const mesh = BABYLON.MeshBuilder.CreateBox(name, { size: 1 }, scene);
-  const material = new BABYLON.StandardMaterial(name, scene);
-  material.diffuseColor = BABYLON.Color3.White();
-  // The copy's colour multiplies the emissive too, so this is the 0.28 glow each box once had.
-  material.emissiveColor = new BABYLON.Color3(0.28, 0.28, 0.28);
-  material.specularColor = new BABYLON.Color3(0.06, 0.06, 0.06);
-  material.alpha = alpha;
-  mesh.material = material;
-  // The bloom is kept for what matters; the crowd stays matte and costs no extra glow pass.
   glow.addExcludedMesh(mesh);
-  return new Batch(mesh);
+  // The copy's colour multiplies the emissive too, so 0.28 is the glow each box once had.
+  return batchOf(mesh, 0.28, alpha);
 }
 
 function batches(): [Batch, Batch]

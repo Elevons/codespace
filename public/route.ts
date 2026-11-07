@@ -2,7 +2,7 @@ import { S, V3 } from "./state.js";
 import type { FileRecord, GraphNode, Trace } from "./types.js";
 
 /** One run of consecutive steps on a shown route that come from the same folder. */
-export interface RouteRun
+interface RouteRun
 {
   node: number;
   hue: string;

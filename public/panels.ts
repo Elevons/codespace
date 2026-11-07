@@ -1,6 +1,8 @@
-import { S, V3, camera, colorFor, colorForTag, filePath, labelFor, render, renderEdges, TAG_ORDER, isExtraFolder } from "./state.js";
-import { displayName, labelOf, symbolsOf, type SymbolInfo } from "./repo.js";
-import type { GraphNode } from "./types.js";
+import { S, camera, colorFor, colorForSystem, copyText, folderColor, folderOf, frameFile, frameFolder, hasFilters, inScene as isInScene, isFileVisible, labelFor, matchesFilters, matchesTagFilter, passesSlice, systemLabel, filePath, render, renderEdges } from "./state.js";
+import { ancestorFolders, foldersToKeepOpen, matchesQueryTerms, queryTerms, type SliceAxis } from "./filter.js";
+import { displayName, readSource } from "./repo.js";
+import { symbolsOf, type SymbolInfo } from "./symbols.js";
+import type { GroupAxis } from "./types.js";
 /* --------------------------------------------------------------- panels ---- */
 
 // Escapes the characters that would otherwise break the info panel's HTML.
@@ -82,14 +84,16 @@ function renderCode(code: string, name: string): string
 // its functions and variables — read from its source.
 function selectFile(nodeIndex: number, fileIndex: number): void
 {
-  select(nodeIndex);
+  // The outliner is drawn once, below, for the file; drawing it for the folder first would scroll
+  // the tree to the folder's row and shift the rows under the pointer between two clicks.
+  select(nodeIndex, false);
   S.selectedFile = fileIndex;
   render();
 
   const path = filePath(nodeIndex, fileIndex);
   syncHash(path);
   const rec = S.fileRecords.get(path);
-  if (rec) { S.autoSpin = false; window.dispatchEvent(new Event("codespace:spin")); S.camGoal = { target: rec.target.clone(), radius: Math.min(camera.radius, 24) }; }
+  if (rec) frameFile(rec, camera.radius);
   const uses = S.FILE_EDGES.filter(([from]) => from === path).length;
   const usedBy = S.FILE_EDGES.filter(([, to]) => to === path).length;
   const lines = S.FILE_LINES.get(path);
@@ -106,6 +110,7 @@ function selectFile(nodeIndex: number, fileIndex: number): void
     "</div>" +
     '<div id="symbols"><p class="hint">reading…</p></div>';
   showSymbols(path);
+  renderOutliner();
 }
 
 // The last file chosen, so a slow source read cannot paint over a newer choice.
@@ -127,13 +132,13 @@ async function showSymbols(path: string): Promise<void>
   const box = document.getElementById("symbols");
   if (!box) return;
   let text = "";
-  try { text = await (await fetch("/api/source?path=" + encodeURIComponent(path))).text(); }
+  try { text = await readSource(path); }
   catch { /* an unreadable file simply lists nothing */ }
   if (wanted !== symbolsWanted) return;
   // A new file's symbols replace the last list, and close any snippet that was open.
   symbolCode = [];
   hideCode();
-  const { functions, classes, variables } = symbolsOf(text);
+  const { functions, classes, interfaces, variables } = symbolsOf(text);
   const section = (title: string, items: SymbolInfo[]): string => items.length === 0 ? "" :
     "<h4>" + title + " (" + items.length + ")</h4><ul>" +
     items.map((item) =>
@@ -141,14 +146,14 @@ async function showSymbols(path: string): Promise<void>
       symbolCode.push(item.code);
       return '<li class="sym" data-i="' + (symbolCode.length - 1) + '"><span>' + escapeHtml(item.name) + '</span><span class="n">L' + item.line + "</span></li>";
     }).join("") + "</ul>";
-  box.innerHTML = section("Functions", functions) + section("Classes", classes) + section("Variables", variables) ||
-    '<p class="hint">No functions or variables found.</p>';
+  box.innerHTML = section("Functions", functions) + section("Classes", classes) + section("Interfaces", interfaces) + section("Variables", variables) ||
+    '<p class="hint">No symbols found.</p>';
   // A symbol picked from search opens straight away, once its code is in hand.
   if (pendingSymbol !== null)
   {
     const requested = pendingSymbol;
     pendingSymbol = null;
-    const found = [...functions, ...classes, ...variables].find((item) => item.name === requested);
+    const found = [...functions, ...classes, ...interfaces, ...variables].find((item) => item.name === requested);
     if (found) showCode(found.name, found.code, path);
   }
 }
@@ -177,8 +182,8 @@ function hideCode(): void
 // Reads a whole file and opens it in the code panel.
 async function openFile(path: string): Promise<void>
 {
-  let text = "";
-  try { text = await (await fetch("/api/source?path=" + encodeURIComponent(path))).text(); }
+  let text: string;
+  try { text = await readSource(path); }
   catch { text = "(could not read this file)"; }
   showCode(path, text);
 }
@@ -186,6 +191,15 @@ async function openFile(path: string): Promise<void>
 document.getElementById("info")!.addEventListener("click", (event) =>
 {
   const target = event.target as HTMLElement;
+  const toggle = target.closest("[data-info-toggle]") as HTMLElement | null;
+  if (toggle)
+  {
+    statsCollapsed = !statsCollapsed;
+    document.getElementById("info")!.classList.toggle("collapsed", statsCollapsed);
+    toggle.textContent = statsCollapsed ? "Show" : "Hide";
+    toggle.setAttribute("aria-expanded", String(!statsCollapsed));
+    return;
+  }
   const item = target.closest("li.sym") as HTMLElement | null;
   if (item)
   {
@@ -202,21 +216,13 @@ document.getElementById("info")!.addEventListener("click", (event) =>
   }
   const open = target.closest("[data-openpath]") as HTMLElement | null;
   if (open) openFile(open.dataset.openpath!);
-  if (target.closest(".repo-path") && S.repoRoot !== "") copyRepoPath();
+  if (target.closest(".repo-path") && S.repoRoot !== "") void copyRepoPath();
 });
 
 /** Copies the repository's path, so a person can paste it to their agent. */
-function copyRepoPath(): void
+async function copyRepoPath(): Promise<void>
 {
-  const area = document.createElement("textarea");
-  area.value = S.repoRoot;
-  area.setAttribute("readonly", "");
-  area.style.position = "fixed";
-  area.style.opacity = "0";
-  document.body.append(area);
-  area.select();
-  try { document.execCommand("copy"); } catch { /* the path stays visible either way */ }
-  area.remove();
+  await copyText(S.repoRoot);
   const note = document.querySelector("#info .repo-path") as HTMLElement | null;
   if (note) { note.textContent = "copied " + S.repoRoot; setTimeout(() => { note.textContent = S.repoRoot; }, 1200); }
 }
@@ -236,6 +242,9 @@ function neighboursOf(i: number): Set<number>
   return set;
 }
 
+// Whether the repository's numbers are folded away, leaving just its name and path.
+let statsCollapsed = false;
+
 // The repository at a glance, shown until something is chosen, with the keys worth knowing.
 function statsHtml(): string
 {
@@ -243,44 +252,47 @@ function statsHtml(): string
   const files = S.NODES.reduce((sum, n) => sum + n.files.length, 0);
   const lines = [...S.FILE_LINES.values()].reduce((sum, count) => sum + count, 0);
   const stat = (value: string, label: string) => '<div class="stat"><b>' + value + "</b><span>" + label + "</span></div>";
-  return '<h3 class="empty-title">' + escapeHtml(S.repoName) + "</h3>" +
+  const toggle = '<button type="button" class="info-toggle" data-info-toggle aria-controls="info-body" aria-expanded="' +
+    String(!statsCollapsed) + '">' + (statsCollapsed ? "Show" : "Hide") + "</button>";
+  return '<div class="empty-head"><h3 class="empty-title">' + escapeHtml(S.repoName) + "</h3>" +
     '<p class="hint repo-path" title="Click to copy the path, to tell your agent">' + escapeHtml(S.repoRoot || "reading…") + "</p>" +
-    '<p class="hint">Click a block to trace it, or press <kbd>/</kbd> to search.</p>' +
-    (S.hiddenFiles > 0 ? '<p class="hint">Showing only described files. <b>' + S.hiddenFiles.toLocaleString() +
-      "</b> more appear as they are described; <i>Undescribed: shown</i> draws them all.</p>" : "") +
+    toggle + "</div>" +
+    '<div id="info-body">' +
+    '<p class="hint how"><span class="key-only">Click a block to trace it, or press <kbd>/</kbd> to search.</span>' +
+    '<span class="touch-only">Tap a block to trace it, or search above.</span></p>' +
+    (S.undescribed > 0 ? '<p class="hint note"><b>' + S.undescribed.toLocaleString() + "</b> file" +
+      (S.undescribed === 1 ? " is" : "s are") + " not described yet.</p>" : "") +
+    S.ARCH_NOTES.map((note) => '<p class="hint note">' + escapeHtml(note) + "</p>").join("") +
     '<div class="stats">' + stat(String(folders), "folders") + stat(String(files), "files") +
     stat(String(S.FILE_LINES.size), "code files") + stat(lines.toLocaleString(), "lines") +
     stat(String(S.FILE_EDGES.length), "imports") + "</div>" +
-    '<div class="keys"><span><kbd>Space</kbd> spin</span><span><kbd>/</kbd> search</span>' +
-    "<span><kbd>F</kbd> frame</span><span><kbd>R</kbd> reset</span><span><kbd>?</kbd> keys</span></div>";
+    '<div class="keys key-only"><span><kbd>Space</kbd> spin</span><span><kbd>/</kbd> search</span>' +
+    "<span><kbd>F</kbd> frame</span><span><kbd>R</kbd> reset</span><span><kbd>?</kbd> keys</span></div></div>";
 }
 
-function select(i: number): void
+function select(i: number, outline = true): void
 {
   S.selected = i;
   S.selectedFile = -1;
   S.focusSet = i >= 0 ? neighboursOf(i) : null;
   const info = document.getElementById("info")!;
+  info.classList.toggle("empty", i < 0);
+  info.classList.toggle("collapsed", i < 0 && statsCollapsed);
   if (i < 0)
   {
     syncHash(null);
     info.innerHTML = statsHtml();
     renderEdges();
+    renderOutliner();
     return;
   }
   const n = S.NODES[i];
   syncHash(n.id);
   // Glide the camera to the chosen folder, close enough that its files read.
-  if (n.cx !== undefined)
-  {
-    const reach = Math.max(n.tileW ?? 8, n.tileD ?? 8);
-    S.autoSpin = false;
-    window.dispatchEvent(new Event("codespace:spin"));
-    S.camGoal = { target: new V3(n.cx, n.topY!, n.cz!), radius: Math.max(8, Math.min(camera.radius, reach * 0.9 + 6)) };
-  }
+  frameFolder(n, camera.radius);
   const outs = S.EDGES.filter((e) => e[0] === n.id).sort((a, b) => b[2] - a[2]);
   const ins = S.EDGES.filter((e) => e[1] === n.id).sort((a, b) => b[2] - a[2]);
-  const line = (e: [string, string, number], target: string) => "<li>" + target + '<span class="n">' + e[2] + "</span></li>";
+  const line = (e: [string, string, number], target: string) => "<li>" + escapeHtml(target) + '<span class="n">' + e[2] + "</span></li>";
   const fileLine = (name: string, fileIndex: number) =>
   {
     const path = filePath(i, fileIndex);
@@ -292,7 +304,7 @@ function select(i: number): void
   };
   info.innerHTML =
     crumbsHtml(n.id, false) +
-    "<h3>" + displayName(n.id) + "</h3>" +
+    "<h3>" + escapeHtml(displayName(n.id)) + "</h3>" +
     '<div class="layer" style="color:' + colorFor(n.layer) + '">' + labelFor(n.layer) + "</div>" +
     (S.FILE_SUMMARIES.get(n.id) ? '<div class="chosen-sum">' + escapeHtml(S.FILE_SUMMARIES.get(n.id)!) + "</div>" : "") +
     "<h4>Files (" + n.files.length + ")</h4>" +
@@ -302,74 +314,568 @@ function select(i: number): void
     "<h4 class='in'>Imported by (" + ins.length + ")</h4>" +
     (ins.length ? "<ul>" + ins.map((e) => line(e, e[0])).join("") + "</ul>" : '<p class="hint">nothing — a top-level entry</p>');
   renderEdges();
+  if (outline) renderOutliner();
 }
 
-function treeRowHtml(n: GraphNode, depth: number): string
+/** One file in the outliner: its path, where its box lives, and its name. */
+interface OutlineFile { path: string; node: number; file: number; name: string }
+
+// Every file the map holds, in the order the folders were built.
+function outlineFiles(): OutlineFile[]
 {
-  const hidden = S.hiddenFolders.has(n.id);
-  const collapsed = S.collapsedFolders.has(n.id);
-  const hasChildren = n.children.length > 0;
-  const extra = isExtraFolder(n.id);
-  let html = '<div class="hrow' + (hidden ? " hidden" : "") + '" style="padding-left:' + (depth * 12) + 'px">' +
-    (hasChildren
-      ? '<button type="button" class="caret' + (collapsed ? " collapsed" : "") + '" data-caret="' + escapeHtml(n.id) +
-        '" aria-expanded="' + String(!collapsed) + '">' + (collapsed ? "▸" : "▾") + "</button>"
-      : '<span class="caret-gap"></span>') +
-    '<label><input type="checkbox" data-id="' + escapeHtml(n.id) + '"' + (hidden ? "" : " checked") + ">" +
-    "<span>" + escapeHtml(labelOf(n)) + "</span></label>" +
-    '<button type="button" class="extra' + (extra ? " on" : "") + '" data-extra="' + escapeHtml(n.id) +
-    '" aria-pressed="' + String(extra) + '" title="Include in Extras">extra</button>' +
+  const files: OutlineFile[] = [];
+  S.NODES.forEach((node, nodeIndex) =>
+  {
+    node.files.forEach((name, fileIndex) => files.push({ path: filePath(nodeIndex, fileIndex), node: nodeIndex, file: fileIndex, name }));
+  });
+  return files;
+}
+
+/** The value one file takes on an axis, with "" for a file that has none. */
+function axisValue(path: string, axis: GroupAxis): string
+{
+  if (axis === "system") return S.FILE_SYSTEMS.get(path) ?? "";
+  if (axis === "layer") return S.FILE_LAYERS.get(path) ?? "";
+  return folderOf(path);
+}
+
+/** The name a group row or filter chip shows for one value on an axis. */
+function groupLabel(axis: GroupAxis, value: string): string
+{
+  if (axis === "system") return systemLabel(value);
+  if (axis === "layer") return value === "" ? "no layer" : labelFor(value);
+  return value === "" ? "(root)" : value + "/";
+}
+
+/** The colour swatch a group row or filter chip shows. */
+function groupColor(axis: GroupAxis, value: string): string
+{
+  if (axis === "system") return colorForSystem(value);
+  if (axis === "layer") return value === "" ? "#6e7681" : colorFor(value);
+  return folderColor(value === "" ? "" : value + "/x");
+}
+
+// Whether the repository has any systems yet. Until it does, the System grouping and its chips
+// would only name "unassigned", so both stay out of the panel.
+function hasSystems(): boolean
+{
+  return S.SYSTEMS.length > 0 || [...S.FILE_SYSTEMS.values()].some((value) => value !== "");
+}
+
+/** The values on one axis, in the repository's declared order with unassigned last. */
+function groupKeys(axis: GroupAxis, present: string[]): string[]
+{
+  const known = axis === "system" ? S.SYSTEMS : axis === "layer" ? S.LAYERS : [...present].sort();
+  const ordered = known.filter((value) => present.includes(value));
+  for (const value of present) if (!ordered.includes(value)) ordered.push(value);
+  return ordered.filter((value, index) => ordered.indexOf(value) === index);
+}
+
+/** The set a filter chip switches: the systems or layers the strip has selected. */
+function sliceSet(axis: SliceAxis): Set<string>
+{
+  return axis === "system" ? S.outliner.systems : S.outliner.layers;
+}
+
+// Whether a file is drawn for the strip's purposes, ignoring one slice so that slice can count its
+// own values. A folder eye or Extras being off keeps a file out of the count, as it does the scene.
+function passesSlices(path: string, skip: SliceAxis | null, eyes = true, crossed = true): boolean
+{
+  if (eyes && !isFileVisible(path)) return false;
+  if (!crossed) return matchesTagFilter(path);
+  return passesSlice(path, skip) && matchesTagFilter(path);
+}
+
+/** Whether a search names this file: each word appears in its path or in one of its symbols. */
+function matchesQuery(item: OutlineFile, terms: string[]): boolean
+{
+  return matchesQueryTerms(item.path, S.FILE_SYMBOLS.get(item.path) ?? [], terms);
+}
+
+/** The files the outliner shows: those that pass every filter and, if asked, the search. */
+function shownFiles(terms: string[]): OutlineFile[]
+{
+  return outlineFiles().filter((item) => matchesFilters(item.path) && matchesQuery(item, terms));
+}
+
+// Wraps every part of a label a search matched, so the reason a row is listed is visible.
+function markQuery(text: string, terms: string[]): string
+{
+  if (terms.length === 0) return escapeHtml(text);
+  const pattern = new RegExp(terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "gi");
+  let out = "", last = 0;
+  for (const match of text.matchAll(pattern))
+  {
+    if (match[0] === "") continue;
+    out += escapeHtml(text.slice(last, match.index)) + "<mark>" + escapeHtml(match[0]) + "</mark>";
+    last = match.index! + match[0].length;
+  }
+  return out + escapeHtml(text.slice(last));
+}
+
+// Small line icons for the row actions, drawn in the text colour so hover and dimming carry over.
+const ICON_EYE = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>';
+const ICON_EYE_OFF = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 5.5C4 4.2 5.8 3.5 8 3.5c4.1 0 6.5 4.5 6.5 4.5s-.7 1.3-2 2.6M10 12.2c-.6.2-1.3.3-2 .3-4.1 0-6.5-4.5-6.5-4.5s.5-.9 1.4-1.9"/><path d="M2 2l12 12"/></svg>';
+
+/** How much of a row is drawn in the scene: all of it, some of it, or none. */
+type Seen = "all" | "some" | "none";
+
+// The eye that hides a row in the scene: it shows on hover, and stays put while the row is hidden
+// or only partly shown.
+function eyeButton(key: string, seen: Seen): string
+{
+  const label = seen === "all" ? "Hide in the scene" : seen === "some" ? "Some files are hidden; hide the rest" : "Show in the scene";
+  return '<button type="button" tabindex="-1" class="oicon oeye' + (seen === "none" ? " on" : seen === "some" ? " part" : "") +
+    '" data-eye="' + escapeHtml(key) + '" title="' + label + '" aria-label="' + label + '">' +
+    (seen === "none" ? ICON_EYE_OFF : ICON_EYE) + "</button>";
+}
+
+// For each folder, how many of the files beneath it the eyes leave visible, counted once per render.
+let folderSeen = new Map<string, { visible: number; total: number }>();
+function countFolderSeen(): void
+{
+  folderSeen = new Map();
+  for (const item of outlineFiles())
+  {
+    const visible = isFileVisible(item.path) ? 1 : 0;
+    for (let dir = folderOf(item.path); dir !== ""; dir = folderOf(dir))
+    {
+      const entry = folderSeen.get(dir);
+      if (entry) { entry.total++; entry.visible += visible; }
+      else folderSeen.set(dir, { visible, total: 1 });
+    }
+  }
+}
+
+// Whether a folder row's files are all, partly, or not at all drawn, as far as the eyes go.
+function folderState(value: string): Seen
+{
+  const entry = folderSeen.get(value);
+  if (!entry || entry.visible === 0) return "none";
+  return entry.visible === entry.total ? "all" : "some";
+}
+
+// The folder block a folder row stands for, or -1 when the map has none by that name.
+function folderNode(value: string): number
+{
+  return S.NODES.findIndex((node) => node.id === value);
+}
+
+// Which group rows are folded while a search is typed. A search opens every group so its matches
+// show, but a fold made during it still works; this set is dropped when the search changes.
+const searchFolds = new Set<string>();
+let searchFoldsFor = "";
+
+// The folds that apply right now: the search's own while one is typed, otherwise the tree's.
+function activeFolds(): Set<string>
+{
+  return S.outliner.query.trim() === "" ? S.outliner.collapsed : searchFolds;
+}
+
+function isFolded(key: string): boolean
+{
+  return activeFolds().has(key);
+}
+
+// Folds or opens one group row; with `deep`, every group beneath it follows.
+function toggleFold(key: string, deep = false): void
+{
+  const folds = activeFolds();
+  const fold = !folds.has(key);
+  const keys = deep && key.startsWith("folder:") ? [key, ...allFolderKeys().filter((path) => path.startsWith(key.slice(7) + "/")).map((path) => "folder:" + path)] : [key];
+  for (const one of keys) { if (fold) folds.add(one); else folds.delete(one); }
+  renderOutliner();
+}
+
+// A group row. Folder rows choose their folder in the scene when clicked and carry an eye, since the
+// filter strip does not cover folders; system and layer rows fold, and their chips sit above the tree.
+function groupRow(axis: GroupAxis, value: string, count: number, depth: number, folded: boolean, name = groupLabel(axis, value)): string
+{
+  const key = axis + ":" + value;
+  const seen = axis === "folder" ? folderState(value) : "all";
+  const node = axis === "folder" ? folderNode(value) : -1;
+  const chosen = node >= 0 && S.selected === node && S.selectedFile < 0;
+  return '<div class="orow grp' + (seen === "none" ? " off" : "") + (chosen ? " sel" : "") + '" data-fold="' + escapeHtml(key) + '" data-key="' +
+    escapeHtml(key) + '"' + (node >= 0 ? ' data-folder="' + escapeHtml(value) + '"' : "") + ' data-depth="' + depth + '" style="--depth:' + depth + '"' +
+    ' role="treeitem" tabindex="-1" aria-expanded="' + String(!folded) + '"' + (chosen ? ' aria-selected="true"' : "") + ">" +
+    '<span class="ocaret' + (folded ? "" : " open") + '" data-caret title="' + (folded ? "Open" : "Fold") + ' (Alt-click for everything inside)" aria-hidden="true"></span>' +
+    '<span class="odot" style="background:' + groupColor(axis, value) + '"></span>' +
+    '<span class="oname" title="' + escapeHtml(axis + ": " + groupLabel(axis, value)) + '">' + escapeHtml(name) + "</span>" +
+    '<span class="onum">' + count + "</span>" +
+    (axis === "folder" ? eyeButton(key, seen) : "") +
     "</div>";
-  if (hasChildren && !collapsed) for (const child of n.children) html += treeRowHtml(child, depth + 1);
+}
+
+// One coloured dot on a file row: its system or layer, clickable to switch that value in the strip.
+function sliceDot(axis: SliceAxis, value: string): string
+{
+  return '<button type="button" tabindex="-1" class="odot oswitch" data-slice="' + axis + '" data-value="' + escapeHtml(value) + '" title="' +
+    escapeHtml(axis + ": " + groupLabel(axis, value)) + '" aria-label="Filter to this ' + axis + '" style="background:' +
+    groupColor(axis, value) + '"></button>';
+}
+
+// The dots that name where a file sits, tied to the strip's colours.
+function fileDots(path: string): string
+{
+  const system = S.FILE_SYSTEMS.get(path) ?? "";
+  const layer = S.FILE_LAYERS.get(path) ?? "";
+  return '<span class="odots">' +
+    (hasSystems() ? sliceDot("system", system) : "") +
+    (layer !== "" ? sliceDot("layer", layer) : "") +
+    "</span>";
+}
+
+// One file row: its name, the tag it roles as, the dots for its system and layer, and its eye.
+function fileRow(item: OutlineFile, depth: number, terms: string[]): string
+{
+  const hidden = !isFileVisible(item.path);
+  const chosen = S.selected === item.node && S.selectedFile === item.file;
+  const tag = S.FILE_TAGS.get(item.path)?.[0];
+  const tagBadge = tag
+    ? '<span class="otag" data-tag="' + escapeHtml(tag) + '" title="' + (S.tagFilter === tag ? "Stop filtering to this tag" : "Filter to this tag") + '">' + escapeHtml(tag) + "</span>"
+    : "";
+  // In the folder tree the name is enough; a flat system or layer group shows the whole path.
+  const name = S.outliner.group === "folder" ? item.path.split("/").pop()! : item.path;
+  const summary = S.FILE_SUMMARIES.get(item.path);
+  let html = '<div class="orow file' + (hidden ? " off" : "") + (chosen ? " sel" : "") + '" data-path="' + escapeHtml(item.path) +
+    '" data-key="' + escapeHtml("file:" + item.path) + '" data-depth="' + depth + '" style="--depth:' + depth + '" role="treeitem" tabindex="-1"' +
+    (chosen ? ' aria-selected="true"' : "") + ">" +
+    '<span class="ocaret" aria-hidden="true"></span><span class="oname" title="' + escapeHtml(item.path + (summary ? "\n" + summary : "")) + '">' +
+    markQuery(name, terms) + "</span>" +
+    '<span class="ofilemeta">' + tagBadge + fileDots(item.path) + "</span>" +
+    eyeButton("file:" + item.path, hidden ? "none" : "all") + "</div>";
+  if (terms.length > 0)
+  {
+    const names = (S.FILE_SYMBOLS.get(item.path) ?? []).filter((symbol) => terms.some((term) => symbol.toLowerCase().includes(term))).slice(0, 6);
+    for (const symbol of names)
+    {
+      html += '<div class="orow osymrow" data-depth="' + (depth + 1) + '" style="--depth:' + (depth + 1) + '" data-symbol="' + escapeHtml(symbol) +
+        '" data-symbolpath="' + escapeHtml(item.path) + '" data-key="' + escapeHtml("sym:" + item.path + "#" + symbol) +
+        '" role="treeitem" tabindex="-1"><span class="ocaret"></span><span class="osym">ƒ ' + markQuery(symbol, terms) + "</span></div>";
+    }
+  }
   return html;
 }
 
-function renderHierarchy(): void
-{
-  const root = S.NODES.find((n) => n.id === "");
-  document.getElementById("hierarchy-tree")!.innerHTML = root ? treeRowHtml(root, 0) : "";
-}
-// Draws the legend from the tags the repository carries, falling back to layers.
-function renderLegend(): void
-{
-  const present: string[] = [];
-  for (const list of S.FILE_TAGS.values()) for (const tag of list) if (!present.includes(tag)) present.push(tag);
-  present.sort((a, b) => TAG_ORDER.indexOf(a) - TAG_ORDER.indexOf(b));
-  const heading = document.querySelector("#legend h2") as HTMLElement | null;
-  if (heading) heading.textContent = present.length > 0 ? "Tags" : "Layers";
-  // A filter for a tag the repository no longer carries is dropped, so the map comes back.
-  if (S.tagFilter !== null && !present.includes(S.tagFilter)) S.tagFilter = null;
-  const items = present.length > 0
-    ? present.map((tag) => '<button class="swatch' + (S.tagFilter === tag ? " active" : "") + '" data-tag="' + escapeHtml(tag) + '">' +
-      '<i style="background:' + colorForTag(tag) + '"></i>' + escapeHtml(tag) + "</button>")
-    : layersLegend();
-  document.getElementById("legend-items")!.innerHTML = items.join("");
-}
+/** One folder in the nested folder tree: the files directly in it, and the folders beneath it. */
+interface FolderNode { path: string; files: OutlineFile[]; children: Map<string, FolderNode>; total: number }
 
-// A click on a tag in the legend filters the map to it; a second click lets everything back in.
-document.getElementById("legend-items")!.addEventListener("click", (event) =>
+// Builds the folder tree the files sit in, so each folder row holds its own files and sub-folders.
+function folderTree(files: OutlineFile[]): FolderNode
 {
-  const button = (event.target as HTMLElement).closest("[data-tag]") as HTMLElement | null;
-  if (!button) return;
-  const tag = button.dataset.tag!;
-  S.tagFilter = S.tagFilter === tag ? null : tag;
-  renderEdges();
-  renderLegend();
-  window.dispatchEvent(new Event("codespace:filter"));
-});
-
-// The fallback legend: by layer, when a repository carries no tags.
-function layersLegend(): string[]
-{
-  const layers: string[] = [];
-  for (const node of S.NODES) if (!layers.includes(node.layer)) layers.push(node.layer);
-  layers.sort((a, b) =>
+  const root: FolderNode = { path: "", files: [], children: new Map(), total: 0 };
+  for (const item of files)
   {
-    const rank = (name: string) => S.NODES.find((node) => node.layer === name)?.rank ?? 0;
-    return rank(a) - rank(b);
-  });
-  return layers.map((name) =>
-    '<div class="swatch"><i style="background:' + colorFor(name) + '"></i>' + escapeHtml(labelFor(name)) + "</div>");
+    let node = root;
+    node.total++;
+    const dir = folderOf(item.path);
+    if (dir !== "")
+    {
+      let path = "";
+      for (const part of dir.split("/"))
+      {
+        path = path === "" ? part : path + "/" + part;
+        let next = node.children.get(part);
+        if (!next) { next = { path, files: [], children: new Map(), total: 0 }; node.children.set(part, next); }
+        node = next;
+        node.total++;
+      }
+    }
+    node.files.push(item);
+  }
+  return root;
 }
 
-export { escapeHtml, select, selectFile, openSymbol, renderLegend, renderHierarchy };
+// Draws the folders beneath one node, then its own files. A folder that holds no files itself and
+// only one sub-folder is joined with it into one row (src/navigation/), so the tree has no empty hops.
+function folderLevel(node: FolderNode, depth: number, terms: string[]): string
+{
+  let html = "";
+  for (const [part, child] of [...node.children].sort(([a], [b]) => a.localeCompare(b)))
+  {
+    let shown = child, name = part;
+    while (shown.files.length === 0 && shown.children.size === 1)
+    {
+      const [[nextPart, next]] = [...shown.children];
+      name += "/" + nextPart;
+      shown = next;
+    }
+    const folded = isFolded("folder:" + shown.path);
+    html += groupRow("folder", shown.path, shown.total, depth, folded, name + "/");
+    if (!folded) html += folderLevel(shown, depth + 1, terms);
+  }
+  return html + [...node.files].sort((a, b) => a.name.localeCompare(b.name)).map((item) => fileRow(item, depth, terms)).join("");
+}
+
+// Draws files flat under one row per system or layer value, folding each group as a whole.
+function groupedLevel(files: OutlineFile[], axis: SliceAxis, depth: number, terms: string[]): string
+{
+  const buckets = new Map<string, OutlineFile[]>();
+  for (const item of files)
+  {
+    const value = axisValue(item.path, axis);
+    const bucket = buckets.get(value);
+    if (bucket) bucket.push(item);
+    else buckets.set(value, [item]);
+  }
+  let html = "";
+  for (const value of groupKeys(axis, [...buckets.keys()]))
+  {
+    const bucket = buckets.get(value)!.sort((a, b) => a.path.localeCompare(b.path));
+    const folded = isFolded(axis + ":" + value);
+    html += groupRow(axis, value, bucket.length, depth, folded);
+    if (!folded) html += bucket.map((item) => fileRow(item, depth + 1, terms)).join("");
+  }
+  return html;
+}
+
+// The filter strip: one switch per system and per layer, each with a live count. A value is on
+// when the strip holds no selection (everything) or when it is one of the selected values.
+function renderFilterStrip(): void
+{
+  const files = outlineFiles();
+  const anyShown: boolean[] = [];
+  for (const axis of ["system", "layer"] as SliceAxis[])
+  {
+    const group = document.getElementById("filter-group-" + axis);
+    const row = document.getElementById("filter-" + axis);
+    if (!group || !row) continue;
+    const present = axis === "system" && !hasSystems() ? [] : [...new Set(files.map((item) => axisValue(item.path, axis)))];
+    const keys = groupKeys(axis, present);
+    const selected = sliceSet(axis);
+    const all = selected.size === 0;
+    // What each value holds under the other axis's selection: drawn, and before the eyes hide any.
+    // "reach" ignores the other strip too: a value can be switched on whenever it has files to draw,
+    // since switching it on brings the other strip's values it needs along with it.
+    const counts = new Map<string, number>(), held = new Map<string, number>(), reach = new Map<string, number>();
+    const bump = (map: Map<string, number>, value: string) => map.set(value, (map.get(value) ?? 0) + 1);
+    for (const item of files)
+    {
+      const value = axisValue(item.path, axis);
+      if (passesSlices(item.path, axis, false)) bump(held, value);
+      if (passesSlices(item.path, axis)) bump(counts, value);
+      if (passesSlices(item.path, axis, true, false)) bump(reach, value);
+    }
+    const other = axis === "system" ? "layer" : "system";
+    row.innerHTML = keys.map((value) =>
+    {
+      const count = counts.get(value) ?? 0;
+      const on = all || selected.has(value);
+      // A value with nothing to draw cannot be switched on, since it would only empty the scene.
+      // One that is already selected stays clickable, so it can always be switched off again.
+      const unavailable = (reach.get(value) ?? 0) === 0 && !selected.has(value);
+      // Off for now only because of the other strip: clicking it brings in what it needs.
+      const crossing = !unavailable && count === 0 && !selected.has(value);
+      const label = groupLabel(axis, value);
+      const why = (held.get(value) ?? 0) > 0 && (reach.get(value) ?? 0) === 0 ? "its files are hidden in the scene (an eye, or Extras off)"
+        : S.tagFilter !== null ? "no files in it carry the tag " + S.tagFilter
+        : sliceSet(other).size > 0 ? "no files in it are in the selected " + other + "s"
+        : "it holds no files";
+      const title = unavailable ? label + ": nothing to show — " + why
+        : crossing ? "Also show " + axis + ": " + label + " — also switches on its " + other + "s"
+        : all ? "Show only " + axis + ": " + label + " (Alt-click: hide it)"
+        : on ? "Stop showing " + axis + ": " + label + (count === 0 ? " — " + why : "") + " (Alt-click: show only this)"
+        : "Also show " + axis + ": " + label + " (Alt-click: show only this)";
+      return '<button type="button" class="fchip' + (on && !unavailable && !crossing ? " on" : "") + (unavailable ? " empty" : "") + (crossing ? " cross" : "") + (on && !unavailable && count === 0 ? " zero" : "") +
+        '" data-slice="' + axis + '" data-value="' + escapeHtml(value) + '" aria-pressed="' + String(on && !unavailable && !crossing) + '"' +
+        (unavailable ? ' aria-disabled="true"' : "") + ' style="--c:' +
+        groupColor(axis, value) + '" title="' + escapeHtml(title) + '">' +
+        '<span class="fdot"></span><span class="fname">' + escapeHtml(label) + '</span><span class="fcount">' + count + "</span></button>";
+    }).join("");
+    group.hidden = keys.length === 0;
+    anyShown.push(keys.length > 0);
+  }
+  const strip = document.getElementById("outliner-filters");
+  if (strip) strip.hidden = !anyShown.some(Boolean);
+}
+
+// The row for a tag filter, since tags live on file rows rather than in the strip.
+function renderChips(): void
+{
+  const chips = S.tagFilter === null ? [] :
+    ['<span class="ochip"><b>tag</b><span>' + escapeHtml(S.tagFilter) + '</span><button type="button" data-chip="tag" title="Remove this filter" aria-label="Remove this filter">✕</button></span>'];
+  const box = document.getElementById("outliner-chips")!;
+  box.innerHTML = chips.join("");
+  box.hidden = chips.length === 0;
+}
+
+// The counts: how many files the tree lists, and how many of all files the scene draws.
+function renderCounts(shown: number): void
+{
+  const files = outlineFiles();
+  const inScene = files.filter((item) => isInScene(item.path)).length;
+  const listed = document.getElementById("outliner-count");
+  if (listed) listed.textContent = shown === files.length ? String(files.length) : shown + " / " + files.length;
+  const note = document.getElementById("outliner-file-count");
+  if (note) note.textContent = inScene + " of " + files.length + " in scene";
+  const clear = document.getElementById("outliner-clear");
+  if (clear) clear.hidden = S.outliner.query === "" && !hasFilters() && S.outliner.collapsed.size === 0;
+  const fold = document.getElementById("outliner-collapse");
+  if (fold)
+  {
+    const expand = allFolded();
+    const label = expand ? "Open every group" : "Fold every group";
+    fold.classList.toggle("expand", expand);
+    fold.title = label;
+    fold.setAttribute("aria-label", label);
+  }
+}
+
+// Whether an eye hides this file, or a folder above it. Extras being off does not count.
+function isEyeHidden(path: string): boolean
+{
+  if (S.outliner.shownFiles.has(path)) return false;
+  if (S.outliner.hiddenFiles.has(path)) return true;
+  return ancestorFolders(path).some((folder) => S.hiddenFolders.has(folder));
+}
+
+// The group rows that must stay open so an eye-hidden file or folder stays listed: a hidden
+// file keeps its folder's chain open, and a hidden folder keeps its parent's chain open.
+function groupsStayingOpen(): Set<string>
+{
+  const stay = new Set<string>();
+  for (const folder of foldersToKeepOpen(S.outliner.hiddenFiles, S.hiddenFolders)) stay.add("folder:" + folder);
+  for (const item of outlineFiles())
+  {
+    if (!isEyeHidden(item.path)) continue;
+    for (const axis of ["system", "layer"] as SliceAxis[]) stay.add(axis + ":" + axisValue(item.path, axis));
+  }
+  return stay;
+}
+
+// Every folder path the folder tree can fold.
+function allFolderKeys(): string[]
+{
+  const paths = new Set<string>();
+  for (const item of outlineFiles())
+  {
+    let dir = folderOf(item.path);
+    while (dir !== "") { paths.add(dir); dir = folderOf(dir); }
+  }
+  return [...paths];
+}
+
+// The fold keys of every group the current listing can show.
+function groupFoldKeys(): string[]
+{
+  if (S.outliner.group === "folder") return allFolderKeys().map((path) => "folder:" + path);
+  const axis = S.outliner.group;
+  return [...new Set(outlineFiles().map((item) => axis + ":" + axisValue(item.path, axis)))];
+}
+
+// The group rows a fold-all may close: those that do not hold an eye-hidden item.
+function foldableGroupKeys(): string[]
+{
+  const stay = groupsStayingOpen();
+  return groupFoldKeys().filter((key) => !stay.has(key));
+}
+
+// Whether every group a fold-all may close is folded, so the button should open them instead.
+function allFolded(): boolean
+{
+  const keys = foldableGroupKeys();
+  if (keys.length === 0) return false;
+  const folds = activeFolds();
+  return keys.every((key) => folds.has(key));
+}
+
+// Folds every group in the tree, or, when they are all folded already, opens every one again.
+// A group holding an eye-hidden file or folder stays open, so the hidden row is never lost.
+function collapseAllOutliner(): void
+{
+  const folds = activeFolds();
+  const stay = groupsStayingOpen();
+  if (allFolded()) folds.clear();
+  else
+  {
+    for (const key of groupFoldKeys()) folds.delete(key);
+    for (const key of groupFoldKeys()) if (!stay.has(key)) folds.add(key);
+  }
+  renderOutliner();
+}
+
+// Opens the groups that hold a file or folder, so a choice made in the scene is never folded out of sight.
+function revealInOutliner(path: string, isFolder: boolean): void
+{
+  if (S.outliner.group === "folder")
+  {
+    for (let dir = folderOf(path); dir !== ""; dir = folderOf(dir))
+    {
+      S.outliner.collapsed.delete("folder:" + dir);
+      searchFolds.delete("folder:" + dir);
+    }
+    return;
+  }
+  if (isFolder) return;
+  const key = S.outliner.group + ":" + axisValue(path, S.outliner.group);
+  S.outliner.collapsed.delete(key);
+  searchFolds.delete(key);
+}
+
+// The file or folder last brought into view, so the tree scrolls to a new choice once and then leaves the scroll alone.
+let revealedPath: string | null = null;
+
+// The row the keyboard sits on, kept by key so it survives the tree being redrawn.
+let focusKey: string | null = null;
+
+/** Which row the tree's keyboard focus rests on, by its data-key; the next render restores it. */
+function setOutlinerFocus(key: string | null): void
+{
+  focusKey = key;
+}
+
+// Fills the filter strip and the one tree, which lists files by folder or flat under a system or layer.
+function renderOutliner(): void
+{
+  const terms = queryTerms(S.outliner.query);
+  const joined = terms.join(" ");
+  if (joined !== searchFoldsFor) { searchFolds.clear(); searchFoldsFor = joined; }
+  const chosenFile = S.selected >= 0 && S.selectedFile >= 0 ? filePath(S.selected, S.selectedFile) : null;
+  const chosenFolder = S.selected >= 0 && S.selectedFile < 0 && S.NODES[S.selected] ? S.NODES[S.selected].id : null;
+  const chosen = chosenFile ?? (chosenFolder !== null && chosenFolder !== "" ? chosenFolder + "/" : null);
+  if (S.outliner.group === "system" && !hasSystems()) S.outliner.group = "folder";
+  if (chosen !== null && chosen !== revealedPath) revealInOutliner(chosenFile ?? chosenFolder!, chosenFile === null);
+  const files = shownFiles(terms);
+  countFolderSeen();
+
+  document.querySelectorAll<HTMLInputElement>("[data-group]").forEach((box) =>
+  {
+    box.checked = box.dataset.group === S.outliner.group;
+    box.disabled = box.dataset.group === "system" && !hasSystems();
+  });
+
+  const tree = document.getElementById("outliner-tree");
+  if (tree)
+  {
+    const hadFocus = tree.contains(document.activeElement);
+    const scroll = tree.scrollTop;
+    const why = S.NODES.length === 0 ? "No files yet."
+      : terms.length > 0 ? "Nothing matches “" + escapeHtml(S.outliner.query.trim()) + "”." : "Nothing matches these filters.";
+    const empty = '<p class="oempty">' + why + "</p>";
+    tree.innerHTML = S.outliner.group === "folder"
+      ? folderLevel(folderTree(files), 0, terms) || empty
+      : groupedLevel(files, S.outliner.group, 0, terms) || empty;
+    tree.scrollTop = scroll;
+
+    // One row takes Tab at a time: the one the keyboard was on, else the chosen one, else the first.
+    const rows = [...tree.querySelectorAll<HTMLElement>(".orow")];
+    const current = (focusKey !== null ? rows.find((row) => row.dataset.key === focusKey) : undefined) ??
+      tree.querySelector<HTMLElement>(".orow.sel") ?? rows[0];
+    if (current)
+    {
+      current.tabIndex = 0;
+      focusKey = current.dataset.key ?? null;
+      if (hadFocus) current.focus({ preventScroll: true });
+    }
+    if (chosen !== revealedPath)
+    {
+      revealedPath = chosen;
+      tree.querySelector(".orow.sel")?.scrollIntoView({ block: "nearest" });
+    }
+  }
+  renderFilterStrip();
+  renderChips();
+  renderCounts(files.length);
+}
+
+export { collapseAllOutliner, escapeHtml, folderNode, select, selectFile, setOutlinerFocus, openSymbol, openFile, renderOutliner, toggleFold };

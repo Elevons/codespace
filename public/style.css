@@ -2,7 +2,7 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #04070d; color: #e6edf3;
     font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-  #scene { display: block; width: 100vw; height: 100vh; touch-action: none; cursor: grab; }
+  #scene { display: block; width: 100vw; height: 100vh; height: 100dvh; touch-action: none; cursor: grab; }
   #scene:active { cursor: grabbing; }
 
   /* Names placed over the scene each frame; they never take the pointer. */
@@ -116,34 +116,128 @@
   #trace-rail li b { flex: 0 0 auto; width: 18px; height: 18px; border-radius: 9px; background: #238636; color: #fff;
     font: 600 10.5px/18px ui-sans-serif, system-ui, sans-serif; text-align: center; }
 
-  #legend { flex: 0 0 auto; font-size: 12px; }
-  .swatch { display: flex; align-items: center; gap: 8px; margin: 3px 0; color: #c9d1d9; }
-  .swatch i { flex: none; width: 12px; height: 12px; border-radius: 3px; }
-  #legend .breaks { margin-top: 8px; padding-top: 8px; border-top: 1px solid #30363d; }
-  #breaks-count { color: #6e7681; }
-  #breaks-count.bad { color: #f85149; }
-
-  /* The folders panel takes whatever height the right column has left, and scrolls its list. */
-  #hierarchy { flex: 0 1 auto; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
-  #hierarchy-head { display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 14px; border-bottom: 1px solid #30363d; }
-  #hierarchy-head .panel-title { margin: 0; }
-  #hierarchy-toggle { display: none; background: #21262d; border: 1px solid #30363d; color: #e6edf3;
-    border-radius: 7px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
-  #hierarchy.collapsed #hierarchy-tree { display: none; }
-  #hierarchy-tree { min-height: 0; overflow: auto; padding: 8px 12px 12px; }
-  .hrow { display: flex; align-items: center; gap: 8px; padding: 3px 0;
-    font-family: ui-monospace, Menlo, monospace; font-size: 12px; color: #c9d1d9; }
-  .hrow label { flex: 1 1 auto; display: flex; align-items: center; gap: 8px; min-width: 0; cursor: pointer; }
-  .hrow input { flex: none; accent-color: #1f6feb; }
-  .hrow span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .hrow.hidden span { color: #6e7681; text-decoration: line-through; }
-  .caret, .caret-gap { flex: none; width: 14px; text-align: center; }
-  .caret { background: none; border: none; color: #8b949e; font-size: 10px; line-height: 1; padding: 0; cursor: pointer; }
-  .caret:hover { color: #e6edf3; }
-  .extra { flex: none; background: #21262d; border: 1px solid #30363d; color: #6e7681; border-radius: 5px;
-    font-size: 9px; letter-spacing: .05em; text-transform: uppercase; padding: 1px 5px; cursor: pointer; }
-  .extra.on { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  /* The outliner: one tree for search, systems, layers, folders, tags, and filters. */
+  #outliner { flex: 1 1 auto; display: flex; flex-direction: column; padding: 0; overflow: hidden; min-height: 0; font-size: 12.5px; }
+  #outliner .hint { font-size: 11px; color: #6e7681; }
+  #outliner-head { display: flex; align-items: center; gap: 4px; padding: 8px 8px 8px 14px; border-bottom: 1px solid #21262d; }
+  #outliner-head .panel-title { margin: 0; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #outliner-count { margin-left: 4px; font-weight: 400; letter-spacing: 0; color: #6e7681; }
+  #outliner-head button, #outliner-bulk button { flex: none; background: none; border: 1px solid transparent; color: #8b949e;
+    border-radius: 6px; padding: 2px 6px; font-size: 11px; cursor: pointer; white-space: nowrap; }
+  #outliner-head button:hover, #outliner-bulk button:hover { background: #21262d; border-color: #30363d; color: #e6edf3; }
+  #outliner-head button[hidden] { display: none; }
+  #outliner-head .hicon { display: grid; place-items: center; width: 24px; height: 22px; padding: 0; }
+  #outliner-head .hicon svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+  #outliner-head .hicon circle { fill: #161b22; }
+  #outliner-head .hicon:hover circle { fill: #21262d; }
+  #outliner-filter[aria-expanded="true"] circle { fill: #1f6feb; }
+  #outliner-filter[aria-expanded="true"] { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  #outliner-options { display: flex; flex-direction: column; gap: 5px;
+    padding: 6px 14px 8px; border-bottom: 1px solid #21262d; background: rgba(13,17,23,.5); }
+  #outliner-options[hidden] { display: none; }
+  .ooptrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+  #outliner-options .hint { flex: none; min-width: 38px; color: #6e7681; }
+  #outliner-options label { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: #c9d1d9; cursor: pointer; white-space: nowrap; }
+  #outliner-options input { margin: 0; accent-color: #1f6feb; }
+  #outliner-options small { font-size: 10.5px; color: #6e7681; }
+  #outliner-options label:has(input:disabled) { color: #6e7681; cursor: default; }
+  #outliner-search { display: flex; align-items: center; gap: 6px; margin: 8px 8px 6px; padding: 0 6px 0 8px; height: 28px;
+    background: #0d1117; border: 1px solid #30363d; border-radius: 7px; color: #6e7681; }
+  #outliner-search:focus-within { border-color: #1f6feb; box-shadow: 0 0 0 3px rgba(31,111,235,.25); }
+  #outliner-search input { flex: 1 1 auto; width: auto; min-width: 0; height: 100%; padding: 0; background: none; border: 0;
+    outline: none; box-shadow: none; color: #e6edf3; font: 12.5px ui-sans-serif, system-ui, sans-serif; }
+  #outliner-search input::placeholder { color: #6e7681; }
+  #outliner-search kbd { flex: none; position: static; color: #6e7681; }
+  #outliner-search:focus-within kbd { display: none; }
+  #outliner-filters { display: flex; flex-direction: column; gap: 5px; padding: 0 8px 8px; }
+  #outliner-filters[hidden] { display: none; }
+  .fgroup { display: flex; flex-direction: column; gap: 3px; }
+  .fgroup[hidden] { display: none; }
+  .flabel { font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: #6e7681; }
+  .fchips { display: flex; flex-wrap: wrap; gap: 3px; }
+  .fchip { display: inline-flex; align-items: center; gap: 4px; height: 19px; padding: 0 5px;
+    background: #0d1117; border: 1px solid #30363d; border-radius: 10px; color: #8b949e;
+    font-size: 10.5px; cursor: pointer; white-space: nowrap; }
+  .fchip:hover { border-color: #484f58; color: #c9d1d9; }
+  .fchip.on { background: color-mix(in srgb, var(--c) 16%, #0d1117); border-color: color-mix(in srgb, var(--c) 55%, #30363d); color: #e6edf3; }
+  .fchip.on:hover { border-color: var(--c); }
+  .fchip.empty, .fchip.zero { opacity: .42; }
+  /* Off only because of the other strip; clicking it switches on what it needs there too. */
+  .fchip.cross { opacity: .7; border-style: dotted; }
+  .fchip.empty { cursor: not-allowed; border-style: dashed; }
+  .fchip.empty:hover { border-color: #30363d; color: #8b949e; }
+  .fdot { width: 7px; height: 7px; border-radius: 50%; background: transparent; border: 1px solid var(--c); }
+  .fchip.on .fdot { background: var(--c); }
+  .fcount { font-size: 9.5px; color: #6e7681; font-variant-numeric: tabular-nums; }
+  .fchip.on .fcount { color: #8b949e; }
+  #outliner-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 0 8px 6px; }
+  #outliner-chips[hidden] { display: none; }
+  .ochip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; font-size: 10.5px;
+    color: #cfe1ff; background: rgba(31,111,235,.18); border: 1px solid rgba(31,111,235,.55);
+    border-radius: 10px; padding: 1px 4px 1px 7px; }
+  .ochip b { font-weight: 400; color: #79a7e8; }
+  .ochip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ochip button { background: none; border: 0; color: #9ab; cursor: pointer; padding: 0 2px; font-size: 11px; }
+  .ochip button:hover { color: #e6edf3; }
+  #outliner > * { flex: none; }
+  #outliner-tree { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 2px 4px 8px; scrollbar-width: thin; }
+  .oempty { margin: 0; padding: 10px; color: #6e7681; font-size: 12px; }
+  .orow { display: flex; align-items: center; gap: 5px; height: 24px; padding: 0 2px 0 calc(4px + var(--depth, 0) * 12px);
+    border-radius: 5px; min-width: 0; cursor: pointer; color: #c9d1d9; }
+  .orow:hover, .orow.hl { background: #21262d; }
+  .orow.sel { background: rgba(31,111,235,.3); color: #fff; }
+  .orow.off { color: #6e7681; }
+  .orow.off .odot { opacity: .4; }
+  .orow.grp { color: #e6edf3; font-weight: 600; }
+  .orow.grp.off { color: #6e7681; }
+  .ocaret { flex: none; width: 12px; height: 12px; position: relative; }
+  .orow.grp .ocaret::before { content: ""; position: absolute; left: 3px; top: 2px; border: 4px solid transparent;
+    border-left: 5px solid #8b949e; transition: transform .12s; transform-origin: 2px 4px; }
+  .orow.grp .ocaret.open::before { transform: rotate(90deg); }
+  .orow.grp:hover .ocaret::before { border-left-color: #e6edf3; }
+  /* The caret folds its row, so it gets a target larger than the triangle it draws. */
+  .orow.grp .ocaret { cursor: pointer; border-radius: 3px; }
+  .orow.grp .ocaret::after { content: ""; position: absolute; inset: -6px -3px; }
+  .orow.grp .ocaret:hover { background: #30363d; }
+  .odot { flex: none; width: 8px; height: 8px; border-radius: 2px; }
+  .oname { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .onum { flex: none; font-size: 10.5px; font-weight: 400; color: #6e7681; }
+  .ofilemeta { flex: none; display: flex; align-items: center; gap: 5px; margin-left: auto; }
+  .odots { display: inline-flex; align-items: center; gap: 3px; }
+  .odot.oswitch { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 2px; cursor: pointer; }
+  .odot.oswitch:hover { outline: 1px solid #e6edf3; outline-offset: 1px; }
+  .otag { font: 9.5px/13px ui-monospace, Menlo, monospace; color: #8b949e; border: 1px solid #30363d;
+    border-radius: 4px; padding: 0 3px; cursor: pointer; }
+  .otag:hover { border-color: #58a6ff; color: #cfe1ff; }
+  .orow.grp .onum { margin-right: auto; }
+  .oicon { flex: none; display: grid; place-items: center; width: 20px; height: 20px; padding: 0; background: none;
+    border: 0; border-radius: 4px; color: #8b949e; cursor: pointer; }
+  .oicon svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+  .oicon:hover { background: #30363d; color: #e6edf3; }
+  .oeye.on { color: #6e7681; }
+  .oeye.part { color: #6e7681; opacity: .8; }
+  .oeye.part svg circle { fill: none; stroke-dasharray: 2 1.5; }
+  .orow:focus { outline: none; }
+  .orow:focus-visible { box-shadow: inset 0 0 0 1px #1f6feb; background: #1c2128; }
+  .orow.sel:focus-visible { background: rgba(31,111,235,.3); }
+  .orow.grp.sel { background: rgba(31,111,235,.22); }
+  /* With a mouse, a row's badges and buttons wait for hover so the list reads as names; a hidden or
+     partly hidden row keeps its eye, and so does the row the keyboard is on. */
+  @media (hover: hover)
+  {
+    .orow .oicon { visibility: hidden; }
+    .orow:hover .oicon, .orow:focus-visible .oicon, .orow .oeye.on, .orow .oeye.part { visibility: visible; }
+  }
+  #outliner-collapse svg { transition: transform .12s; }
+  #outliner-tree, #outliner-filters { touch-action: manipulation; }
+  /* A note in the footer, such as why a chip cannot be switched on, which a touch screen has no tooltip for. */
+  #outliner-file-count.note { color: #d29922; white-space: normal; }
+  #outliner-collapse.expand svg { transform: rotate(180deg); }
+  .osym { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #d2a8ff; font: 11px ui-monospace, Menlo, monospace; }
+  #outliner mark { background: rgba(210,153,34,.35); color: inherit; border-radius: 2px; }
+  #outliner-bulk { display: flex; align-items: center; gap: 2px; padding: 5px 6px 5px 14px; border-top: 1px solid #21262d;
+    font-size: 11px; color: #6e7681; }
+  #outliner-file-count { flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* The bottom bars: the view buttons on the left, the layer gap and extras on the right. */
   .bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 8px 10px; overflow: visible; }
@@ -164,33 +258,12 @@
   kbd { display: inline-block; padding: 1px 5px; border: 1px solid #30363d; border-bottom-width: 2px;
     border-radius: 4px; background: #0d1117; color: #c9d1d9; font: 10.5px ui-monospace, Menlo, monospace; }
 
-  /* Search sits above the summary, and its results drop over the panels below. */
-  #searchbar { position: relative; flex: 0 0 auto; padding: 8px 10px; }
+  /* The outliner's search box. */
   #search { width: 100%; padding: 8px 30px 8px 10px; background: #0d1117; border: 1px solid #30363d;
     border-radius: 7px; color: #e6edf3; font: 13px ui-monospace, Menlo, monospace; outline: none; }
   #search:focus { border-color: #1f6feb; box-shadow: 0 0 0 3px rgba(31,111,235,.25); }
   #search::placeholder { color: #6e7681; }
   #search-key { position: absolute; right: 18px; top: 15px; color: #6e7681; pointer-events: none; }
-  #search-results { margin: 8px -2px 0; padding: 0; list-style: none; max-height: min(46vh, 420px); overflow: auto; }
-  #search-results[hidden] { display: none; }
-  .hit { display: grid; grid-template-columns: 44px 1fr; gap: 0 8px; padding: 5px 6px; border-radius: 6px;
-    font: 12px ui-monospace, Menlo, monospace; color: #c9d1d9; cursor: pointer; }
-  .hit:hover, .hit.active { background: rgba(31,111,235,.24); }
-  .hit-kind { align-self: center; font: 9px ui-sans-serif, system-ui, sans-serif; letter-spacing: .7px;
-    text-transform: uppercase; color: #6e7681; }
-  .hit.active .hit-kind { color: #a5d6ff; }
-  .hit small { grid-column: 2; color: #8b91ad; font-size: 10.5px; overflow: hidden;
-    text-overflow: ellipsis; white-space: nowrap; }
-
-  /* The legend's tags are buttons now; a click filters the map to one. */
-  button.swatch { display: flex; align-items: center; gap: 8px; width: 100%; margin: 1px 0; padding: 3px 5px;
-    background: none; border: 0; border-radius: 6px; color: #c9d1d9; font: inherit; text-align: left; cursor: pointer; }
-  button.swatch:hover { background: rgba(255,255,255,.06); }
-  button.swatch.active { background: rgba(31,111,235,.22); box-shadow: inset 0 0 0 1px #1f6feb; }
-  #tag-filter { display: block; width: 100%; margin-top: 8px; padding: 4px 8px; border: 1px solid #1f6feb;
-    border-radius: 6px; background: rgba(31,111,235,.16); color: #a5d6ff; font-size: 11px; cursor: pointer; }
-  #tag-filter[hidden] { display: none; }
-
   /* Breadcrumbs: click any folder to walk back up. */
   .crumbs { display: flex; flex-wrap: wrap; gap: 1px; margin: 0 0 8px; font: 11.5px ui-monospace, Menlo, monospace; }
   .crumb { padding: 1px 3px; border-radius: 4px; color: #8b91ad; text-decoration: none; cursor: pointer; }
@@ -199,6 +272,14 @@
   .crumb-sep { color: #484f58; }
 
   /* The repository at a glance, shown until a block is chosen. */
+  .empty-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .empty-head .empty-title { margin: 0; flex: none; }
+  .empty-head .repo-path { margin: 0; min-width: 0; flex: 1 1 auto; }
+  #info .note { margin: 4px 0 0; }
+  #info.collapsed #info-body { display: none; }
+  .info-toggle { flex: none; align-self: center; margin-left: auto; background: #21262d; color: #e6edf3;
+    border: 1px solid #30363d; border-radius: 7px; padding: 2px 9px; font-size: 11px; cursor: pointer; }
+  .info-toggle:hover { background: #30363d; }
   .empty-title { margin: 0 0 2px; font-size: 15px; }
   .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 10px 0 8px; }
   .stat { display: flex; flex-direction: column; padding: 6px 8px; border: 1px solid #21262d; border-radius: 7px; background: #0d1117; }
@@ -228,9 +309,9 @@
   #repo-form input { flex: 1; min-width: 0; background: #0d1117; color: #e6edf3; border: 1px solid #30363d;
     border-radius: 7px; padding: 6px 8px; font: 12px ui-monospace, Menlo, monospace; }
   #repo-form input:focus { outline: none; border-color: #1f6feb; }
-  #repo-form button, #repo-ingest-copy { background: #21262d; color: #e6edf3; border: 1px solid #30363d;
+  #repo-form button, #repo-ingest-copy, #repo-delete button { background: #21262d; color: #e6edf3; border: 1px solid #30363d;
     border-radius: 7px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
-  #repo-form button:hover, #repo-ingest-copy:hover { background: #30363d; }
+  #repo-form button:hover, #repo-ingest-copy:hover, #repo-delete button:hover { background: #30363d; }
   #repo-form button:disabled { opacity: .6; cursor: default; }
   #repo-current { margin: 8px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #repo-error { margin: 8px 0 0; color: #f85149; }
@@ -262,6 +343,15 @@
     border-radius: 6px; padding: 4px 6px; font: 11.5px ui-monospace, Menlo, monospace; cursor: pointer;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #repo-recent button:hover { background: #21262d; border-color: #30363d; }
+  #repo-delete { display: flex; justify-content: flex-end; margin-top: 10px; padding-top: 10px; border-top: 1px solid #30363d; }
+  #repo-delete button { color: #f85149; }
+  #repo-delete button[hidden], #repo-delete-confirm[hidden] { display: none; }
+  #repo-delete-confirm { display: flex; align-items: center; gap: 8px; width: 100%; }
+  #repo-delete-question { flex: 1; margin: 0; font-size: 12px; color: #c9d1d9; overflow-wrap: anywhere; }
+  #repo-delete-confirm #repo-delete-cancel { color: #e6edf3; }
+  #repo-delete-confirm #repo-delete-yes { background: #da3633; border-color: #f85149; color: #fff; }
+  #repo-delete-confirm #repo-delete-yes:hover { background: #f85149; }
+  #repo-delete button:disabled { opacity: .6; cursor: default; }
   #help { position: fixed; z-index: 9; left: 50%; top: 50%; transform: translate(-50%, -50%);
     width: min(430px, calc(100vw - 32px)); }
   #help[hidden] { display: none; }
@@ -269,6 +359,8 @@
   #help dt { text-align: right; white-space: nowrap; color: #c9d1d9; }
   #help dd { margin: 0; color: #8b91ad; }
 
+  /* A toggle's state and the repository's name follow their label after a colon, drawn here so the phone's tiles can drop it. */
+  .bar .state::before, #repo .repo-name::before { content: ": "; }
   /* The colour menu and the on/off dots on the toggles. */
   #controls select { padding: 6px 8px; border: 1px solid #30363d; border-radius: 7px; background: #21262d;
     color: #e6edf3; font-size: 12px; }
@@ -276,21 +368,247 @@
     border-radius: 3px; background: #6e7681; vertical-align: 1px; }
   #spin.on::before, #live.on::before { background: #e6edf3; }
 
-  /* Narrow screens: the scene gets the room. Summary and details stack along the top,
-     the folders list folds down above the bars, and the legend drops out. */
+  /* Hints for a keyboard and mouse, or for a touch screen: each device sees only its own. */
+  .touch-only { display: none; }
+  @media (hover: none) and (pointer: coarse)
+  {
+    .key-only, #search-key { display: none; }
+    .touch-only { display: revert; }
+    /* iOS zooms the page into any field set below 16px, and a finger needs a bigger target. */
+    #search, #repo-form input, #repo-path { font-size: 16px; }
+    #search { padding-right: 10px; }
+    .bar button, #controls select { min-height: 36px; }
+    #showing-clear, #codeblock-close, #repo-up, .info-toggle { min-height: 32px; padding: 4px 12px; }
+    #info li.sym, #info .filelist li { padding: 6px 0; }
+    #repo-browse-list button, #repo-recent button { padding: 8px 6px; }
+    /* The outliner, sized for a finger: taller rows, wider icons, and dots with room around them. */
+    #outliner { font-size: 14px; }
+    #outliner-head .hicon { width: 36px; height: 32px; }
+    #outliner-head button, #outliner-bulk button { min-height: 32px; padding: 4px 10px; font-size: 12px; }
+    #outliner-search { height: 38px; }
+    .orow { height: 38px; gap: 8px; padding-left: calc(2px + var(--depth, 0) * 14px); }
+    .orow.grp .ocaret { width: 26px; height: 32px; }
+    .orow.grp .ocaret::before { left: 9px; top: 12px; }
+    .orow.grp .ocaret::after { inset: 0; }
+    .oicon { width: 34px; height: 34px; }
+    .oicon svg { width: 17px; height: 17px; }
+    .odots { gap: 10px; }
+    .odot.oswitch { position: relative; width: 11px; height: 11px; }
+    .odot.oswitch::after { content: ""; position: absolute; inset: -11px -5px; }
+    .otag { font-size: 11px; line-height: 20px; padding: 0 6px; }
+    .osym { font-size: 12.5px; }
+    .fchip { height: 30px; padding: 0 10px; gap: 6px; border-radius: 15px; font-size: 12.5px; }
+    .fcount { font-size: 11px; }
+    .ochip { font-size: 12px; padding: 3px 4px 3px 9px; }
+    .ochip button { min-width: 28px; min-height: 24px; font-size: 13px; }
+    #outliner-options label { min-height: 34px; font-size: 13px; }
+    #outliner-options input { width: 18px; height: 18px; }
+  }
+
+  /* Narrow screens: the scene gets the room. Summary and details stack along the top, the
+     folders list folds down above the bars, and the legend drops out. Everything above the
+     bottom bars sits clear of them by their measured height (--dock-bottom-h, set in controls.ts),
+     and clear of a notch or home indicator by the safe-area insets. */
   @media (max-width: 720px)
   {
+    :root { --edge: 8px; --above-bars: calc(var(--dock-bottom-h, 104px) + var(--edge) + env(safe-area-inset-bottom) + 8px); }
     .dock { top: auto; bottom: auto; }
-    #dock-left { top: 8px; left: 8px; right: 8px; width: auto; max-height: 38vh; }
-    #info { padding: 10px 12px; }
+    #dock-left { top: calc(var(--edge) + env(safe-area-inset-top)); left: calc(var(--edge) + env(safe-area-inset-left));
+      right: calc(var(--edge) + env(safe-area-inset-right)); width: auto; max-height: 34dvh; gap: 6px; }
+    #info { padding: 8px 10px; }
     #info h3 { font-size: 13px; }
-    #legend { display: none; }
-    #codeblock { top: auto; left: 8px; right: 8px; width: auto; transform: none; bottom: 96px; max-height: 40vh; }
-    #dock-right { left: 8px; right: 8px; bottom: 104px; width: auto; max-height: 36vh; }
-    #hierarchy-toggle { display: block; }
-    #dock-bottom { left: 8px; right: 8px; bottom: 8px; justify-content: center; gap: 6px; }
-    #repo-panel { left: 8px; right: 8px; width: auto; bottom: 168px; max-height: 46vh; overflow: auto; }
-    .bar { justify-content: center; gap: 6px; }
-    .bar button { padding: 6px 9px; font-size: 11.5px; }
-    #controls input[type="range"] { flex: 1; width: auto; min-width: 80px; }
+    #info .hint { margin: 2px 0 0; }
+    #info.empty .how { display: none; }
+    #info .empty-head { gap: 6px; }
+    #info .empty-head .empty-title { font-size: 14px; }
+    #info .empty-head .repo-path { margin: 0; font-size: 10.5px; }
+    #info .note { font-size: 10.5px; margin-top: 3px; }
+    #tools .state { display: none; }
+    #controls { display: none; }
+    #repo .repo-name { display: none; }
+    /* The repository's numbers fit on one row instead of a tall grid. */
+    .stats { grid-template-columns: repeat(5, 1fr); gap: 4px; margin: 8px 0 0; }
+    .stat { padding: 4px 5px; align-items: center; }
+    .stat b { font-size: 12.5px; }
+    .stat span { font-size: 8px; letter-spacing: .3px; text-align: center; }
+    #codeblock { top: auto; left: var(--edge); right: var(--edge); width: auto; transform: none;
+      bottom: var(--above-bars); max-height: 40dvh; }
+    #dock-right { left: var(--edge); right: var(--edge); bottom: var(--above-bars); width: auto; max-height: 46dvh; }
+
+    #dock-bottom { left: calc(var(--edge) + env(safe-area-inset-left)); right: calc(var(--edge) + env(safe-area-inset-right));
+      bottom: calc(var(--edge) + env(safe-area-inset-bottom)); flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 6px; }
+    #repo-panel { left: var(--edge); right: var(--edge); width: auto; bottom: var(--above-bars); max-height: 46dvh; overflow: auto; }
+    /* Each bar is one row that scrolls sideways, rather than wrapping into a tall block. */
+    .bar { flex-wrap: nowrap; justify-content: flex-start; gap: 6px; padding: 6px; overflow-x: auto; overflow-y: hidden;
+      scrollbar-width: none; overscroll-behavior-x: contain; }
+    .bar::-webkit-scrollbar { display: none; }
+    .bar > * { flex: none; }
+    .bar button { padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+    #controls label { padding-left: 4px; }
+    #controls input[type="range"] { width: 110px; }
   }
+
+  /* A phone on its side is wide but short: the side columns keep to the top and leave the scene. */
+  @media (max-height: 500px) and (min-width: 721px)
+  {
+    .dock { top: 8px; bottom: 64px; }
+    #dock-left { left: 8px; width: min(300px, 34vw); }
+    #dock-right { right: 8px; width: min(240px, 28vw); }
+    #dock-bottom { left: 8px; right: 8px; bottom: 8px; flex-wrap: nowrap; gap: 6px; }
+    .bar { flex: 0 1 auto; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 5px 6px; gap: 6px; }
+    .bar > * { flex: none; }
+    .bar button { padding: 5px 9px; white-space: nowrap; }
+    .stats, .keys, #info .how { display: none; }
+    #codeblock { top: 8px; left: calc(8px + min(300px, 34vw) + 8px); width: auto; right: 8px; max-height: calc(100dvh - 80px); }
+    #repo-panel { bottom: 64px; max-height: calc(100dvh - 80px); overflow: auto; }
+  }
+
+  /* ---- the phone layout (mobile.ts adds body.phone on a narrow screen) ----------------------
+     The map takes the whole screen. A tab bar along the bottom opens one sheet at a time — Files,
+     Filters, Details, View — and the desktop panels are moved into it, so they are restyled here
+     as large, finger-sized tiles rather than the desktop's compact columns. */
+  #msheet, #mtabs, #mpeek { display: none; }
+  body.phone #dock-bottom, body.phone #dock-left, body.phone #dock-right { display: none; }
+
+  body.phone #mtabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; position: fixed; z-index: 8; left: 0; right: 0; bottom: 0;
+    padding: 6px max(6px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+    background: rgba(13,17,23,.95); border-top: 1px solid #30363d; backdrop-filter: blur(10px); }
+  #mtabs button { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-height: 54px; padding: 0; background: none; border: 0; border-radius: 12px; color: #8b949e; font: 500 11px ui-sans-serif, system-ui, sans-serif;
+    cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  #mtabs svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  #mtabs button[aria-pressed="true"] { color: #e6edf3; background: rgba(31,111,235,.2); }
+  #mtabs button[aria-pressed="true"] svg { stroke: #58a6ff; }
+  .mbadge { position: absolute; top: 4px; left: calc(50% + 7px); min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
+    background: #1f6feb; color: #fff; font: 600 10px/17px ui-sans-serif, system-ui, sans-serif; font-style: normal; text-align: center; }
+  .mbadge.dot { min-width: 9px; width: 9px; height: 9px; padding: 0; top: 7px; background: #58a6ff; }
+  .mbadge[hidden] { display: none; }
+
+  body.phone #msheet { display: flex; flex-direction: column; position: fixed; z-index: 7;
+    left: max(6px, env(safe-area-inset-left)); right: max(6px, env(safe-area-inset-right)); bottom: calc(var(--tabs-h, 67px) + 6px);
+    height: 62dvh; background: rgba(22,27,34,.97); border: 1px solid #30363d; border-radius: 18px;
+    box-shadow: 0 -10px 40px rgba(0,0,0,.55); backdrop-filter: blur(10px); overflow: hidden; }
+  body.phone #msheet[hidden] { display: none; }
+  body.phone #msheet[data-pane="view"] { height: auto; max-height: 62dvh; }
+  body.phone #msheet.full { top: calc(6px + env(safe-area-inset-top)); height: auto; max-height: none; }
+  #msheet-head { flex: none; position: relative; display: flex; align-items: center; gap: 8px; padding: 16px 8px 8px 18px; touch-action: none; }
+  #msheet-grip { position: absolute; top: 6px; left: 50%; width: 38px; height: 4px; margin-left: -19px; border-radius: 2px; background: #484f58; }
+  #msheet-title { flex: 1 1 auto; margin: 0; font-size: 12.5px; }
+  #msheet-close { display: grid; place-items: center; width: 44px; height: 38px; background: #21262d; border: 1px solid #30363d;
+    border-radius: 11px; color: #c9d1d9; cursor: pointer; }
+  #msheet-close svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .mpane { display: none; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px 14px 16px; }
+  #msheet[data-pane="files"] #mpane-files { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+  #msheet[data-pane="filters"] #mpane-filters, #msheet[data-pane="details"] #mpane-details, #msheet[data-pane="view"] #mpane-view { display: block; }
+
+  /* Panels inside a sheet lose their own card: the sheet is the card. */
+  .mpane .panel { background: none; border: 0; border-radius: 0; box-shadow: none; backdrop-filter: none; padding: 0; max-height: none; overflow: visible; }
+
+  /* Files: the search and the tree, with big rows. */
+  #mpane-files > #outliner { flex: 1 1 auto; min-height: 0; overflow: hidden; font-size: 15px; }
+  /* The search and the outliner's own buttons share one row under the sheet's title. */
+  #mpane-files > #outliner { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto minmax(0, 1fr); }
+  #mpane-files #outliner-search { grid-area: 1 / 1; }
+  #mpane-files #outliner-head { grid-area: 1 / 2; align-self: start; gap: 6px; padding: 0 12px 8px 0; border-bottom: 0; }
+  #mpane-files #outliner-tree { grid-area: 2 / 1 / 3 / 3; }
+  #mpane-files #outliner-head .panel-title { display: none; }
+  #mpane-files #outliner-filter { display: none; }
+  #mpane-files #outliner-head .hicon { width: 44px; height: 44px; border: 1px solid #30363d; border-radius: 11px; background: #21262d; }
+  #mpane-files #outliner-head .hicon svg { width: 17px; height: 17px; }
+  #mpane-files #outliner-clear { min-height: 44px; padding: 4px 14px; border: 1px solid #30363d; border-radius: 11px; background: #21262d; color: #e6edf3; font-size: 13px; }
+  #mpane-files #outliner-search { height: 44px; margin: 0 8px 8px 12px; border-radius: 12px; }
+  #mpane-files #outliner-search kbd { display: none; }
+  #mpane-files #outliner-search input { font-size: 16px; }
+  #mpane-files #outliner-tree { padding: 0 8px 12px; border-top: 1px solid #21262d; }
+  #mpane-files .orow { height: 44px; gap: 8px; border-radius: 10px; padding-left: calc(2px + var(--depth, 0) * 16px); }
+  #mpane-files .orow.grp .ocaret { width: 30px; height: 40px; }
+  #mpane-files .orow.grp .ocaret::before { left: 11px; top: 15px; }
+  #mpane-files .orow.grp .ocaret::after { inset: 0; }
+  #mpane-files .odot { width: 10px; height: 10px; }
+  #mpane-files .oicon { width: 40px; height: 40px; visibility: visible; }
+  #mpane-files .oicon svg { width: 19px; height: 19px; }
+  #mpane-files .odots { gap: 12px; }
+  #mpane-files .odot.oswitch { position: relative; width: 12px; height: 12px; }
+  #mpane-files .odot.oswitch::after { content: ""; position: absolute; inset: -14px -6px; }
+  #mpane-files .otag { font-size: 11.5px; line-height: 22px; padding: 0 7px; border-radius: 6px; }
+  #mpane-files .osym { font-size: 13.5px; }
+  #mpane-files .oempty { font-size: 14px; padding: 16px 10px; }
+
+  /* Filters: every system and layer as a large tile, with the view options and bulk actions below. */
+  #mpane-filters #outliner-filters { padding: 0; gap: 16px; }
+  #mpane-filters .fgroup { gap: 8px; }
+  #mpane-filters .flabel { font-size: 11px; }
+  #mpane-filters .fchips { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+  #mpane-filters .fchip { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px 8px; height: auto; min-height: 70px;
+    padding: 12px; border-radius: 14px; font-size: 14.5px; white-space: normal; text-align: left; touch-action: manipulation; }
+  #mpane-filters .fdot { grid-area: 1 / 1; width: 11px; height: 11px; border-width: 1.5px; }
+  #mpane-filters .fcount { grid-area: 1 / 2; justify-self: end; font-size: 17px; font-weight: 600; color: #8b949e; }
+  #mpane-filters .fchip.on .fcount { color: #e6edf3; }
+  #mpane-filters .fname { grid-area: 2 / 1 / 3 / 3; overflow-wrap: anywhere; }
+  #mpane-filters #outliner-chips { padding: 14px 0 0; }
+  #mpane-filters .ochip { font-size: 14px; padding: 4px 4px 4px 12px; border-radius: 12px; }
+  #mpane-filters .ochip button { min-width: 40px; min-height: 36px; font-size: 15px; }
+  #mpane-filters #outliner-options, #mpane-filters #outliner-options[hidden] { display: flex; gap: 12px; padding: 18px 0 0; background: none; border: 0; }
+  #mpane-filters .ooptrow { gap: 8px; }
+  #mpane-filters #outliner-options .hint { flex: 1 0 100%; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  #mpane-filters #outliner-options label { flex: 1 1 0; justify-content: center; min-height: 48px; padding: 0 10px; font-size: 14px;
+    background: #0d1117; border: 1px solid #30363d; border-radius: 12px; }
+  #mpane-filters #outliner-options label:has(input:checked) { background: rgba(31,111,235,.2); border-color: #1f6feb; color: #fff; }
+  #mpane-filters #outliner-options input { width: 18px; height: 18px; }
+  #mpane-filters #outliner-bulk { flex-wrap: wrap; gap: 8px; padding: 18px 0 0; border: 0; font-size: 13px; }
+  #mpane-filters #outliner-file-count { flex: 1 0 100%; }
+  #mpane-filters #outliner-bulk button { flex: 1 1 0; min-height: 48px; background: #21262d; border: 1px solid #30363d; border-radius: 12px;
+    color: #e6edf3; font-size: 14px; }
+
+  /* Details: the chosen file or folder, in a size that reads at arm's length. */
+  #mpane-details #showing { max-height: none; margin-bottom: 14px; border: 1px solid #30363d; border-radius: 14px; }
+  #mpane-details #info { font-size: 15px; padding: 0; }
+  #mpane-details #info h3 { font-size: 17px; }
+  #mpane-details #info ul { font-size: 14px; }
+  #mpane-details #info li { padding: 8px 0; border-bottom: 1px solid #21262d; }
+  #mpane-details #info .filelist .sum, #mpane-details #info .chosen-sum { font-size: 13.5px; }
+  #mpane-details .crumbs { font-size: 13.5px; gap: 2px; }
+  #mpane-details .crumb { padding: 6px 6px; }
+  #mpane-details .info-toggle { min-height: 36px; padding: 4px 14px; font-size: 13px; }
+  #mpane-details .stats { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  #mpane-details .stat { padding: 12px 14px; border-radius: 12px; align-items: flex-start; }
+  #mpane-details .stat b { font-size: 22px; }
+  #mpane-details .stat span { font-size: 10.5px; }
+  #mpane-details #info .chosen-file { padding: 14px 16px; border-radius: 14px; }
+  #mpane-details #info .chosen-name { font-size: 16px; }
+
+  /* View: the map's controls as a grid of big square buttons. */
+  #mpane-view .bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 0; overflow: visible; }
+  #mpane-view #controls { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 16px; }
+  #mpane-view .bar button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    min-height: 72px; padding: 8px; border-radius: 14px; font-size: 14px; white-space: normal; line-height: 1.2; }
+  #mpane-view .bar button .state { display: block; font-size: 12px; opacity: .8; }
+  #mpane-view .bar button .state::before, #mpane-view #repo .repo-name::before { content: none; }
+  #mpane-view #repo .repo-name { display: block; font-size: 12px; opacity: .8; }
+  #mpane-view #spin::before, #mpane-view #live::before { display: none; }
+  #mpane-view #controls label { padding: 4px 2px 0; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #6e7681; }
+  #mpane-view #controls select { width: 100%; min-height: 48px; border-radius: 12px; font-size: 16px; }
+  #mpane-view #controls input[type="range"] { width: 100%; min-height: 40px; }
+  #mpane-view #glow { min-height: 56px; }
+
+  /* The chosen thing, as a strip above the tabs while the map is showing. */
+  body.phone #mpeek { display: flex; align-items: center; gap: 4px; position: fixed; z-index: 6;
+    left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); bottom: calc(var(--tabs-h, 67px) + 8px);
+    padding: 4px; background: rgba(22,27,34,.95); border: 1px solid #30363d; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,.45);
+    backdrop-filter: blur(10px); }
+  body.phone #mpeek[hidden] { display: none; }
+  #mpeek-open { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 6px 10px;
+    background: none; border: 0; border-radius: 12px; color: #e6edf3; text-align: left; cursor: pointer; }
+  #mpeek-dot { flex: none; width: 12px; height: 12px; border-radius: 3px; }
+  #mpeek-text { display: flex; flex-direction: column; min-width: 0; }
+  #mpeek-name { font: 600 14.5px ui-monospace, Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #mpeek-sub { font-size: 12.5px; color: #8b949e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #mpeek-clear { flex: none; width: 48px; height: 48px; background: #21262d; border: 1px solid #30363d; border-radius: 12px; color: #c9d1d9; font-size: 16px; cursor: pointer; }
+
+  /* Over everything but the tabs: the code view takes the screen, and the repository picker and help sit above the tabs. */
+  body.phone #codeblock { z-index: 9; top: calc(6px + env(safe-area-inset-top)); bottom: calc(var(--tabs-h, 67px) + 6px);
+    left: max(6px, env(safe-area-inset-left)); right: max(6px, env(safe-area-inset-right)); width: auto; max-height: none; border-radius: 16px; }
+  body.phone #codeblock-close { min-height: 38px; padding: 4px 16px; font-size: 13px; border-radius: 10px; }
+  body.phone #symbol-code { font-size: 12.5px; }
+  body.phone #repo-panel { z-index: 10; left: 6px; right: 6px; width: auto; bottom: calc(var(--tabs-h, 67px) + 6px); max-height: 70dvh; }
+  body.phone #help { z-index: 10; }

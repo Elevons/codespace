@@ -28,10 +28,16 @@ export class Graph
     /**
      * Reads the repository's code files and links the imports between them.
      * @param repo the repository to read
+     * @param files the repository's files, when the caller has already listed them
+     * @param read how to read one file, when the caller has already read them
      */
-    public static async BuildAsync(repo: Repo): Promise<Graph>
+    public static async BuildAsync(
+        repo: Repo,
+        files?: readonly string[],
+        read: (path: string) => Promise<string> = (path) => repo.ReadFileAsync(path),
+    ): Promise<Graph>
     {
-        const files = await repo.ListFilesAsync()
+        files ??= await repo.ListFilesAsync()
         const known = new Set(files)
         const imports = new Map<string, string[]>()
 
@@ -42,7 +48,7 @@ export class Graph
         for (const path of files)
         {
             if (!CSharpFile.test(path)) continue
-            const text = (await repo.ReadFileAsync(path).catch(() => '')).slice(0, MaxFileChars)
+            const text = (await read(path).catch(() => '')).slice(0, MaxFileChars)
             csharpUses.set(path, Graph.CSharpUses(text))
             const namespace = Graph.CSharpNamespace(text)
             if (namespace !== null) declared.set(namespace, [...(declared.get(namespace) ?? []), path])
@@ -59,7 +65,7 @@ export class Graph
             }
             else if (CodeFile.test(path))
             {
-                const text = await repo.ReadFileAsync(path).catch(() => '')
+                const text = await read(path).catch(() => '')
                 for (const specifier of Graph.ParseSpecifiers(text.slice(0, MaxFileChars)))
                 {
                     const folder = dirname(path) === '.' ? '' : dirname(path)
@@ -89,13 +95,21 @@ export class Graph
      */
     public Edges(folder = ''): Array<[string, string]>
     {
-        const prefix = folder === '' ? '' : folder.replace(/\/+$/, '') + '/'
         const edges: Array<[string, string]> = []
-        for (const [from, targets] of this.imports)
-        {
-            for (const to of targets) if (from.startsWith(prefix) || to.startsWith(prefix)) edges.push([from, to])
-        }
-        return edges
+        for (const [from, targets] of this.imports) for (const to of targets) edges.push([from, to])
+        return Graph.EdgesUnder(edges, folder)
+    }
+
+    /**
+     * Narrows a list of imports to the ones that touch a folder.
+     * @param edges each import, as the importing file and the imported one
+     * @param folder when given, only imports where either file is under this folder
+     */
+    public static EdgesUnder(edges: ReadonlyArray<[string, string]>, folder = ''): Array<[string, string]>
+    {
+        if (folder === '') return [...edges]
+        const prefix = folder.replace(/\/+$/, '') + '/'
+        return edges.filter(([from, to]) => from.startsWith(prefix) || to.startsWith(prefix))
     }
 
     /**

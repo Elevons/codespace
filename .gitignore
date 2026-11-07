@@ -4,3 +4,6 @@ public/vectors/chunks.json
 .DS_Store
 # Compiled browser output; the TypeScript in public/ is the source.
 public/*.js
+
+# A scratch batch an agent writes for `apply`; it is not part of the project.
+batch.json

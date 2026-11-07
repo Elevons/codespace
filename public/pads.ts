@@ -1,5 +1,5 @@
-import { S, scene, colorFor, matchesTagFilter } from "./state.js";
-import { Batch } from "./batch.js";
+import { S, scene, colorFor, isLitRecord, layerRank } from "./state.js";
+import { Batch, batchOf, colorOf } from "./batch.js";
 import type { FileRecord } from "./types.js";
 
 // A thin ring on each file's own layer plane, right under the block, in the layer's colour, so the
@@ -12,13 +12,7 @@ let faded: Batch | null = null;
 function makeBatch(name: string, alpha: number): Batch
 {
   const mesh = BABYLON.MeshBuilder.CreateTorus(name, { diameter: 1, thickness: 0.035, tessellation: 40 }, scene);
-  const material = new BABYLON.StandardMaterial(name, scene);
-  material.diffuseColor = BABYLON.Color3.White();
-  material.emissiveColor = new BABYLON.Color3(0.7, 0.7, 0.7);
-  material.specularColor = new BABYLON.Color3(0.06, 0.06, 0.06);
-  material.alpha = alpha;
-  mesh.material = material;
-  return new Batch(mesh);
+  return batchOf(mesh, 0.7, alpha);
 }
 
 function batches(): [Batch, Batch]
@@ -36,8 +30,6 @@ export function resizePads(count: number): void
   b.resize(count);
 }
 
-const parsed = new Map<string, BABYLON.Color3>();
-
 function syncPads(): void
 {
   const [a, b] = batches();
@@ -45,29 +37,18 @@ function syncPads(): void
   for (const rec of S.fileRecords.values())
   {
     const layer = layered ? S.FILE_LAYERS.get(rec.path) : undefined;
-    const rank = layer === undefined ? -1 : S.LAYERS.indexOf(layer);
+    const rank = layer === undefined ? -1 : layerRank(layer);
     if (rank < 0) { a.hide(rec.slot); b.hide(rec.slot); continue; }
     const pos = rec.shape.position, size = rec.shape.scaling;
     const across = Math.max(size.x, size.z) * 1.5;
-    const into = lit(rec) ? a : b, out = into === a ? b : a;
+    const into = isLitRecord(rec) ? a : b, out = into === a ? b : a;
     into.place(rec.slot, pos.x, rank * S.layerGap + 0.012, pos.z, across, 1, across);
     out.hide(rec.slot);
-    const hex = colorFor(layer!);
-    let color = parsed.get(hex);
-    if (!color) { color = BABYLON.Color3.FromHexString(hex); parsed.set(hex, color); }
+    const color = colorOf(colorFor(layer!));
     into.paint(rec.slot, color.r, color.g, color.b);
   }
   a.flush();
   b.flush();
-}
-
-// Whether a file stays bright under the current choice, as its block does.
-function lit(rec: FileRecord): boolean
-{
-  if (!matchesTagFilter(rec.path)) return false;
-  if (S.trace) return S.trace.set.has(rec.path);
-  if (S.focusSet) return S.focusSet.has(rec.node);
-  return true;
 }
 
 export { syncPads };

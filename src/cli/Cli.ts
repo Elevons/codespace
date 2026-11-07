@@ -2,8 +2,8 @@
  * The ingest commands an agent runs from a shell, with no server and no MCP: they read the
  * repository's files, write `.codespace/architecture.json`, and the map picks the change up.
  *
- *   node src/cli/Cli.ts next [--size N]      the next files or folders without a summary
- *   node src/cli/Cli.ts apply --file <json>  write summaries, tags, and layers back; - reads stdin
+ *   node src/cli/Cli.ts next [--size N]      the next files or folders without a complete entry
+ *   node src/cli/Cli.ts apply --file <json>  write systems, layers, tags, and summaries back; - reads stdin
  *   node src/cli/Cli.ts status               how much is left to describe
  *   node src/cli/Cli.ts repo                 which repository it reads, and where
  *
@@ -14,7 +14,7 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { Architecture, type IArchitecturePatch } from '../repo/Architecture.ts'
 import { Graph } from '../repo/Graph.ts'
-import { NextBatchAsync, StatusAsync } from '../repo/Ingest.ts'
+import { DefaultBatch, NextBatchAsync, StatusAsync } from '../repo/Ingest.ts'
 import { Repo } from '../repo/Repo.ts'
 
 /** The usage, printed by --help and by a command that is missing. */
@@ -23,27 +23,12 @@ const Usage = `Usage: node src/cli/Cli.ts <command> [--repo <folder>]
   repo                       which repository it reads, and where
   status                     how many files and folders still need a summary
   next [--size N]            the next files or folders to describe, with their source
-  apply --file <json>        write {"files": {...}, "folders": {...}} back; - reads stdin
+  apply --file <json>        write {"systems": {...}, "layers": [...], "files": {...}, "folders": {...}} back; - reads stdin
 
 Options:
   --repo <folder>            the repository (default CODESPACE_REPO, else the current folder)
   --size <n>                 how many files or folders next hands back, at most 40
   --file <path>              the JSON change for apply`
-
-/**
- * What a person pastes into their agent, naming these same commands.
- * @param cli the CLI script's absolute path
- * @param root the repository's absolute path
- */
-export function PromptFor(cli: string, root: string): string
-{
-    return `Describe this repository for the Codespace map. Its CLI needs no server or MCP; run it from a shell:
-  node --experimental-transform-types ${cli} status --repo ${root}
-  node --experimental-transform-types ${cli} next --repo ${root}
-Write each batch to a JSON file and save it with:
-  node --experimental-transform-types ${cli} apply --file batch.json --repo ${root}
-where the file holds {"files": {"src/a.ts": {"summary": "...", "tags": ["core"], "layer": "base"}}, "folders": {"src": {"summary": "..."}}}. By default, ignore the extras — tests, docs, scripts, and vendored or library folders such as node_modules and vendor — and leave them out of your batches; the map hides them. Every file entry needs all three: one sentence, tags from entry/orchestrate/core/data/io/ui/config/test, and a layer. If the architecture file declares no layers yet, declare two to five in the first apply, for example {"layers": ["meta", "base", "ui"]} — a layer not declared there is refused. next also returns files that have a summary but no layer or tags, so fill those in too. Repeat until status reports "remaining": 0. Generated and vendored files are settled for you. If these commands fail, stop and say so rather than editing .codespace/architecture.json by hand.`
-}
 
 /**
  * Runs one command.
@@ -85,7 +70,7 @@ export async function RunAsync(args: readonly string[]): Promise<number>
 
         if (command === 'next')
         {
-            const size = Math.max(1, Math.min(40, Number(option('--size')) || 12))
+            const size = Math.max(1, Math.min(40, Number(option('--size')) || DefaultBatch))
             const known = await repo.ListFilesAsync()
             const architecture = await Architecture.ReadAsync(repo.Root, known)
             const batch = await NextBatchAsync(repo, architecture, await Graph.BuildAsync(repo), size)
@@ -129,6 +114,6 @@ async function ReadStdinAsync(): Promise<string>
     return Buffer.concat(chunks).toString('utf8')
 }
 
-// Only run when started as a program, so importing PromptFor never runs a command.
+// Only run when started as a program, so importing this module never runs a command.
 const started = process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 if (started) process.exitCode = await RunAsync(process.argv.slice(2))

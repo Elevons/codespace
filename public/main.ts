@@ -11,6 +11,7 @@ import { routeTargets } from "./route.js";
 import { syncPads } from "./pads.js";
 import "./view.js";
 import "./repo-switch.js";
+import "./mobile.js";
 
 /* -------------------------------------------------------- interaction ---- */
 
@@ -37,7 +38,6 @@ function pickFolder(x: number, y: number): number
 // A pointer move only marks a pick as wanted; the frame loop does one pick at most per frame,
 // so a fast mouse does not cost a scene-wide hit test on every event.
 let pickWanted = false;
-let pickButtons = 0;
 
 // A tap picks the file or folder under it; dragging orbits, right-drag pans, and
 // the wheel or a pinch zooms, all handled by the camera itself.
@@ -54,7 +54,6 @@ scene.onPointerObservable.add((info) =>
   {
     if (event.buttons) { setSpin(false); pickWanted = false; return; }
     pickWanted = true;
-    pickButtons = event.buttons;
     return;
   }
   if (info.type !== BABYLON.PointerEventTypes.POINTERTAP || event.button === 2) return;
@@ -106,13 +105,22 @@ engine.runRenderLoop(() =>
   }
 
   // The hover name follows the pointer at most once per frame.
-  if (pickWanted && !pickButtons)
+  if (pickWanted)
   {
     pickWanted = false;
     const hit = pickFile(scene.pointerX, scene.pointerY);
     const path = hit ? hit.path : null;
     canvas.style.cursor = path ? "pointer" : "";
-    if (path !== S.hoveredPath) { S.hoveredPath = path; render(); }
+    if (path !== S.hoveredPath)
+    {
+      S.hoveredPath = path;
+      render();
+      // The outliner row for the hovered box lights up with it, so the two views stay linked.
+      document.querySelectorAll<HTMLElement>("#outliner-tree [data-path]").forEach((row) =>
+      {
+        row.classList.toggle("hl", row.getAttribute("data-path") === path);
+      });
+    }
   }
 
   if (S.dirty) applyHighlight();

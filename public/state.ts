@@ -1,4 +1,6 @@
-import type { Box, CamGoal, ColorBy, FileRecord, GraphNode, Trace } from "./types.js";
+import { CODE_FILE } from "./symbols.js";
+import { passesSliceValues, type SliceAxis } from "./filter.js";
+import type { Box, CamGoal, ColorBy, FileRecord, GraphNode, OutlinerState, Trace } from "./types.js";
 
 // ---- constants ----
 export const V3 = BABYLON.Vector3;
@@ -8,8 +10,8 @@ export const AREA_PER_WEIGHT = 2.0;
 // Spacing: between sibling folder tiles, and from a tile's edge to what it holds.
 export const TILE_GAP = 0.7, MARGIN = 0.55, PLATE_H = 0.06, FLOOR_STEP = 0.035;
 export const DEFAULT_ALPHA = -Math.PI / 2 - 0.62, DEFAULT_BETA = 0.95;
-export const LAYER_GAP = 3;
-export const CODE_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|py|rb|go|rs|java|kt|kts|swift|cs|c|h|cc|cpp|hpp|php|vue|svelte|scala|dart|lua|ex|exs|erl|clj|jl|r|html?|css|scss|less|json|yaml|yml|svg|xml|md|sh|sql)$/;
+const LAYER_GAP = 3;
+export { CODE_FILE };
 
 // ---- the mutable world ----
 export const S = {
@@ -23,17 +25,25 @@ export const S = {
   FILE_CHANGES: new Map<string, number>(),     // path -> changed lines since HEAD, for the changes colouring
   ARCH_NOTES: [] as string[],                  // problems found in the architecture file, to show
   FILE_LAYERS: new Map<string, string>(),      // path -> the layer the architecture file puts it in
+  FILE_SYSTEMS: new Map<string, string>(),     // path -> the system the architecture file puts it in
   LAYERS: [] as string[],                      // the layer names, bottom plane first
+  SYSTEMS: [] as string[],                     // the declared system names, in deck order
+  outliner: {
+    query: "",
+    systems: new Set<string>(),
+    layers: new Set<string>(),
+    group: "folder",
+    hiddenFiles: new Set<string>(),
+    shownFiles: new Set<string>(),
+    collapsed: new Set<string>(),
+  } as OutlinerState,
   layerPlanes: [] as BABYLON.Mesh[],           // the translucent planes, one per layer
+  shownLayers: [] as string[],                 // the layers that still hold a drawn file, bottom plane first
   layerGap: LAYER_GAP,                         // the vertical spacing between layer planes, set by the spread slider
   boxes: [] as Box[],                          // one entry per visible file, with its terrace spot
   trace: null as Trace | null,                 // what the map is asked to show: { paths, set, trace, title, note, notes }, or null
   hiddenFolders: new Set<string>(),            // folder ids the map has hidden, with their subtrees
-  collapsedFolders: new Set<string>(),         // folder ids collapsed in the Folders panel
-  extraFolders: new Set<string>(),             // folders the user added to the extras
-  plainFolders: new Set<string>(),             // folders the user took out of the extras
   fileRecords: new Map<string, FileRecord>(),  // path -> { shape, slot, node, file, path, target, targetSize }
-  plates: [] as BABYLON.Mesh[],                // the folder tiles drawn in the terraces layout
   selected: -1,
   selectedFile: -1,                            // which file inside the chosen folder is highlighted, or -1
   autoSpin: true,
@@ -47,23 +57,23 @@ export const S = {
   graphSignature: "",
   extrasShown: false,                          // whether the extras (tests, docs, library code) are shown
   colorBy: "tag" as ColorBy,                   // what the boxes are coloured by
-  tagFilter: null as string | null,            // the tag the legend is filtering to, or null for none
+  tagFilter: null as string | null,            // the tag the tag filter is set to, or null for none
   fingerprint: "",                             // the repository's change stamp from the last full read
   repoName: "Codespace",                       // the repository being shown, as the server names it
   repoRoot: "",                                // its folder on the machine running Codespace
   ingestOnly: true,                            // show only files that the architecture file already describes
-  hiddenFiles: 0,                              // how many files that leaves out of the map
+  undescribed: 0,                              // how many files that leaves out of the map
   plateMesh: null as BABYLON.Mesh | null,      // every folder tile, batched into one mesh
   plateLines: null as BABYLON.Mesh | null,     // the tile outlines, batched into one line system
 };
 
 /** Folders the Extras toggle hides by default: tests, docs, scripts, assets, and library code. */
-export const EXTRA_FOLDER = /(^|\/)(tests|node_modules|bower_components|jspm_packages|vendor|third_party|third-party|site-packages|__pycache__|\.venv|venv|Pods|Carthage)$|^docs$|^scripts$|^\.codespace$|^game\/public$/;
+const EXTRA_FOLDER = /(^|\/)(tests|node_modules|bower_components|jspm_packages|vendor|third_party|third-party|site-packages|__pycache__|\.venv|venv|Pods|Carthage)$|^docs$|^scripts$|^\.codespace$|^game\/public$/;
 
-/** Whether a folder counts as an extra: named as one, or chosen by the user. */
-export function isExtraFolder(id: string): boolean
+/** Whether a folder counts as an extra: tests, docs, scripts, assets, or library code. */
+function isExtraFolder(id: string): boolean
 {
-  return (EXTRA_FOLDER.test(id) || S.extraFolders.has(id)) && !S.plainFolders.has(id);
+  return EXTRA_FOLDER.test(id);
 }
 
 /** Every folder the Extras toggle acts on, named or user-chosen. */
@@ -84,7 +94,36 @@ export function colorFor(layer: string): string
   return layerColors.get(layer)!;
 }
 
-// The words shown for one layer in the legend.
+// Systems are slices of the repository; each keeps a steady colour, apart from the layer palette.
+const SYSTEM_PALETTE = ["#58a6ff", "#3fb950", "#c297ff", "#ffa657", "#56d4dd", "#e3b341", "#f778ba", "#ff7b72"];
+const systemColors = new Map<string, string>();
+
+/** The colour for one system, or a neutral grey for a file with none. */
+export function colorForSystem(system: string): string
+{
+  if (system === "") return "#6e7681";
+  if (!systemColors.has(system))
+  {
+    const index = S.SYSTEMS.indexOf(system);
+    systemColors.set(system, index >= 0 ? SYSTEM_PALETTE[index % SYSTEM_PALETTE.length] : "#8b949e");
+  }
+  return systemColors.get(system)!;
+}
+
+/** The folder a path lives in, or "" for the repository root. */
+export function folderOf(path: string): string
+{
+  const cut = path.lastIndexOf("/");
+  return cut < 0 ? "" : path.slice(0, cut);
+}
+
+/** The label for a system in the outliner; an unassigned file gets a readable placeholder. */
+export function systemLabel(system: string): string
+{
+  return system === "" ? "unassigned" : system;
+}
+
+// The words shown for one layer in the filter strip.
 export function labelFor(layer: string): string
 {
   return layer.replace(/[-_]+/g, " ");
@@ -96,11 +135,8 @@ const TAG_COLORS: Record<string, string> = {
   io: "#ff7b72", ui: "#39d2c0", config: "#8b949e", test: "#e3b341",
 };
 
-/** The tag vocabulary, in the order a process reads it: entry first, foundations last. */
-export const TAG_ORDER = ["entry", "orchestrate", "core", "io", "ui", "data", "config", "test"];
-
 // The colour of one tag, or a neutral grey for anything unfamiliar.
-export function colorForTag(tag: string): string
+function colorForTag(tag: string): string
 {
   return TAG_COLORS[tag] ?? "#8b949e";
 }
@@ -141,6 +177,7 @@ function changeColor(weight: number): string
 // The colour of one file: by the map's chosen colouring, which defaults to its first tag.
 export function fileColor(path: string, layer: string): string
 {
+  if (S.colorBy === "system") return colorForSystem(S.FILE_SYSTEMS.get(path) ?? "");
   if (S.colorBy === "folder") return folderColor(path);
   if (S.colorBy === "size") return sizeColor(linesOf(path));
   if (S.colorBy === "changes") return changeColor(S.FILE_CHANGES.get(path) || 0);
@@ -149,19 +186,94 @@ export function fileColor(path: string, layer: string): string
   return tags && tags.length > 0 ? colorForTag(tags[0]) : colorFor(layer);
 }
 
-// Whether a file carries the tag the legend is filtering to, or any tag when nothing is filtered.
+// Whether a file carries the tag the tag filter is set to, or any tag when nothing is filtered.
 export function matchesTagFilter(path: string): boolean
 {
   if (S.tagFilter === null) return true;
   return (S.FILE_TAGS.get(path) || []).includes(S.tagFilter);
 }
 
-// Whether a folder holds at least one file that passes the tag filter.
-export function nodeMatchesTagFilter(nodeIndex: number): boolean
+// Whether a file passes the filter strip: it must sit in a selected system and a selected layer,
+// when either strip has a selection. `skip` ignores one axis, so that axis can count its own values.
+export function passesSlice(path: string, skip: SliceAxis | null = null): boolean
 {
-  if (S.tagFilter === null) return true;
+  return passesSliceValues(S.FILE_SYSTEMS.get(path), S.FILE_LAYERS.get(path), S.outliner.systems, S.outliner.layers, skip);
+}
+
+// Whether a file passes both the tag filter and the filter strip, so the scene can draw only the rest.
+export function matchesFilters(path: string): boolean
+{
+  return matchesTagFilter(path) && passesSlice(path);
+}
+
+// Whether a file stays bright under the current choice: the files being shown (S.trace) when there
+// are some, the chosen folder and its neighbours otherwise, and always the filters when any are on.
+export function isLitRecord(rec: FileRecord): boolean
+{
+  if (!matchesFilters(rec.path)) return false;
+  if (S.trace) return S.trace.set.has(rec.path);
+  if (S.focusSet) return S.focusSet.has(rec.node);
+  return true;
+}
+
+// Glides the camera to one file, close enough to read it.
+export function frameFile(rec: FileRecord, currentRadius: number): void
+{
+  S.autoSpin = false;
+  window.dispatchEvent(new Event("codespace:spin"));
+  S.camGoal = { target: rec.target.clone(), radius: Math.min(currentRadius, 24) };
+}
+
+// Glides the camera to one folder, close enough that its files read.
+export function frameFolder(n: GraphNode, currentRadius: number): void
+{
+  if (n.cx === undefined) return;
+  const reach = Math.max(n.tileW ?? 8, n.tileD ?? 8);
+  S.autoSpin = false;
+  window.dispatchEvent(new Event("codespace:spin"));
+  S.camGoal = { target: new V3(n.cx, n.topY!, n.cz!), radius: Math.max(8, Math.min(currentRadius, reach * 0.9 + 6)) };
+}
+
+/** Whether any filter is active, from the tag filter or the filter strip. */
+export function hasFilters(): boolean
+{
+  return S.tagFilter !== null || S.outliner.systems.size > 0 || S.outliner.layers.size > 0;
+}
+
+// Whether a folder holds a file that passes both filters.
+export function nodeMatchesFilters(nodeIndex: number): boolean
+{
   const n = S.NODES[nodeIndex];
-  return n.files.some((_, i) => matchesTagFilter(filePath(nodeIndex, i)));
+  return n.files.some((_, i) => matchesFilters(filePath(nodeIndex, i)));
+}
+
+// Whether a file is hidden from the scene altogether: an eye on its file, or on a folder above it.
+export function isFileVisible(path: string): boolean
+{
+  // A file's own eye wins over its folder, so any file can be brought back.
+  if (S.outliner.shownFiles.has(path)) return true;
+  if (S.outliner.hiddenFiles.has(path)) return false;
+  // Loose top-level files (readme, package files) count as extras.
+  if (!S.extrasShown && !path.includes("/")) return false;
+  for (let dir = folderOf(path); ; dir = folderOf(dir))
+  {
+    if (S.hiddenFolders.has(dir)) return false;
+    if (dir === "") break;
+  }
+  return true;
+}
+
+// Whether a file is drawn in the scene: no eye hides it, and it passes every active filter.
+export function inScene(path: string): boolean
+{
+  return isFileVisible(path) && matchesFilters(path);
+}
+
+// A layer's place among the layers that still hold a drawn file, or -1 when it holds none. Planes
+// stack by this rank, so hiding or filtering a layer away closes the gap it leaves.
+export function layerRank(layer: string): number
+{
+  return S.shownLayers.indexOf(layer);
 }
 
 // Whether a path names a code file whose line count sets its box height.
@@ -175,6 +287,30 @@ export function render(): void { S.dirty = true; }
 
 // A change that moves the strands' endpoints or their colours: a choice, filter, trace, or layout.
 export function renderEdges(): void { S.dirty = true; S.edgesDirty = true; }
+
+// Copies text, falling back to a hidden box when the page is not secure enough for the Clipboard API.
+export async function copyText(text: string): Promise<boolean>
+{
+  try
+  {
+    if (navigator.clipboard !== undefined && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; }
+  }
+  catch { /* fall through to the old way */ }
+  try
+  {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.append(area);
+    area.select();
+    const copied = document.execCommand("copy");
+    area.remove();
+    return copied;
+  }
+  catch { return false; }
+}
 
 // The repository-relative path of one file within a folder block. Read from the node list,
 // so the layout, the edges, and the panels all name files the same way.
@@ -204,6 +340,9 @@ const softwareRenderer = (() =>
   return /swiftshader|llvmpipe|software|basic render|mesa offscreen/i.test(name);
 })();
 if (softwareRenderer) engine.setHardwareScalingLevel(1.5);
+// A phone's screen can be three device pixels to each CSS pixel; past two, the extra pixels cost
+// frame time and battery without making the map any easier to read.
+else if (window.devicePixelRatio > 2) engine.setHardwareScalingLevel(1 / 2);
 const BACKGROUND = BABYLON.Color3.FromHexString("#04070d");
 scene.clearColor = BACKGROUND.toColor4(1);
 scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;

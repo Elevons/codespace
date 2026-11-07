@@ -16,5 +16,8 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "typescript": "^5.8.0"
+  },
+  "dependencies": {
+    "babylonjs": "9.31.3"
   }
 }
