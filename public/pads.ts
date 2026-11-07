@@ -11,7 +11,7 @@ let faded: Batch | null = null;
 
 function makeBatch(name: string, alpha: number): Batch
 {
-  const mesh = BABYLON.MeshBuilder.CreateTorus(name, { diameter: 1, thickness: 0.035, tessellation: 40 }, scene);
+  const mesh = BABYLON.MeshBuilder.CreateTorus(name, { diameter: 1, thickness: 0.0175, tessellation: 40 }, scene);
   return batchOf(mesh, 0.7, alpha);
 }
 

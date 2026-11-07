@@ -1,4 +1,4 @@
-import { S, V3, scene, glowMaterial, materialFor, filePath, matchesFilters, nodeMatchesFilters, hasFilters } from "./state.js";
+import { S, V3, scene, glowMaterial, materialFor, filePath, matchesFilters, hasFilters, inScene } from "./state.js";
 import { routeFolderHues, routeRuns, runLine } from "./route.js";
 import type { FileRecord, GraphNode } from "./types.js";
 
@@ -10,7 +10,6 @@ interface Edge
   route?: BABYLON.Vector3[] | null;
   broken: boolean;
   state: string;
-  weight: number;
   bow?: number;
 }
 
@@ -62,9 +61,10 @@ function ancestry(n: GraphNode): GraphNode[]
 // Where an import's strand passes: from the imported folder up the tree to the nearest folder
 // above both, then down to the folder that uses it. Imports between the same regions share
 // this route, so they gather into bundles. The strand is straightened toward the direct line
-// by BUNDLE, and the top of the route is lifted so the bundle arches over the tiles. A folder
-// and its own subfolder have no route between them, so they keep the plain arch (null).
-function bundleRoute(used: GraphNode, user: GraphNode, lift: number): BABYLON.Vector3[] | null
+// by BUNDLE, and the top of the route is lifted so the bundle arches over the tiles. The route
+// starts and ends on the two files' tether pads, so a bundle fans out to the files it joins. A
+// folder and its own subfolder have no route between them, so they keep the plain arch (null).
+function bundleRoute(used: GraphNode, user: GraphNode, lift: number, from: BABYLON.Vector3, to: BABYLON.Vector3): BABYLON.Vector3[] | null
 {
   const up = ancestry(used), down = ancestry(user);
   const shared = new Set(down);
@@ -72,6 +72,8 @@ function bundleRoute(used: GraphNode, user: GraphNode, lift: number): BABYLON.Ve
   const route = up.slice(0, top + 1).concat(down.slice(0, down.indexOf(up[top])).reverse());
   if (route.length < 3) return null;
   const points = route.map((n) => new V3(n.cx!, n.topY! + 0.45, n.cz!));
+  points[0] = from.clone();
+  points[points.length - 1] = to.clone();
   points[top > 0 && top < route.length - 1 ? top : Math.floor(route.length / 2)].y += lift;
   const first = points[0], last = points[points.length - 1];
   return points.map((p, i) =>
@@ -117,32 +119,54 @@ function pointsUp(userPath: string, usedPath: string): boolean
   return user !== undefined && used !== undefined && S.LAYERS.indexOf(user) < S.LAYERS.indexOf(used);
 }
 
-// Every folder import on screen, as two ends and how it should look. An import that
-// points up the layers — something lower down using something built on top of it —
-// is a break: the one kind that means the layers are tangled. With layers declared, that is
-// read from the layer each file is given in the architecture file; without, a folder using
-// one nested deeper is a break. With layers declared, breaks are drawn per file by
-// collectBreaks instead, so folder strands stay plain.
+// The import wires, drawn only for what is chosen so the map stays readable. A chosen folder's
+// imports in and out are one strand per file import, from the imported file's tether pad to the pad
+// of the file that uses it; between folders the strand follows the folder tree, so a folder's imports
+// from one region travel together and fan out to their files. A chosen file's own imports arch
+// straight from block to block instead, with nothing drawn on the pads.
+// Nothing chosen, or a route shown, draws no wires; the layer breaks (collectBreaks) still show.
+// A file chosen shows only its own imports, not its folder's as well. Without declared layers, an
+// import into a folder nested deeper is drawn as a break; with them, it is a file using a higher layer.
 function collectEdges(): Edge[]
 {
   const result: Edge[] = [];
-  const byId = new Map(S.NODES.map((n) => [n.id, n]));
-  for (const [from, to, count] of S.EDGES)
+  const folderChosen = S.selected >= 0 && S.selectedFile < 0 && S.trace === null;
+  const chosen = S.selected >= 0 && S.selectedFile >= 0 && S.trace === null ? filePath(S.selected, S.selectedFile) : null;
+  if (folderChosen || chosen !== null)
   {
-    const user = byId.get(from), used = byId.get(to);
-    if (!user || !used || user.hidden || used.hidden || user.cx === undefined || used.cx === undefined) continue;
-    const broken = S.LAYERS.length === 0 && user.rank < used.rank;
-    let state = "normal";
-    if (S.trace) state = "dim";
-    else if (S.selected >= 0) state = user.index === S.selected ? "out" : used.index === S.selected ? "in" : "dim";
-    // A tag filter dims every import that touches neither a matching folder.
-    if (hasFilters() && state !== "dim" && !nodeMatchesFilters(user.index!) && !nodeMatchesFilters(used.index!)) state = "dim";
-    result.push({
-      user: new V3(user.cx, user.topY! + 0.02, user.cz!),
-      used: new V3(used.cx, used.topY! + 0.02, used.cz!),
-      route: bundleRoute(used, user, 0.5),
-      broken, state, weight: count,
-    });
+    for (const [from, to] of S.FILE_EDGES)
+    {
+      const userRec = S.fileRecords.get(from), usedRec = S.fileRecords.get(to);
+      if (!userRec || !usedRec || !inScene(from) || !inScene(to)) continue;
+      // A folder's wires are the imports crossing its edge; a file's are its own, inside its folder too.
+      let state: string;
+      if (chosen !== null)
+      {
+        if (from !== chosen && to !== chosen) continue;
+        state = from === chosen ? "out" : "in";
+      }
+      else
+      {
+        if (userRec.node === usedRec.node || (userRec.node !== S.selected && usedRec.node !== S.selected)) continue;
+        state = userRec.node === S.selected ? "out" : "in";
+      }
+      const user = S.NODES[userRec.node], used = S.NODES[usedRec.node];
+      if (!user || !used || user.hidden || used.hidden || user.cx === undefined || used.cx === undefined) continue;
+      const broken = S.LAYERS.length > 0 ? pointsUp(from, to) : user.rank < used.rank;
+      // A chosen file's wires join the blocks themselves, nothing on the folder pads.
+      if (chosen !== null)
+      {
+        result.push({ user: userRec.shape.position, used: usedRec.shape.position, broken, state });
+        continue;
+      }
+      const userPad = footOf(userRec), usedPad = footOf(usedRec);
+      if (!userPad || !usedPad) continue;
+      result.push({
+        user: userPad, used: usedPad,
+        route: userRec.node === usedRec.node ? null : bundleRoute(used, user, 0.5, usedPad, userPad),
+        broken, state,
+      });
+    }
   }
 
   // A code path being traced (S.trace): a strand from each file to the next, in order. Each
@@ -161,27 +185,11 @@ function collectEdges(): Edge[]
       if (!from || !to || from === to) continue;
       const used = topOf(from), user = topOf(to);
       const length = V3.Distance(used, user);
-      result.push({ user, used, broken: false, state: "trace", weight: 1,
+      result.push({ user, used, broken: false, state: "trace",
         bow: Math.min(5, Math.max(1.1, 0.35 * length + 0.6)) });
     }
   }
 
-  // The chosen file's own imports and importers, drawn file to file.
-  const chosen = S.selected >= 0 && S.selectedFile >= 0 ? filePath(S.selected, S.selectedFile) : null;
-  if (chosen !== null)
-  {
-    for (const [from, to] of S.FILE_EDGES)
-    {
-      if (from !== chosen && to !== chosen) continue;
-      const user = S.fileRecords.get(from), used = S.fileRecords.get(to);
-      if (!user || !used) continue;
-      const broken = S.LAYERS.length > 0 ? pointsUp(from, to) : S.NODES[user.node].rank < S.NODES[used.node].rank;
-      result.push({
-        user: user.shape.position, used: used.shape.position,
-        broken, state: from === chosen ? "out" : "in", weight: 1,
-      });
-    }
-  }
   return result;
 }
 
@@ -197,17 +205,19 @@ function footOf(rec: FileRecord): BABYLON.Vector3 | null
 }
 
 // Every file import that points up the declared layers, foot to foot on the folder plates. The
-// chosen file's own breaks are left out, since collectEdges already draws them as solid strands.
+// chosen file's or folder's own breaks are left out, since collectEdges draws them as its wires.
 function collectBreaks(): Break[]
 {
   const result: Break[] = [];
   if (S.LAYERS.length === 0) return result;
-  const chosen = S.selected >= 0 && S.selectedFile >= 0 ? filePath(S.selected, S.selectedFile) : null;
+  const chosen = S.selected >= 0 && S.selectedFile >= 0 && S.trace === null ? filePath(S.selected, S.selectedFile) : null;
+  const folderChosen = S.selected >= 0 && S.selectedFile < 0 && S.trace === null;
   for (const [from, to] of S.FILE_EDGES)
   {
     if (from === chosen || to === chosen || !pointsUp(from, to)) continue;
     const user = S.fileRecords.get(from), used = S.fileRecords.get(to);
     if (!user || !used) continue;
+    if (folderChosen && user.node !== used.node && (user.node === S.selected || used.node === S.selected)) continue;
     const a = footOf(user), b = footOf(used);
     if (!a || !b) continue;
     const lit = (matchesFilters(from) || matchesFilters(to)) && S.trace === null &&
@@ -261,36 +271,17 @@ function rebuildEdges(): void
   edgeShapes = [];
   flowEdges = [];
 
-  const edges = collectEdges();
+  // Every wire is for something chosen (a folder, a file, or a route), so each is a solid strand
+  // with a travelling dot: green along a route, red for a layer break, blue going out, amber coming in.
   const lines: BABYLON.Vector3[][] = [], colors: BABYLON.Color4[][] = [];
-  const SEGMENTS = 16;
-  for (const edge of edges)
+  for (const edge of collectEdges())
   {
     const length = V3.Distance(edge.user, edge.used);
     const bow = edge.bow !== undefined ? edge.bow : Math.min(6, 0.25 * length + 0.3);
     const state = edge.state;
-
-    const solid = state === "out" || state === "in" || state === "trace" || (edge.broken && state !== "dim");
-    if (solid)
-    {
-      const hex = state === "trace" ? "#3fb950" : edge.broken ? "#f85149" : state === "out" ? "#58a6ff" : "#d29922";
-      addStrand(edge, bow, hex, state === "trace" ? 0.04 : edge.broken && state === "normal" ? 0.035 : 0.05);
-      flowEdges.push({ edge, bow, hex });
-      continue;
-    }
-
-    // A hairline fading from the imported end to the end that uses it, so direction still reads.
-    const busy = Math.min(0.55, 0.22 + 0.06 * Math.log2(1 + edge.weight));
-    const base = state === "dim" ? 0.05 : busy;
-    const points: BABYLON.Vector3[] = [], shades: BABYLON.Color4[] = [];
-    for (let i = 0; i <= SEGMENTS; i++)
-    {
-      const t = i / SEGMENTS;
-      points.push(edgePoint(edge, bow, t));
-      shades.push(new BABYLON.Color4(0.55, 0.64, 0.75, base * (0.35 + 0.65 * t)));
-    }
-    lines.push(points);
-    colors.push(shades);
+    const hex = state === "trace" ? "#3fb950" : edge.broken ? "#f85149" : state === "out" ? "#58a6ff" : "#d29922";
+    addStrand(edge, bow, hex, state === "trace" ? 0.04 : 0.05);
+    flowEdges.push({ edge, bow, hex });
   }
   // Layer breaks: a thin red line from tether foot to tether foot, brightening toward the file
   // that uses the import, so direction reads without an arrowhead per line.
@@ -319,7 +310,7 @@ function rebuildEdges(): void
   {
     if (routed)
     {
-      const tube = BABYLON.MeshBuilder.CreateTube("tether", { path: points, radius: 0.036, tessellation: 5 }, scene);
+      const tube = BABYLON.MeshBuilder.CreateTube("tether", { path: points, radius: 0.018, tessellation: 5 }, scene);
       tube.material = materialFor(hue, 0.85, 0.5);
       tube.isPickable = false;
       tetherShapes.push(tube);
@@ -390,8 +381,10 @@ function rebuildEdges(): void
 const STRIP_WIDTH = 1.25;
 
 // One solid strand from the imported end to the user, with an arrowhead where it is used.
-function addStrand(edge: Edge, bow: number, hex: string, radius: number): void
+// The strand and its arrowhead are both drawn at half the given radius, a hairline that leaves the map readable.
+function addStrand(edge: Edge, bow: number, hex: string, given: number): void
 {
+  const radius = given / 2;
   const path: BABYLON.Vector3[] = [];
   for (let i = 0; i <= 20; i++) path.push(edgePoint(edge, bow, i / 20));
   const tube = BABYLON.MeshBuilder.CreateTube("strand", { path, radius, tessellation: 6 }, scene);

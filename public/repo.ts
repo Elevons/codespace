@@ -34,6 +34,17 @@ function labelOf(n: GraphNode): string
   return n.name && n.name.includes("/") ? n.name : shortLabel(n.id);
 }
 
+// A folder's name on its plate: only what it adds below the folder drawn around it, since the plate
+// sits inside that folder's plate already; a top-level folder shows its whole name. Two segments of
+// a deep path, as labelOf gives, would read as a different, top-level folder.
+function plateLabel(n: GraphNode): string
+{
+  if (n.id === "") return "(root)";
+  if (n.name) return n.name;
+  const parent = n.parent;
+  return parent && parent.id !== "" && n.id.startsWith(parent.id + "/") ? n.id.slice(parent.id.length + 1) : n.id;
+}
+
 // A short label for the map: the last two path segments, so deep folders stay legible.
 function shortLabel(id: string): string
 {
@@ -235,4 +246,4 @@ async function loadRepo(): Promise<void>
   }
 }
 
-export { displayName, labelOf, loadGraph, loadRepo, readSource };
+export { displayName, labelOf, plateLabel, loadGraph, loadRepo, readSource };

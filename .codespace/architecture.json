@@ -22,13 +22,13 @@
       "system": "meta",
       "layer": "docs",
       "tags": ["config"],
-      "summary": "What an agent working here should know first: the commands, the architecture-file rule, and the ingest loop."
+      "summary": "What an agent working here should know first: the commands, the architecture-file rule, the ingest loop, the map's API, and the built-in chat."
     },
     "README.md": {
       "system": "meta",
       "layer": "docs",
       "tags": ["config"],
-      "summary": "What Codespace is, how to run it, and the CLI an agent uses to describe a repository."
+      "summary": "What Codespace is, how to run it, its built-in chat, and the CLI an agent uses to describe a repository."
     },
     "docs/FUTURE.md": {
       "system": "meta",
@@ -77,6 +77,12 @@
       "layer": "render",
       "tags": ["ui"],
       "summary": "Draws every file box as a batched crowd, lends standout files a mesh of their own, and finds the box under the pointer."
+    },
+    "public/chat.ts": {
+      "system": "browser",
+      "layer": "panels",
+      "tags": ["ui", "io"],
+      "summary": "The Chat panel: the prompt box, the conversation with its folded steps and map links, the live status line, and the working and waiting signals."
     },
     "public/city.ts": {
       "system": "browser",
@@ -136,7 +142,7 @@
       "system": "browser",
       "layer": "shell",
       "tags": ["ui"],
-      "summary": "Lays the page out for a phone: the map fills the screen and the panels move into one sheet opened from a tab bar along the bottom."
+      "summary": "Lays the page out for a phone: the map fills the screen and the panels, including the chat, move into one sheet opened from a tab bar along the bottom."
     },
     "public/pads.ts": {
       "system": "browser",
@@ -154,7 +160,7 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui"],
-      "summary": "The Repo picker: open another folder, list recent ones, show how much is left to describe, and delete the current repository's architecture folder."
+      "summary": "The Repo picker: open another folder, list recent ones, show how much is left to describe and hand that to the chat, and delete the current repository's architecture folder."
     },
     "public/repo.ts": {
       "system": "browser",
@@ -196,7 +202,25 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "io"],
-      "summary": "Listens for what tools ask the map to show, lights those files up, and lists them with their explanations."
+      "summary": "Listens for what tools ask the map to show, lights those files up, lists them with their explanations, and passes the chat's progress on."
+    },
+    "src/agent/Chat.ts": {
+      "system": "server",
+      "layer": "api",
+      "tags": ["core", "io"],
+      "summary": "The chat built into the map: runs a pi agent in the repository being mapped against the configured model, keeps its saved chats, and streams its reply to the page."
+    },
+    "src/agent/Instructions.ts": {
+      "system": "server",
+      "layer": "api",
+      "tags": ["data"],
+      "summary": "What the chat's agent is told about Codespace: how to draw routes on the map and how to describe the repository."
+    },
+    "src/agent/ModelSettings.ts": {
+      "system": "server",
+      "layer": "config",
+      "tags": ["config", "io"],
+      "summary": "Reads which OpenAI-compatible endpoint, model, and key the chat uses, including a key read by name from another program's env file."
     },
     "src/cli/Cli.ts": {
       "system": "server",
@@ -238,25 +262,25 @@
       "system": "server",
       "layer": "api",
       "tags": ["orchestrate", "io"],
-      "summary": "The endpoints the page uses, including the agent prompt: the architecture read, changed, or deleted, the import graph, ingest status, and what the map shows."
+      "summary": "The endpoints the page uses: the architecture read, changed, or deleted, the import graph, ingest status, what the map shows, and the chat."
     },
     "src/server/Guard.ts": {
       "system": "server",
       "layer": "api",
       "tags": ["io"],
-      "summary": "Decides who may change anything: only requests from this machine, as a local host name, as JSON, from this site, and lets the folder picker through this machine's tailnet name too."
+      "summary": "Decides who may change anything or use the chat: requests from this machine, as a local host name, from this site, and as JSON for changes; the folder picker also answers this machine's tailnet name."
     },
     "src/server/Server.ts": {
       "system": "server",
       "layer": "entry",
       "tags": ["entry", "io"],
-      "summary": "Serves the page, the file list, source, changed lines, the fingerprint, repository switching, and the folder picker, and starts with the server."
+      "summary": "Serves the page, the file list, source, changed lines, the fingerprint, repository switching, and the folder picker, and starts the server with the chat and its settings."
     },
     "src/server/View.ts": {
       "system": "server",
       "layer": "api",
       "tags": ["core"],
-      "summary": "Holds what the map is asked to show and streams changes to every page that is watching."
+      "summary": "Holds what the map is asked to show and streams changes to every page that is watching, and the chat's progress to pages on this machine."
     },
     "src/server/Workspace.ts": {
       "system": "server",
@@ -275,6 +299,12 @@
       "layer": "tests",
       "tags": ["test"],
       "summary": "Checks the architecture file reader: the layers, tags, and summaries it keeps, the problems it reports, and that a link out of the repository is refused."
+    },
+    "tests/Chat.test.ts": {
+      "system": "meta",
+      "layer": "tests",
+      "tags": ["test"],
+      "summary": "Checks the chat's model settings and key lookup, how saved messages become chat lines, and what its agent is told."
     },
     "tests/Filter.test.ts": {
       "system": "meta",
@@ -360,7 +390,10 @@
       "summary": "The browser side of the map: the 3D city, its outliner and panels, and its controls."
     },
     "src": {
-      "summary": "The server and CLI source: reading repositories, serving the map, and the commands an agent runs to describe one."
+      "summary": "The server and CLI source: reading repositories, serving the map, the built-in chat, and the commands an agent runs to describe one."
+    },
+    "src/agent": {
+      "summary": "The chat built into the map: its agent, what that agent is told, and which model it talks to."
     },
     "src/cli": {
       "summary": "The commands an agent runs to describe a repository, with no server or MCP."

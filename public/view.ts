@@ -41,7 +41,7 @@ function renderShowing(): void
   const known = index().files;
   const rows = shown.paths.map((path, step) =>
   {
-    const note = shown.notes.get(path);
+    const note = shown.notes[step];
     const summary = S.FILE_SUMMARIES.get(path);
     return "<li>" + (shown.trace ? '<span class="step">' + (step + 1) + "</span>" : '<span class="dot"></span>') +
       "<div>" + (known.has(path) ? '<a href="#" class="path" data-path="' + escapeHtml(path) + '">' + escapeHtml(path) + "</a>" : "<code>" + escapeHtml(path) + "</code>") +
@@ -76,7 +76,7 @@ function show(shown: ShownPayload): void
 {
   S.trace = {
     paths: shown.files.map((file) => file.path), set: new Set(shown.files.map((file) => file.path)),
-    notes: new Map(shown.files.filter((file) => file.note).map((file) => [file.path, file.note!])),
+    notes: shown.files.map((file) => file.note ?? ""),
     trace: shown.trace, title: shown.title, note: shown.note,
   };
   renderShowing();
@@ -143,7 +143,11 @@ events.onmessage = (message) =>
   else if (event.type === "focus") focus(event.path);
   else if (event.type === "architecture") { S.graphSignature = ""; refreshGraph().then(renderShowing); window.dispatchEvent(new Event("codespace:architecture")); }
   else if (event.type === "repo") location.reload();
+  else if (event.type === "chat") window.dispatchEvent(new CustomEvent("codespace:chat", { detail: event.chat }));
 };
+
+// The chat leads to a file the same way a tool does.
+export { focus as focusPath };
 
 // A redraw can change which files exist, so refresh the list's links too.
 window.addEventListener("codespace:built", renderShowing);

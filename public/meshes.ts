@@ -203,7 +203,7 @@ export function pulseFile(path: string): void
   if (!rec) return;
   const folder = S.NODES[rec.node];
   const y = (folder && folder.topY !== undefined ? folder.topY : rec.terrace.y) + 0.02;
-  const mesh = BABYLON.MeshBuilder.CreateTorus("pulse:" + path, { diameter: 1, thickness: 0.06, tessellation: 32 }, scene);
+  const mesh = BABYLON.MeshBuilder.CreateTorus("pulse:" + path, { diameter: 1, thickness: 0.03, tessellation: 32 }, scene);
   mesh.position.set(rec.terrace.x, y, rec.terrace.z);
   mesh.isPickable = false;
   const material = new BABYLON.StandardMaterial("pulse", scene);

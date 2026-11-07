@@ -1,9 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { Chat } from '../agent/Chat.ts'
 import { Architecture, type IArchitecturePatch } from '../repo/Architecture.ts'
 import { Graph } from '../repo/Graph.ts'
 import { StatusAsync } from '../repo/Ingest.ts'
 import { Snapshot } from '../repo/Snapshot.ts'
-import { ReadJsonAsync, RefuseWrite, SendJson } from './Guard.ts'
+import { ReadJsonAsync, RefuseOutside, RefuseWrite, SendJson } from './Guard.ts'
 import type { IShownFile, View } from './View.ts'
 import type { Workspace } from './Workspace.ts'
 
@@ -100,14 +101,19 @@ export class Api
     /** Where the ingest CLI lives, so the page can copy commands that work. */
     private readonly cli: string
 
+    /** The chat built into the map, or null when this server has none. */
+    private readonly chat: Chat | null
+
     /**
      * Prepares the endpoints.
      * @param workspace the repository being mapped
      * @param allowWrites whether changes are accepted from any machine, as started with --allow-writes
      * @param cli the absolute path of the ingest CLI
+     * @param chat the chat built into the map, if any
      */
-    public constructor(workspace: Workspace, allowWrites = false, cli = 'src/cli/Cli.ts')
+    public constructor(workspace: Workspace, allowWrites = false, cli = 'src/cli/Cli.ts', chat: Chat | null = null)
     {
+        this.chat = chat
         this.workspace = workspace
         this.allowWrites = allowWrites
         this.cli = cli
@@ -145,7 +151,17 @@ export class Api
             })
         }
         else if (path === '/api/view' && reading) SendJson(response, 200, { shown: this.view.Shown })
-        else if (path === '/api/view/events' && reading) this.view.Subscribe(response)
+        else if (path === '/api/view/events' && reading) this.view.Subscribe(response, RefuseOutside(request, this.allowWrites) === null)
+        else if (path === '/api/chat' && this.chat !== null)
+        {
+            // The chat runs commands in the repository, so even reading it is kept to this machine.
+            const refusal = reading ? RefuseOutside(request, this.allowWrites) : RefuseWrite(request, this.allowWrites)
+            if (refusal !== null) { SendJson(response, 403, { error: refusal }); return true }
+            if (reading) { SendJson(response, 200, await this.chat.StateAsync()); return true }
+            if (request.method !== 'POST') { SendJson(response, 405, { error: 'The chat takes GET or POST.' }); return true }
+            try { await this.ChangeChatAsync(this.chat, await ReadJsonAsync(request)); SendJson(response, 200, { ok: true }) }
+            catch (error) { SendJson(response, 400, { error: (error as Error).message }) }
+        }
         else if ((path === '/api/architecture' || path === '/api/view') && request.method === 'POST')
         {
             const refusal = RefuseWrite(request, this.allowWrites)
@@ -188,6 +204,22 @@ export class Api
         const updated = await Architecture.UpdateAsync(repo.Root, await repo.ListFilesAsync(), body as IArchitecturePatch)
         this.view.ArchitectureChanged()
         SendJson(response, 200, updated)
+    }
+
+    /**
+     * Sends a message to the chat, stops its reply, starts a new chat (plain, or one that describes the
+     * repository), or reopens a past one.
+     * @param chat the chat
+     * @param body the request, as sent
+     */
+    private async ChangeChatAsync(chat: Chat, body: Record<string, unknown>): Promise<void>
+    {
+        if (body.action === 'send') await chat.SendAsync(typeof body.text === 'string' ? body.text : '')
+        else if (body.action === 'stop') await chat.StopAsync()
+        else if (body.action === 'new') await chat.NewAsync()
+        else if (body.action === 'describe') await chat.DescribeAsync()
+        else if (body.action === 'open' && typeof body.id === 'string') await chat.ResumeAsync(body.id)
+        else throw new Error('action must be "send", "stop", "new", "describe", or "open".')
     }
 
     /**

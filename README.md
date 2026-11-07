@@ -26,6 +26,27 @@ proxy such as Tailscale Serve. Without it, only this machine can change anything
 A big repository draws only the files that already have an architecture entry until it is
 fully described — the *Described only* toggle in the Outliner's grouping menu draws them all.
 
+## The chat
+
+The **Chat** button (the Chat tab on a phone) opens an agent built into the map. Ask it how
+something works and it finds the code, draws it on the map as a numbered route, and answers in a
+few lines; file names in its reply lead to the file. It is a [pi](https://github.com/earendil-works/pi)
+agent working in the repository being mapped, with pi's basic tools (read, bash, edit, write,
+grep, find, ls), and it uses the same map API and CLI an outside agent would. Pi runs the agent
+loop and keeps each repository's chats, which the chat's menu reopens. While the panel is
+closed, its button only says when the agent is working or a reply is waiting.
+
+The Repo panel's **Ingest Codebase** starts a chat that describes the whole repository for the
+map, so nothing has to be copied into another agent.
+
+It talks to any OpenAI-compatible endpoint, set in a `.env` beside `package.json` (see
+`.env.example`): `CODESPACE_MODEL_BASE_URL`, `CODESPACE_MODEL`, and the key, either directly as
+`CODESPACE_MODEL_API_KEY` or read by name from another program's env file with
+`CODESPACE_MODEL_KEY_FILE` and `CODESPACE_MODEL_KEY_NAME`. With nothing set it uses OpenRouter
+and asks for a key. Its settings and chats live in `~/.codespace/agent`, apart from your own pi
+setup. Like any change, the chat is only open to this machine unless the server was started
+with `--allow-writes`.
+
 ## Using the map
 
 - **Find anything.** Press `/` or Ctrl/Cmd+K and type part of a file path, folder, or
@@ -77,13 +98,16 @@ without refreshing.
 - `src/server/Server.ts` — the page (compressed, with validators), the installed Babylon at a versioned address, `/api/bootstrap`, the source API, the changed-line counts, and switching repositories.
 - `src/server/Workspace.ts` — the repository being read, and the recent ones the page can switch back to.
 - `src/repo/Architecture.ts` — reads, checks, and safely changes a repository's `.codespace/architecture.json`.
-- `src/server/Api.ts` — the endpoints the page uses: the architecture, the import graph, the ingest status, and what the map shows.
+- `src/server/Api.ts` — the endpoints the page uses: the architecture, the import graph, the ingest status, what the map shows, and the chat.
 - `src/server/View.ts` — what the map is asked to show, streamed to every open page.
 - `src/repo/Snapshot.ts` — one cached read of a repository's files, imports, line counts, and declared names, rebuilt only when a file changes.
 - `src/repo/Graph.ts` — the imports between code files, relative for TypeScript and
   JavaScript and by namespace for C#, for the tools.
 - `src/repo/Ingest.ts` — what an agent reads next to describe a codebase: files whose entry is incomplete, then folders.
-- `src/server/Guard.ts` — who may change anything: this machine only.
+- `src/server/Guard.ts` — who may change anything or use the chat: this machine only.
+- `src/agent/Chat.ts` — the chat built into the map: a pi agent in the repository, its saved chats, and its reply streamed to the page.
+- `src/agent/Instructions.ts` — what the chat's agent is told: drawing on the map and describing the repository.
+- `src/agent/ModelSettings.ts` — which OpenAI-compatible endpoint, model, and key the chat uses.
 - `src/cli/Cli.ts` — the commands an agent runs to describe a repository, with no server or MCP.
 - `public/index.html` — the map page: the scene and its controls.
 - `public/main.ts` — the entry: pointer interaction, the render loop, and boot.
@@ -95,7 +119,8 @@ without refreshing.
 - `public/meshes.ts` — builds the boxes and grid, and moves the camera.
 - `public/highlight.ts`, `public/edges.ts`, `public/labels.ts`, `public/route.ts`, `public/pads.ts` — the selection glow, the import strands, the names, the route lane, and the layer rings.
 - `public/view.ts` — the Showing panel, and what tools ask the map to light up or focus.
-- `public/repo-switch.ts` — the Repo picker: open another folder, list recent ones, and show how much is left to describe.
+- `public/repo-switch.ts` — the Repo picker: open another folder, list recent ones, show how much is left to describe, and hand that to the chat.
+- `public/chat.ts` — the Chat panel: the prompt box, the conversation, and what the agent is doing now.
 - `public/panels.ts` — the info panel, the Outliner tree, its search and filters, the breadcrumbs, and the highlighted code view.
 - `public/controls.ts` — the buttons, Outliner interactions, keyboard shortcuts, colour menu, live poll, and refresh.
 - `public/mobile.ts` — the phone layout: moves the panels into one sheet behind a tab bar.
@@ -103,7 +128,7 @@ without refreshing.
 - `public/types.ts` — the shapes the page shares between its modules: the folder tree, each file's record, and what a tool asks to show.
 - `public/babylon.d.ts` — the slice of the Babylon.js global the page uses, so the browser code type-checks.
 - `tsconfig.web.json` — the compiler settings for the browser code; `npm run build` compiles `public/*.ts` to `.js` beside them.
-- `AGENTS.md` — what a coding agent should know first: the commands, the architecture-file rule, and the ingest loop.
+- `AGENTS.md` — what a coding agent should know first: the commands, the architecture-file rule, the ingest loop, and the map's API.
 - `docs/review-rubric.md` — the code-health review rubric.
 - `docs/FUTURE.md` — ideas deliberately deferred, written so they can be picked up later.
 - `docs/architecture.md` — the architecture file: its fields, the tag vocabulary, and the rules for generated code.
@@ -111,9 +136,10 @@ without refreshing.
 
 ## Ingesting a codebase from an agent
 
-Any coding agent with a shell can describe a repository. There is no MCP server and no client
-to install: `src/cli/Cli.ts` reads the repository, writes its architecture file, and the map
-picks the change up while it runs.
+The simplest way is the Repo panel's **Ingest Codebase**, which has the built-in chat do it (see
+*The chat* above). Any other coding agent with a shell can do the same. There is no MCP server and
+no client to install: `src/cli/Cli.ts` reads the repository, writes its architecture file, and the
+map picks the change up while it runs.
 
 ```sh
 # which repository, and how much is left to describe
@@ -137,9 +163,8 @@ lack a summary, a system, a layer, or tags, so re-running never overwrites what 
 The file does not exist until the first batch is written; opening a repository creates nothing.
 
 `AGENTS.md` here spells the loop out for an agent working in this repository. For another one,
-the Repo picker's **Copy agent prompt** hands over the same commands with that repository's path
-filled in. Codespace has no model of its own: writing summaries and tags is judgment, which the
-agent does.
+the Repo picker's **Copy prompt** hands over the same commands with that repository's path
+filled in. Writing summaries and tags is judgment, which the agent does, built in or not.
 
 Changes show up in every open page at once. Reading is open, like the rest of the map, but
 anything that changes something is accepted only from this machine and only when Codespace
@@ -151,9 +176,12 @@ with `--allow-writes`.
 The page reads the repository live from one `/api/bootstrap` request (started before Babylon finishes downloading, and answered with just a stamp when nothing has changed), and `/api/source` for a file's text, following
 the repository's own `.gitignore` (and a built-in list when it has none) to skip
 what git ignores. Each folder becomes a tile holding its files, and every file is a box of the
-same footprint, as tall as its line count. Imports between folders are drawn as strands
-that follow the folder tree, so imports between the same regions gather into bundles;
-selecting a file draws its own imports directly. A layer break — a file importing one on a
+same footprint, as tall as its line count. Imports are drawn only for what is chosen, so the
+map stays readable. Choosing a folder draws the imports crossing its edge, each as a strand from
+the imported file's tether pad to the importing file's, blue going out and amber coming in;
+between folders a strand follows the folder tree, so imports from one region travel together and
+fan out to their files at the ends. Choosing a file draws just its own imports, arching block to
+block. A folder's plate is labelled with what it adds below the folder around it. A layer break — a file importing one on a
 higher layer — is a thin red line on the folder plates, from the importing file's tether foot
 to the imported file's, brightest at the end that uses it. A reload — or the 15-second poll —
 redraws it as the code changes.

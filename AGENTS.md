@@ -2,7 +2,8 @@
 
 Codespace is a small 3D map of a codebase: a Node server reads one repository and
 serves a Babylon page, plus a small CLI that agents use to describe a repository and
-write its architecture file. There is no MCP server to connect.
+write its architecture file. The page has a chat built in: a pi agent that uses the same
+CLI and map API. There is no MCP server to connect.
 
 ## Commands
 
@@ -70,6 +71,69 @@ The page's Repo panel shows the current repository and its absolute path, and co
 commands with the path filled in. It can switch repositories at runtime. The server accepts
 writes from this machine and localhost, or from anywhere with `--allow-writes`.
 
+## Showing things on the map
+
+When the user asks you to show, trace, or walk through code on the map ("put it on the board",
+"trace how X happens"), drive the running server's HTTP API at `http://localhost:5190`. Every open
+page updates at once. Paths are repository-relative, as `GET /api/files` lists them. Check which
+repository the server is reading first (`GET /api/repo`); switch it if it is the wrong one.
+
+```sh
+curl -s -X POST localhost:5190/api/view -H 'Content-Type: application/json' -d @board.json
+```
+
+`POST /api/view` takes one of three actions:
+
+- **`show`** — light up files, with a note on each, and optionally draw them as a route:
+  ```json
+  {"action": "show", "trace": true, "title": "How a request is served",
+   "note": "One or two sentences on the whole process.",
+   "files": [{"path": "src/server/Server.ts", "note": "What happens here, at this step."},
+             {"path": "src/server/Api.ts", "note": "..."}]}
+  ```
+  With `"trace": true` the files are numbered steps in the order given: the map lifts them into a
+  row along the front of the city, joins each step to the next with a strand, and lists the steps
+  in a numbered rail beside them and in the Showing panel. A file may appear in more than one
+  step, each with its own note, when a process comes back to it. Without `trace` the files are
+  simply highlighted as a set. A plain path string works in place of `{"path", "note"}`. Each
+  step is one file, so name the function or method in its note (`Table.UpdateNeeds drains ...`).
+  Limits: 60 files, 600 characters per file note, 120 for the title, 1500 for the overall note.
+  The reply is `{"ok": true, "shown": n, "unknown": [...]}`; any path in `unknown` was not drawn,
+  so fix it and send again.
+- **`focus`** — `{"action": "focus", "path": "src/repo"}` selects a file or folder and moves the
+  camera to it; an empty path is the repository root.
+- **`clear`** — `{"action": "clear"}` takes down whatever is shown.
+
+A new `show` replaces the last one. `GET /api/view` returns what is shown now, or `null`.
+
+Reading, for finding the right files and steps before you show them:
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /api/repo` | the repository being read (`name`, `root`) and recent ones |
+| `POST /api/repo` | `{"path": "/abs/folder"}` switches the map to another repository |
+| `GET /api/files` | every repository-relative file path the map knows |
+| `GET /api/architecture` | the architecture file: layers, systems, and each file's summary, tags, and layer |
+| `GET /api/graph?folder=src` | the import edges, optionally only those under a folder |
+| `GET /api/source?path=src/a.ts` | one file's text |
+| `GET /api/changes` | each file changed since `HEAD`, with how many lines changed |
+
+Writes (`POST /api/view`, `POST /api/repo`, `POST`/`DELETE /api/architecture`) are accepted from
+this machine through `localhost` only, unless the server was started with `--allow-writes`; a
+refused write answers 403 with the reason.
+
+## The built-in chat
+
+`src/agent/` runs a [pi](https://github.com/earendil-works/pi) agent (`@earendil-works/pi-coding-agent`)
+in the repository being mapped, with pi's basic tools, against any OpenAI-compatible endpoint. Its model
+comes from `.env` beside `package.json` (git-ignored; see `.env.example`): `CODESPACE_MODEL_BASE_URL`,
+`CODESPACE_MODEL`, and a key, given as `CODESPACE_MODEL_API_KEY` or read by name from another env file with
+`CODESPACE_MODEL_KEY_FILE` and `CODESPACE_MODEL_KEY_NAME`. What the agent is told lives in
+`src/agent/Instructions.ts`; **when the map API or the CLI changes, change it there too**, as well as in the
+sections above. `/api/chat` takes `GET` for the chat and `POST` with `{"action": "send", "text"}`, `"stop"`,
+`"new"`, `"describe"` (Ingest Codebase), or `{"action": "open", "id"}`; its progress reaches pages on this
+machine as `chat` events on the view stream. Chats and pi's settings live in `~/.codespace/agent`.
+
 ## Layout worth knowing
 
 - `src/cli/` — the commands an agent runs to describe a repository.
@@ -77,8 +141,9 @@ writes from this machine and localhost, or from anywhere with `--allow-writes`.
   what to ingest next. No HTTP in here.
 - `src/server/` — the HTTP server, the endpoints, the view stream, the write guard,
   and the switchable workspace.
+- `src/agent/` — the built-in chat: its pi agent, what that agent is told, and which model it uses.
 - `public/` — the browser side: the 3D city, the Outliner with its system/layer filters,
-  the panels and controls, and the phone sheet. `public/filter.ts` and `public/symbols.ts`
+  the panels and controls, the chat, and the phone sheet. `public/filter.ts` and `public/symbols.ts`
   hold the pure filter and symbol rules.
 - `tests/` — one test file per piece of the server side, plus the dependency-free browser
   helpers; run `npm test`.

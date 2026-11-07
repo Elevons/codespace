@@ -230,6 +230,13 @@ function stepFile(direction: number): void
 const helpPanel = document.getElementById("help") as HTMLElement;
 function toggleHelp(): void { helpPanel.hidden = !helpPanel.hidden; }
 document.getElementById("help-btn")!.addEventListener("click", toggleHelp);
+// The card closes from its own button, or a tap or click anywhere outside it, since a phone has no Escape key.
+document.getElementById("help-close")!.addEventListener("click", () => { helpPanel.hidden = true; });
+document.addEventListener("pointerdown", (event) =>
+{
+  const target = event.target as Node;
+  if (!helpPanel.hidden && !helpPanel.contains(target) && !document.getElementById("help-btn")!.contains(target)) helpPanel.hidden = true;
+});
 
 document.addEventListener("keydown", (event) =>
 {

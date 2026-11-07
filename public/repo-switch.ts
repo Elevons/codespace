@@ -1,6 +1,6 @@
 // The repository switcher: point the map at another folder, keep the ones opened before, and say
-// how much of the codebase is still undescribed. Describing it is the agent's job, with the CLI, so
-// this panel offers the command prompt rather than calling a model itself.
+// how much of the codebase is still undescribed. Describing it is an agent's job, with the CLI: this
+// panel copies the command prompt for an agent outside, and the Chat panel (chat.ts) runs one inside.
 
 import { copyText } from "./state.js";
 
@@ -47,6 +47,7 @@ const errorNote = byId<HTMLParagraphElement>("repo-error");
 const ingest = byId<HTMLDivElement>("repo-ingest");
 const ingestNote = byId<HTMLParagraphElement>("repo-ingest-note");
 const copyButton = byId<HTMLButtonElement>("repo-ingest-copy");
+const runButton = byId<HTMLButtonElement>("repo-ingest-run");
 const promptBox = byId<HTMLTextAreaElement>("repo-prompt");
 const savedNote = byId<HTMLParagraphElement>("repo-ingest-saved");
 const recent = byId<HTMLDivElement>("repo-recent");
@@ -90,13 +91,14 @@ async function refreshStatus(): Promise<void>
     const status: IIngestStatus = await fetch("/api/ingest/status", { cache: "no-cache" }).then((response) => response.json());
     ingest.hidden = false;
     ingestPrompt = status.prompt;
-    savedNote.textContent = "Your agent saves to .codespace/architecture.json as it goes.";
+    savedNote.textContent = "The chat saves to .codespace/architecture.json as it goes.";
     const parts: string[] = [];
     if (status.files > 0) parts.push(status.files + (status.files === 1 ? " file" : " files"));
     if (status.incomplete > 0) parts.push(status.incomplete + " to fill in");
     if (status.folders > 0) parts.push(status.folders + (status.folders === 1 ? " folder" : " folders"));
     ingestNote.textContent = parts.length === 0 ? "Fully described." : parts.join(" · ") + " to describe";
     copyButton.hidden = status.remaining === 0;
+    runButton.hidden = status.remaining === 0;
   }
   catch
   {
@@ -286,12 +288,32 @@ deleteButton.addEventListener("click", () => askDelete(true));
 deleteCancel.addEventListener("click", () => askDelete(false));
 deleteYes.addEventListener("click", () => void deleteArchitecture());
 
+// Ingest hands the describing to the chat's agent: the server starts a new chat with the prompt,
+// and the chat opens so its progress can be followed while the map fills in.
+runButton.addEventListener("click", async () =>
+{
+  runButton.disabled = true;
+  try
+  {
+    const response = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "describe" }) });
+    if (!response.ok) throw new Error(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "The chat could not start.");
+    hidePanel();
+    window.dispatchEvent(new Event("codespace:open-chat"));
+  }
+  catch (error)
+  {
+    errorNote.textContent = (error as Error).message;
+    errorNote.hidden = false;
+  }
+  finally { runButton.disabled = false; }
+});
+
 copyButton.addEventListener("click", async () =>
 {
   if (await copyText(ingestPrompt))
   {
     copyButton.textContent = "Copied";
-    setTimeout(() => { copyButton.textContent = "Copy agent prompt"; }, 1400);
+    setTimeout(() => { copyButton.textContent = "Copy prompt"; }, 1400);
     return;
   }
   // Nothing could reach the clipboard, so show the prompt to copy by hand.

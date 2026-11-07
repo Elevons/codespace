@@ -134,7 +134,8 @@ export interface Trace
 {
     paths: string[];
     set: Set<string>;
-    notes: Map<string, string>;
+    /** Each step's note, in the same order as paths, so a file met twice keeps both. */
+    notes: string[];
     trace: boolean;
     title: string;
     note: string;

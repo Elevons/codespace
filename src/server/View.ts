@@ -1,4 +1,5 @@
 import type { ServerResponse } from 'node:http'
+import type { ChatEvent } from '../agent/Chat.ts'
 
 /** How often an idle event stream is nudged, so a proxy does not close it, in milliseconds. */
 const KeepAliveInterval = 25_000
@@ -32,6 +33,7 @@ export type ViewEvent =
     | { type: 'focus', path: string }
     | { type: 'architecture' }
     | { type: 'repo' }
+    | { type: 'chat', chat: ChatEvent }
 
 /** What the map is currently being asked to show, and the pages watching it. */
 export class View
@@ -39,8 +41,8 @@ export class View
     /** What is shown now, or null. A page that connects later is told it first. */
     private shown: IShown | null = null
 
-    /** The pages watching. */
-    private readonly clients = new Set<ServerResponse>()
+    /** The pages watching, each with whether it is on this machine and so may follow the chat. */
+    private readonly clients = new Map<ServerResponse, boolean>()
 
     /** What the map is showing now. */
     public get Shown(): IShown | null
@@ -80,6 +82,15 @@ export class View
         this.Broadcast({ type: 'repo' })
     }
 
+    /**
+     * Tells the pages on this machine how the chat's reply is going.
+     * @param chat what happened
+     */
+    public Chat(chat: ChatEvent): void
+    {
+        this.Broadcast({ type: 'chat', chat }, true)
+    }
+
     /** Tells the pages the architecture file changed, so they read it again. */
     public ArchitectureChanged(): void
     {
@@ -89,11 +100,12 @@ export class View
     /**
      * Starts an event stream to one page.
      * @param response the page's response, held open
+     * @param local whether the page is on this machine, and so is sent the chat
      */
-    public Subscribe(response: ServerResponse): void
+    public Subscribe(response: ServerResponse, local = false): void
     {
         response.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', Connection: 'keep-alive' })
-        this.clients.add(response)
+        this.clients.set(response, local)
         const timer = setInterval(() => response.write(': keepalive\n\n'), KeepAliveInterval)
         response.on('close', () => { clearInterval(timer); this.clients.delete(response) })
         if (this.shown !== null) response.write(`data: ${JSON.stringify({ type: 'show', shown: this.shown } satisfies ViewEvent)}\n\n`)
@@ -103,10 +115,11 @@ export class View
     /**
      * Sends an event to every page.
      * @param event what to send
+     * @param localOnly whether only the pages on this machine are sent it
      */
-    private Broadcast(event: ViewEvent): void
+    private Broadcast(event: ViewEvent, localOnly = false): void
     {
         const line = `data: ${JSON.stringify(event)}\n\n`
-        for (const client of this.clients) client.write(line)
+        for (const [client, local] of this.clients) if (local || !localOnly) client.write(line)
     }
 }

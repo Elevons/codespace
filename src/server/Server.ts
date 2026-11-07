@@ -1,11 +1,13 @@
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http'
 import { execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 import { brotliCompress, constants, gzip } from 'node:zlib'
 import { pathToFileURL } from 'node:url'
 import { Api } from './Api.ts'
+import { Chat } from '../agent/Chat.ts'
 import { ReadJsonAsync, RefuseRemoteRead, RefuseWrite, SendJson } from './Guard.ts'
 import { Architecture } from '../repo/Architecture.ts'
 import { Snapshot } from '../repo/Snapshot.ts'
@@ -77,11 +79,14 @@ export class Server
      * @param workspace the repository to read
      * @param publicRoot the folder holding the page and index
      * @param allowWrites whether changes are accepted from any machine, as started with --allow-writes
+     * @param mapUrl the address the chat's agent reaches this server at
      */
-    public static async CreateAsync(workspace: Workspace, publicRoot: string, allowWrites = false): Promise<{ server: Server, http: HttpServer }>
+    public static async CreateAsync(workspace: Workspace, publicRoot: string, allowWrites = false, mapUrl = 'http://localhost:5190'): Promise<{ server: Server, http: HttpServer }>
     {
-        const cli = join(publicRoot, '..', 'src', 'cli', 'Cli.ts')
-        const server = new Server(workspace, publicRoot, new Api(workspace, allowWrites, cli), allowWrites)
+        const cli = resolve(publicRoot, '..', 'src', 'cli', 'Cli.ts')
+        const guide = resolve(publicRoot, '..', 'docs', 'architecture.md')
+        const chat = new Chat(() => workspace.repo.Root, { mapUrl, cli, guide }, (event) => workspace.view.Chat(event))
+        const server = new Server(workspace, publicRoot, new Api(workspace, allowWrites, cli, chat), allowWrites)
         const http = createServer((request, response) =>
         {
             server.HandleAsync(request, response).catch((error) =>
@@ -104,7 +109,7 @@ export class Server
     public static async StartAsync(repoPath: string, publicRoot: string, port: number, host: string, allowWrites = false): Promise<void>
     {
         const workspace = await Workspace.OpenAsync(repoPath)
-        const { http } = await Server.CreateAsync(workspace, publicRoot, allowWrites)
+        const { http } = await Server.CreateAsync(workspace, publicRoot, allowWrites, `http://localhost:${port}`)
         await new Promise<void>((done) => http.listen(port, host, done))
         console.log(`Codespace reading ${workspace.repo.Name} at ${workspace.repo.Root}`)
         console.log(`Open http://localhost:${port}`)
@@ -419,6 +424,9 @@ export class Server
 const started = process.argv[1] !== undefined && import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 if (started)
 {
+    // Codespace's own settings, such as the chat's model, come from a .env beside it when there is one.
+    const envFile = join(import.meta.dirname, '..', '..', '.env')
+    if (existsSync(envFile)) process.loadEnvFile(envFile)
     const args = process.argv.slice(2)
     const repoArg = Server.ReadOption(args, '--repo') ?? process.env.CODESPACE_REPO ?? process.cwd()
     const port = Number(Server.ReadOption(args, '--port') ?? process.env.PORT ?? 5190)

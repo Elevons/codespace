@@ -30,6 +30,21 @@ function IsOwnHost(host: string): boolean
  */
 export function RefuseWrite(request: IncomingMessage, anywhere = false): string | null
 {
+    const outside = RefuseOutside(request, anywhere)
+    if (outside !== null) return outside
+    if (!(request.headers['content-type'] ?? '').startsWith('application/json')) return 'Send JSON.'
+    return null
+}
+
+/**
+ * Says why a request is not from this machine (or, with --allow-writes, from a page of this site),
+ * or null when it is. Writes need this and a JSON body; the chat, which runs commands in the
+ * repository, needs it even to be read or followed.
+ * @param request the incoming request
+ * @param anywhere whether any machine is allowed, as started with --allow-writes
+ */
+export function RefuseOutside(request: IncomingMessage, anywhere = false): string | null
+{
     if (!anywhere)
     {
         if (!LoopbackAddresses.has(request.socket.remoteAddress ?? '')) return 'Changes are only accepted from the machine running Codespace. Start it with --allow-writes to change that.'
@@ -39,7 +54,6 @@ export function RefuseWrite(request: IncomingMessage, anywhere = false): string 
     const origin = request.headers.origin
     const target = (request.headers['x-forwarded-host'] ?? request.headers.host ?? '').toString()
     if (origin !== undefined && new URL(origin).host !== target) return 'Cross-site requests are refused.'
-    if (!(request.headers['content-type'] ?? '').startsWith('application/json')) return 'Send JSON.'
     return null
 }
 

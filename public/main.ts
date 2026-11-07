@@ -11,6 +11,7 @@ import { routeTargets } from "./route.js";
 import { syncPads } from "./pads.js";
 import "./view.js";
 import "./repo-switch.js";
+import "./chat.js";
 import "./mobile.js";
 
 /* -------------------------------------------------------- interaction ---- */

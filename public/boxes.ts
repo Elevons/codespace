@@ -83,7 +83,7 @@ export function accent(rec: FileRecord, material: BABYLON.StandardMaterial, outl
     mesh.outlineWidth = 0.04;
     mesh.enableEdgesRendering();
     mesh.edgesColor = new BABYLON.Color4(0.35, 0.82, 0.98, 0.4);
-    mesh.edgesWidth = 1.2;
+    mesh.edgesWidth = 0.6;
     pool.push(mesh);
   }
   poolUsed++;

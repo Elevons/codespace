@@ -1,5 +1,5 @@
 import { S, V3, scene, camera, canvas, labelLayer, colorFor, filePath, matchesFilters, nodeMatchesFilters } from "./state.js";
-import { labelOf } from "./repo.js";
+import { labelOf, plateLabel } from "./repo.js";
 import { routeFolderHues, routeRuns, runLine } from "./route.js";
 
 /** One name, tag, or step the page wants on screen this frame. */
@@ -36,7 +36,7 @@ function collectLabels(): LabelItem[]
     if (!labelled) return;
     const pos = new V3(n.cx, n.topY! + 0.5, n.cz!);
     const dim = filtered || (S.focusSet !== null && !S.focusSet.has(i) && hue === undefined);
-    wanted.push({ key: "d" + i, text: labelOf(n), pos, cls: i === S.selected ? "folder sel" : hue && !filtered ? "folder routed" : "folder",
+    wanted.push({ key: "d" + i, text: plateLabel(n), pos, cls: i === S.selected ? "folder sel" : hue && !filtered ? "folder routed" : "folder",
       caption: "",
       priority: i === S.selected || (hue && !filtered) ? 2 : dim ? 5 : 3,
       color: i === S.selected ? "" : filtered ? "#6e7681" : hue || colorFor(n.layer), opacity: dim ? 0.25 : 1 });
@@ -75,9 +75,10 @@ function collectLabels(): LabelItem[]
       priority: hovered ? 0 : chosenFile ? 1 : 4,
       cls: hovered ? "file hover" : "file", color: "", opacity: 1 });
   }
-  // Layer band names at the corner of each plane nearest the camera, so they stay on screen.
+  // Layer band names at the corner of each plane nearest the camera, so they stay on screen. Where room
+  // is tight, as on a phone, the name goes without its "layer ·" prefix.
   const roomy = canvas.clientWidth > 720 && canvas.clientHeight > 500;
-  if (roomy) for (const plane of S.layerPlanes)
+  for (const plane of S.layerPlanes)
   {
     const info = plane.getBoundingInfo().boundingBox;
     const meta = plane.metadata as { layer: string; rank: number };
@@ -91,7 +92,7 @@ function collectLabels(): LabelItem[]
     // Lift the name a little above its plane and in from the corner, so it never sits under a dock.
     const cx = (info.minimumWorld.x + info.maximumWorld.x) / 2;
     const cz = (info.minimumWorld.z + info.maximumWorld.z) / 2;
-    wanted.push({ key: "L" + meta.rank, text: "layer · " + meta.layer,
+    wanted.push({ key: "L" + meta.rank, text: roomy ? "layer · " + meta.layer : meta.layer,
       pos: new V3(corner.x + (cx - corner.x) * 0.16, plane.position.y + 1.6, corner.z + (cz - corner.z) * 0.16),
       cls: "layer", caption: "", color: "", opacity: 1, priority: 0 });
   }
@@ -106,7 +107,7 @@ function collectLabels(): LabelItem[]
 const SVG = "http://www.w3.org/2000/svg";
 let rail: HTMLOListElement | null = null, railSvg: SVGSVGElement | null = null, railSignature = "";
 const feet: SVGCircleElement[] = [];
-const ROW = 36, RAIL_GAP = 70;
+const ROW = 18, RAIL_GAP = 70;
 
 function ensureRail(): void
 {
@@ -117,6 +118,18 @@ function ensureRail(): void
   rail = document.createElement("ol");
   rail.id = "trace-rail";
   labelLayer.appendChild(rail);
+}
+
+/** Whether the page is in its phone layout (mobile.ts). */
+function onPhone(): boolean { return document.body.classList.contains("phone"); }
+
+// How much of the screen's bottom is covered by the controls: the bottom bars on a computer, or the
+// tab bar and the strip naming the choice above it on a phone.
+function bottomReserve(): number
+{
+  if (!onPhone()) return 90;
+  const tabs = document.getElementById("mtabs"), peek = document.getElementById("mpeek");
+  return (tabs ? tabs.offsetHeight : 67) + (peek && !peek.hidden ? peek.offsetHeight + 6 : 0) + 10;
 }
 
 // The screen columns free of the side panels.
@@ -182,7 +195,13 @@ function updateRail(width: number, height: number, transform: BABYLON.Matrix, vi
     });
   }
   const chosen = S.selected >= 0 && S.selectedFile >= 0 ? filePath(S.selected, S.selectedFile) : null;
-  for (const row of Array.from(railEl.children) as HTMLElement[]) row.classList.toggle("chosen", row.dataset.path === chosen);
+  for (const row of Array.from(railEl.children) as HTMLElement[])
+  {
+    const was = row.classList.contains("chosen"), is = row.dataset.path === chosen;
+    row.classList.toggle("chosen", is);
+    // A step chosen on the map scrolls into view in a rail too long for the screen.
+    if (is && !was) row.scrollIntoView({ block: "nearest" });
+  }
 
   // Where each traced file is on screen: the middle of its block's near face.
   const spots = new Map<string, { x: number; y: number }>();
@@ -195,18 +214,36 @@ function updateRail(width: number, height: number, transform: BABYLON.Matrix, vi
     spots.set(path, { x: p.x, y: p.y });
   }
 
-  // Put the rail beside the files, on the side with room, centred on them.
-  const railWidth = railEl.offsetWidth, railHeight = steps.length * ROW;
+  // The rail stays inside the free part of the screen: no wider than the open columns allow and no taller
+  // than the band above the controls, scrolling when a long route needs more.
+  const phone = onPhone();
   const [open0, open1] = openSpan(width);
+  const bandTop = phone ? 10 : 16, bandBottom = height - bottomReserve();
+  railEl.style.maxHeight = Math.max(ROW * 2, bandBottom - bandTop).toFixed(0) + "px";
+  railEl.style.maxWidth = (phone ? Math.min(230, width * 0.48) : Math.min(340, open1 - open0 - 24)).toFixed(0) + "px";
+  railEl.classList.toggle("docked", phone);
+  const railWidth = railEl.offsetWidth, railHeight = railEl.offsetHeight;
+
   const xs = [...spots.values()].map((s) => s.x), ys = [...spots.values()].map((s) => s.y);
   const minX = xs.length ? Math.min(...xs) : width / 2, maxX = xs.length ? Math.max(...xs) : width / 2;
   const midY = ys.length ? (Math.min(...ys) + Math.max(...ys)) / 2 : height / 2;
-  const roomRight = open1 - 12 - (maxX + RAIL_GAP + railWidth);
-  const roomLeft = (minX - RAIL_GAP - railWidth) - (open0 + 12);
-  const onRight = roomRight >= 0 || roomRight >= roomLeft;
-  let railX = onRight ? maxX + RAIL_GAP : minX - RAIL_GAP - railWidth;
-  railX = Math.max(open0 + 12, Math.min(open1 - 12 - railWidth, railX));
-  const railY = Math.max(16, Math.min(height - 90 - railHeight, midY - railHeight / 2));
+  let onRight: boolean, railX: number;
+  if (phone)
+  {
+    // On a phone the rail docks to a screen edge, the one away from the files, so it covers less of them.
+    onRight = (minX + maxX) / 2 < width / 2;
+    railX = onRight ? width - railWidth - 6 : 6;
+  }
+  else
+  {
+    // On a computer it sits beside the files, on the side with room, centred on them.
+    const roomRight = open1 - 12 - (maxX + RAIL_GAP + railWidth);
+    const roomLeft = (minX - RAIL_GAP - railWidth) - (open0 + 12);
+    onRight = roomRight >= 0 || roomRight >= roomLeft;
+    railX = onRight ? maxX + RAIL_GAP : minX - RAIL_GAP - railWidth;
+    railX = Math.max(open0 + 12, Math.min(open1 - 12 - railWidth, railX));
+  }
+  const railY = Math.max(bandTop, Math.min(bandBottom - railHeight, midY - railHeight / 2));
   railEl.style.transform = "translate(" + railX.toFixed(1) + "px," + railY.toFixed(1) + "px)";
   railEl.classList.toggle("left", !onRight);
 
@@ -215,11 +252,14 @@ function updateRail(width: number, height: number, transform: BABYLON.Matrix, vi
   svgEl.setAttribute("height", String(height));
   let d = "";
   const edgeX = onRight ? railX : railX + railWidth, dir = onRight ? -1 : 1;
+  const rows = Array.from(railEl.children) as HTMLElement[];
   steps.forEach((path, i) =>
   {
-    const spot = spots.get(path);
-    if (!spot) return;
-    const y0 = railY + i * ROW + ROW / 2;
+    const spot = spots.get(path), row = rows[i];
+    if (!spot || !row) return;
+    // Only the rows scrolled into view get a line.
+    const y0 = railY + row.offsetTop - railEl.scrollTop + row.offsetHeight / 2;
+    if (y0 < railY || y0 > railY + railHeight) return;
     const stubX = edgeX + dir * 14;
     d += "M" + edgeX.toFixed(1) + " " + y0.toFixed(1) + "L" + stubX.toFixed(1) + " " + y0.toFixed(1) +
       "L" + spot.x.toFixed(1) + " " + spot.y.toFixed(1);
@@ -262,8 +302,9 @@ function updateLabels(): void
     if (item.cls === "layer")
     {
       const [left, right] = openSpan(width);
-      p.x = Math.max(left + 60, Math.min(right - 60, p.x));
-      p.y = Math.max(24, Math.min(height - 90, p.y));
+      const half = item.text.length * 3.5 + 12;
+      p.x = Math.max(left + half, Math.min(right - half, p.x));
+      p.y = Math.max(24, Math.min(height - bottomReserve(), p.y));
     }
     // Try the label with its caption, nudged a little up or down if its spot is crowded;
     // failing that, the name alone; failing that, it is left off this frame.

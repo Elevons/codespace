@@ -1,13 +1,14 @@
 // The phone layout. A narrow screen gives the map the whole screen and puts the panels behind a tab
 // bar along the bottom: Files (the outliner's search and tree), Filters (the system and layer tiles,
-// the tag filter, and the view options), Details (what is chosen), and View (the map's controls).
+// the tag filter, and the view options), Details (what is chosen), Chat (the built-in agent), and View
+// (the map's controls).
 // One sheet holds whichever tab is open. The panels are moved into it, not copied, so every handler
 // and every render keeps working on the same elements; leaving the narrow layout puts them back.
 import { S, filePath, fileColor, hasFilters, labelFor } from "./state.js";
 import { select } from "./panels.js";
 
 /** The tabs that open a sheet; Map closes it. */
-type Pane = "files" | "filters" | "details" | "view";
+type Pane = "files" | "filters" | "details" | "chat" | "view";
 
 const narrow = window.matchMedia("(max-width: 720px)");
 
@@ -16,9 +17,10 @@ const PANES: Record<Pane, string[]> = {
   files: ["outliner"],
   filters: ["outliner-filters", "outliner-chips", "outliner-options", "outliner-bulk"],
   details: ["showing", "info"],
+  chat: ["chat-panel"],
   view: ["tools", "controls"],
 };
-const TITLES: Record<Pane, string> = { files: "Files", filters: "Filters", details: "Details", view: "View" };
+const TITLES: Record<Pane, string> = { files: "Files", filters: "Filters", details: "Details", chat: "Chat", view: "View" };
 
 const sheet = document.getElementById("msheet") as HTMLElement;
 const sheetTitle = document.getElementById("msheet-title") as HTMLElement;
@@ -77,6 +79,7 @@ function setPane(pane: Pane | null): void
   });
   // The options strip is a pop-out on the desktop; in the Filters sheet it is simply shown.
   syncChrome();
+  window.dispatchEvent(new CustomEvent("codespace:pane", { detail: pane }));
 }
 
 tabs.addEventListener("click", (event) =>
@@ -92,15 +95,24 @@ document.getElementById("msheet-close")!.addEventListener("click", () => setPane
 // A choice made in the outliner closes the sheet, so the map can glide to it.
 window.addEventListener("codespace:chosen", () => { if (narrow.matches && open === "files") setPane(null); });
 
-// While the search box has the keyboard up, the sheet takes the whole screen so the box and its
-// matches stay above the keyboard.
-search.addEventListener("focus", () => { if (narrow.matches) sheet.classList.add("full"); });
-search.addEventListener("blur", () => sheet.classList.remove("full"));
+// Another panel can open the chat, as Ingest Codebase does.
+window.addEventListener("codespace:open-chat", () => { if (narrow.matches) setPane("chat"); });
+
+// The chat's "See it" and its file links close the sheet, so the map shows what was drawn.
+window.addEventListener("codespace:see-map", () => { if (narrow.matches && open !== null) setPane(null); });
+
+// While the search box or the chat's box has the keyboard up, the sheet takes the whole screen so
+// the box and what it is about stay above the keyboard.
+for (const box of [search, document.getElementById("chat-input")!])
+{
+  box.addEventListener("focus", () => { if (narrow.matches) sheet.classList.add("full"); });
+  box.addEventListener("blur", () => sheet.classList.remove("full"));
+}
 
 // Escape (a hardware keyboard on a tablet) closes the sheet before anything else.
 document.addEventListener("keydown", (event) =>
 {
-  if (event.key === "Escape" && narrow.matches && open !== null && !(event.target as HTMLElement).closest?.("input"))
+  if (event.key === "Escape" && narrow.matches && open !== null && !(event.target as HTMLElement).closest?.("input, textarea"))
   {
     setPane(null);
     event.stopImmediatePropagation();

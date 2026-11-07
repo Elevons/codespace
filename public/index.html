@@ -87,6 +87,7 @@
 <div id="dock-bottom">
   <div class="panel bar" id="tools">
     <button id="repo" type="button" title="Change the repository the map reads">Repo: …</button>
+    <button id="chat-btn" type="button" title="Talk to the agent about this repository">Chat</button>
     <button id="spin" class="on">Spin<span class="state">on</span></button>
     <button id="reset">Reset view</button>
     <button id="refresh">Refresh</button>
@@ -120,6 +121,7 @@
   <div class="mpane" id="mpane-filters" data-pane="filters"></div>
   <div class="mpane" id="mpane-details" data-pane="details"></div>
   <div class="mpane" id="mpane-view" data-pane="view"></div>
+  <div class="mpane" id="mpane-chat" data-pane="chat"></div>
 </section>
 <div id="mpeek" hidden>
   <button id="mpeek-open" type="button" title="Show the details"><span id="mpeek-dot"></span><span id="mpeek-text"><b id="mpeek-name"></b><small id="mpeek-sub"></small></span></button>
@@ -130,6 +132,7 @@
   <button type="button" data-tab="files" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v11H3z"/><path d="M7 13h10M7 16h6"/></svg><span>Files</span></button>
   <button type="button" data-tab="filters" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6 8v6l-4-2v-4z"/></svg><span>Filters</span><i class="mbadge" hidden></i></button>
   <button type="button" data-tab="details" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg><span>Details</span><i class="mbadge dot" hidden></i></button>
+  <button type="button" data-tab="chat" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg><span>Chat</span><i class="mbadge dot" hidden></i></button>
   <button type="button" data-tab="view" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg><span>View</span></button>
 </nav>
 
@@ -151,9 +154,12 @@
   <div id="repo-ingest" hidden>
     <div>
       <p id="repo-ingest-note"></p>
-      <p class="hint" id="repo-ingest-saved">Your agent saves to .codespace/architecture.json as it goes.</p>
+      <p class="hint" id="repo-ingest-saved">The chat saves to .codespace/architecture.json as it goes.</p>
     </div>
-    <button id="repo-ingest-copy" type="button" title="Copy the prompt to give your agent">Copy agent prompt</button>
+    <div id="repo-ingest-actions">
+      <button id="repo-ingest-run" type="button" title="Have the built-in agent describe this repository, in the chat">Ingest Codebase</button>
+      <button id="repo-ingest-copy" class="link" type="button" title="Copy the prompt for an agent outside Codespace">Copy prompt</button>
+    </div>
   </div>
   <textarea id="repo-prompt" class="hint" readonly hidden></textarea>
   <div id="repo-recent"></div>
@@ -167,8 +173,29 @@
   </div>
 </div>
 
+<div class="panel" id="chat-panel" hidden>
+  <div id="chat-head">
+    <h2 class="panel-title">Chat</h2>
+    <label class="sr-only" for="chat-history">Past chats</label>
+    <select id="chat-history" title="Reopen a past chat"></select>
+    <button id="chat-new" type="button" title="Start a new chat">New</button>
+    <button id="chat-close" type="button" title="Close the chat">Close</button>
+  </div>
+  <p class="hint" id="chat-model"></p>
+  <div id="chat-status" hidden><span class="pulse" aria-hidden="true"></span><span id="chat-status-text"></span><span id="chat-status-time"></span></div>
+  <div id="chat-log" aria-live="polite"></div>
+  <form id="chat-form">
+    <label class="sr-only" for="chat-input">Message</label>
+    <textarea id="chat-input" rows="1" placeholder="Ask, or say what to trace on the map" spellcheck="true" enterkeyhint="send"></textarea>
+    <button id="chat-send" type="submit">Send</button>
+  </form>
+</div>
+
 <div class="panel" id="help" hidden>
-  <h2 class="panel-title">Controls</h2>
+  <div id="help-head">
+    <h2 class="panel-title">Controls</h2>
+    <button id="help-close" type="button" title="Close">Close</button>
+  </div>
   <dl class="touch-only">
     <dt>tap</dt><dd>choose a block · tap empty ground to clear</dd>
     <dt>drag</dt><dd>orbit the map</dd>

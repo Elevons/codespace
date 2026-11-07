@@ -18,6 +18,8 @@
     "typescript": "^5.8.0"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "^0.85.1",
+    "@earendil-works/pi-coding-agent": "^0.85.1",
     "babylonjs": "9.31.3"
   }
 }

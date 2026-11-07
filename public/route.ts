@@ -28,7 +28,9 @@ function routeTargets(): void
   for (const rec of S.fileRecords.values()) rec.target.copyFrom(rec.terrace);
   if (!lifting) return;
 
-  const recs = trace!.paths.map((path) => S.fileRecords.get(path)).filter((rec): rec is FileRecord => Boolean(rec));
+  // Each file is placed once, where the route first reaches it; a later step that comes back to it
+  // draws its strand back to the same block.
+  const recs = [...new Set(trace!.paths)].map((path) => S.fileRecords.get(path)).filter((rec): rec is FileRecord => Boolean(rec));
   if (recs.length < 2) return;
 
   // The plan's middle and its front edge, read from every file's resting spot.
