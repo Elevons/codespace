@@ -1,13 +1,14 @@
 import { S, V3, scene, glowMaterial, materialFor, filePath, matchesFilters, hasFilters, inScene } from "./state.js";
 import { routeFolderHues, routeRuns, runLine } from "./route.js";
-import type { FileRecord, GraphNode } from "./types.js";
+import type { FileRecord } from "./types.js";
 
-/** One import on screen: its two ends, its route when bundled, and how it should look. */
+/** One import on screen: its two ends, its trace when it has one, and how it should look. */
 interface Edge
 {
   user: BABYLON.Vector3;
   used: BABYLON.Vector3;
-  route?: BABYLON.Vector3[] | null;
+  /** A circuit-board trace: straight runs from end to end, used in place of a curve when set. */
+  trace?: BABYLON.Vector3[];
   broken: boolean;
   state: string;
   bow?: number;
@@ -47,69 +48,103 @@ function archPoint(a: BABYLON.Vector3, b: BABYLON.Vector3, bow: number, t: numbe
     u * u * a.z + 2 * u * t * mid.z + t * t * b.z);
 }
 
-// How tightly folder imports hug the folder tree: 0 is a straight line, 1 follows it exactly.
-const BUNDLE = 0.85;
-
-// The folders from one up to the root, itself first.
-function ancestry(n: GraphNode): GraphNode[]
-{
-  const chain: GraphNode[] = [];
-  for (let at: GraphNode | null = n; at; at = at.parent ?? null) chain.push(at);
-  return chain;
-}
-
-// Where an import's strand passes: from the imported folder up the tree to the nearest folder
-// above both, then down to the folder that uses it. Imports between the same regions share
-// this route, so they gather into bundles. The strand is straightened toward the direct line
-// by BUNDLE, and the top of the route is lifted so the bundle arches over the tiles. The route
-// starts and ends on the two files' tether pads, so a bundle fans out to the files it joins. A
-// folder and its own subfolder have no route between them, so they keep the plain arch (null).
-function bundleRoute(used: GraphNode, user: GraphNode, lift: number, from: BABYLON.Vector3, to: BABYLON.Vector3): BABYLON.Vector3[] | null
-{
-  const up = ancestry(used), down = ancestry(user);
-  const shared = new Set(down);
-  const top = up.findIndex((n) => shared.has(n));
-  const route = up.slice(0, top + 1).concat(down.slice(0, down.indexOf(up[top])).reverse());
-  if (route.length < 3) return null;
-  const points = route.map((n) => new V3(n.cx!, n.topY! + 0.45, n.cz!));
-  points[0] = from.clone();
-  points[points.length - 1] = to.clone();
-  points[top > 0 && top < route.length - 1 ? top : Math.floor(route.length / 2)].y += lift;
-  const first = points[0], last = points[points.length - 1];
-  return points.map((p, i) =>
-  {
-    if (i === 0 || i === points.length - 1) return p;
-    const along = i / (points.length - 1);
-    return new V3(
-      BUNDLE * p.x + (1 - BUNDLE) * (first.x + along * (last.x - first.x)),
-      BUNDLE * p.y + (1 - BUNDLE) * (first.y + along * (last.y - first.y)),
-      BUNDLE * p.z + (1 - BUNDLE) * (first.z + along * (last.z - first.z)));
-  });
-}
-
-// The point at t (0 to 1) along a smooth cubic B-spline through a route's control points.
-// The ends are tripled so the curve starts and finishes exactly on the first and last.
-function splinePoint(route: BABYLON.Vector3[], t: number): BABYLON.Vector3
-{
-  const p = [route[0], route[0], ...route, route[route.length - 1], route[route.length - 1]];
-  const segments = p.length - 3;
-  const s = Math.min(t, 0.999999) * segments;
-  const i = Math.floor(s), u = s - i;
-  const u2 = u * u, u3 = u2 * u;
-  const b0 = (1 - u) * (1 - u) * (1 - u) / 6, b1 = (3 * u3 - 6 * u2 + 4) / 6;
-  const b2 = (-3 * u3 + 3 * u2 + 3 * u + 1) / 6, b3 = u3 / 6;
-  return new V3(
-    b0 * p[i].x + b1 * p[i + 1].x + b2 * p[i + 2].x + b3 * p[i + 3].x,
-    b0 * p[i].y + b1 * p[i + 1].y + b2 * p[i + 2].y + b3 * p[i + 3].y,
-    b0 * p[i].z + b1 * p[i + 1].z + b2 * p[i + 2].z + b3 * p[i + 3].z);
-}
-
-// The point at t along an edge, from the imported end to the user: along its bundle
-// route when it has one, else on a plain arch.
+// The point at t along an edge, from the imported end to the user: along its circuit trace when it
+// has one, else on a plain arch.
 function edgePoint(edge: Edge, bow: number, t: number): BABYLON.Vector3
 {
   if (t >= 1) return edge.user.clone();
-  return edge.route ? splinePoint(edge.route, t) : archPoint(edge.used, edge.user, bow, t);
+  if (edge.trace) return polylinePoint(edge.trace, t);
+  return archPoint(edge.used, edge.user, bow, t);
+}
+
+// The point a fraction t of the way along a run of straight segments, by length.
+function polylinePoint(points: BABYLON.Vector3[], t: number): BABYLON.Vector3
+{
+  let total = 0;
+  for (let i = 1; i < points.length; i++) total += V3.Distance(points[i - 1], points[i]);
+  let left = Math.max(0, Math.min(1, t)) * total;
+  for (let i = 1; i < points.length; i++)
+  {
+    const length = V3.Distance(points[i - 1], points[i]);
+    if (left <= length && length > 0) return points[i - 1].add(points[i].subtract(points[i - 1]).scale(left / length));
+    left -= length;
+  }
+  return points[points.length - 1].clone();
+}
+
+/* --------------------------------------------------- circuit traces ---- */
+
+// A chosen folder's imports are drawn like the traces on a circuit board, so many of them stay
+// readable: each rises straight up from its pad to a routing level just above the plates, runs in
+// straight lines with cut corners, and drops straight onto the other pad. The traces between the
+// chosen folder and one other folder share a corridor and run side by side, like a bus; each bus
+// runs at its own small height, so buses that cross pass over one another instead of merging.
+const TRACE_LIFT = 0.3, TRACE_LAYER = 0.06, TRACE_GAP = 0.1, TRACE_CHAMFER = 0.3;
+
+/**
+ * Lays out circuit traces for a set of edges, one bus per group.
+ * @param edges the edges to route, each given its trace
+ * @param groups the group each edge belongs to, by index into edges
+ */
+function routeTraces(edges: Edge[], groups: string[]): void
+{
+  const buses = new Map<string, number[]>();
+  groups.forEach((key, i) => { const bus = buses.get(key); if (bus) bus.push(i); else buses.set(key, [i]); });
+  let layer = 0;
+  for (const members of buses.values())
+  {
+    // The bus runs along whichever way its two ends lie farther apart, in a corridor halfway between
+    // them the other way, and lifts one routing layer above the bus before it.
+    let dx = 0, dz = 0, middle = 0;
+    for (const i of members)
+    {
+      const { used, user } = edges[i];
+      dx += Math.abs(user.x - used.x);
+      dz += Math.abs(user.z - used.z);
+    }
+    const alongX = dx >= dz;
+    for (const i of members) middle += alongX ? (edges[i].used.z + edges[i].user.z) / 2 : (edges[i].used.x + edges[i].user.x) / 2;
+    middle /= members.length;
+    // Lanes are ordered by where each trace starts across the bus, so neighbours never cross.
+    const ordered = [...members].sort((a, b) => alongX ? edges[a].used.z - edges[b].used.z : edges[a].used.x - edges[b].used.x);
+    ordered.forEach((i, lane) =>
+    {
+      const edge = edges[i];
+      const corridor = middle + (lane - (ordered.length - 1) / 2) * TRACE_GAP;
+      const height = Math.max(edge.used.y, edge.user.y) + TRACE_LIFT + layer * TRACE_LAYER;
+      edge.trace = traceThrough(edge.used, edge.user, height, corridor, alongX);
+    });
+    layer++;
+  }
+}
+
+/**
+ * One trace: up from a pad, along to the corridor, down the corridor, across to the other pad, and
+ * down onto it, with the level corners cut at forty-five degrees.
+ * @param from the imported file's pad
+ * @param to the using file's pad
+ * @param height the routing level
+ * @param corridor where the bus runs, across its length
+ * @param alongX whether the bus runs along x
+ */
+function traceThrough(from: BABYLON.Vector3, to: BABYLON.Vector3, height: number, corridor: number, alongX: boolean): BABYLON.Vector3[]
+{
+  const corners = alongX
+    ? [new V3(from.x, height, from.z), new V3(from.x, height, corridor), new V3(to.x, height, corridor), new V3(to.x, height, to.z)]
+    : [new V3(from.x, height, from.z), new V3(corridor, height, from.z), new V3(corridor, height, to.z), new V3(to.x, height, to.z)];
+  // Drop corners that do not turn, so a trace already on its corridor is one straight run.
+  const level: BABYLON.Vector3[] = [];
+  for (const point of corners) if (level.length === 0 || V3.Distance(level[level.length - 1], point) > 1e-3) level.push(point);
+  const cut: BABYLON.Vector3[] = [level[0]];
+  for (let i = 1; i < level.length - 1; i++)
+  {
+    const before = level[i - 1], at = level[i], after = level[i + 1];
+    const into = at.subtract(before), out = after.subtract(at);
+    const r = Math.min(TRACE_CHAMFER, V3.Distance(before, at) / 2, V3.Distance(at, after) / 2);
+    cut.push(at.subtract(into.normalize().scale(r)), at.add(out.normalize().scale(r)));
+  }
+  if (level.length > 1) cut.push(level[level.length - 1]);
+  return [from.clone(), ...cut, to.clone()];
 }
 
 // Whether one file using another points up the layers the repository declares.
@@ -132,6 +167,8 @@ function collectEdges(): Edge[]
   const result: Edge[] = [];
   const folderChosen = S.selected >= 0 && S.selectedFile < 0 && S.trace === null;
   const chosen = S.selected >= 0 && S.selectedFile >= 0 && S.trace === null ? filePath(S.selected, S.selectedFile) : null;
+  // The bus each chosen folder's wire joins: its direction and the folder at its other end.
+  const busOf: string[] = [];
   if (folderChosen || chosen !== null)
   {
     for (const [from, to] of S.FILE_EDGES)
@@ -161,12 +198,10 @@ function collectEdges(): Edge[]
       }
       const userPad = footOf(userRec), usedPad = footOf(usedRec);
       if (!userPad || !usedPad) continue;
-      result.push({
-        user: userPad, used: usedPad,
-        route: userRec.node === usedRec.node ? null : bundleRoute(used, user, 0.5, usedPad, userPad),
-        broken, state,
-      });
+      result.push({ user: userPad, used: usedPad, broken, state });
+      busOf.push(state + ":" + (state === "out" ? usedRec.node : userRec.node));
     }
+    if (folderChosen) routeTraces(result, busOf);
   }
 
   // A code path being traced (S.trace): a strand from each file to the next, in order. Each
@@ -381,18 +416,22 @@ function rebuildEdges(): void
 const STRIP_WIDTH = 1.25;
 
 // One solid strand from the imported end to the user, with an arrowhead where it is used.
+// A trace's strand follows its straight runs exactly; any other is sampled along its curve.
 // The strand and its arrowhead are both drawn at half the given radius, a hairline that leaves the map readable.
 function addStrand(edge: Edge, bow: number, hex: string, given: number): void
 {
   const radius = given / 2;
   const path: BABYLON.Vector3[] = [];
-  for (let i = 0; i <= 20; i++) path.push(edgePoint(edge, bow, i / 20));
+  if (edge.trace) path.push(...edge.trace);
+  else for (let i = 0; i <= 20; i++) path.push(edgePoint(edge, bow, i / 20));
   const tube = BABYLON.MeshBuilder.CreateTube("strand", { path, radius, tessellation: 6 }, scene);
   tube.material = glowMaterial(hex);
   tube.isPickable = false;
   edgeShapes.push(tube);
 
-  const tip = path[path.length - 1], before = path[path.length - 3];
+  const tip = path[path.length - 1];
+  let before = path[path.length - 2];
+  for (let i = path.length - 2; i >= 0 && V3.Distance(path[i], tip) < 1e-3; i--) before = path[Math.max(0, i - 1)];
   const direction = tip.subtract(before).normalize();
   const head = BABYLON.MeshBuilder.CreateCylinder("arrow", { diameterTop: 0, diameterBottom: radius * 7, height: radius * 10, tessellation: 8 }, scene);
   head.material = glowMaterial(hex);

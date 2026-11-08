@@ -177,10 +177,11 @@ The page reads the repository live from one `/api/bootstrap` request (started be
 the repository's own `.gitignore` (and a built-in list when it has none) to skip
 what git ignores. Each folder becomes a tile holding its files, and every file is a box of the
 same footprint, as tall as its line count. Imports are drawn only for what is chosen, so the
-map stays readable. Choosing a folder draws the imports crossing its edge, each as a strand from
-the imported file's tether pad to the importing file's, blue going out and amber coming in;
-between folders a strand follows the folder tree, so imports from one region travel together and
-fan out to their files at the ends. Choosing a file draws just its own imports, arching block to
+map stays readable. Choosing a folder draws the imports crossing its edge as circuit-board traces
+from the imported file's tether pad to the importing file's, blue going out and amber coming in:
+each rises from its pad, runs in straight lines with cut corners, and drops onto the other pad.
+The traces to one other folder run side by side in a shared corridor, like a bus, and each bus
+has its own small height, so crossing buses pass over one another. Choosing a file draws just its own imports, arching block to
 block. A folder's plate is labelled with what it adds below the folder around it. A layer break — a file importing one on a
 higher layer — is a thin red line on the folder plates, from the importing file's tether foot
 to the imported file's, brightest at the end that uses it. A reload — or the 15-second poll —
