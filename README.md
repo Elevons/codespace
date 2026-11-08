@@ -37,7 +37,17 @@ loop and keeps each repository's chats, which the chat's menu reopens. While the
 closed, its button only says when the agent is working or a reply is waiting.
 
 The Repo panel's **Ingest Codebase** starts a chat that describes the whole repository for the
-map, so nothing has to be copied into another agent.
+map, so nothing has to be copied into another agent. It has two passes. The first writes each
+file's summary, system, layer, and tags. The second, `refine`, checks those against the imports: it
+looks for imports that point up the layers (the red lines), files that would fit another layer or
+system better, and layers or systems that look wrong as a whole, and the agent fixes what it finds.
+Once a repository is described, **Refine layers** runs the second pass alone.
+
+Ingest is incremental, so the same button updates a map on demand: once a repository has a
+description it reads **Update Map**, and it hands the agent only what is new or changed. Each description
+is recorded against the file's text when it is written (in `.codespace/ingested.json`, kept out of git),
+so a rewritten file comes back for review with its current entry to judge against, an entry follows a
+file that was moved and drops with one that was deleted, and an untouched file is never read again.
 
 It talks to any OpenAI-compatible endpoint, set in a `.env` beside `package.json` (see
 `.env.example`): `CODESPACE_MODEL_BASE_URL`, `CODESPACE_MODEL`, and the key, either directly as
@@ -104,6 +114,9 @@ without refreshing.
 - `src/repo/Graph.ts` — the imports between code files, relative for TypeScript and
   JavaScript and by namespace for C#, for the tools.
 - `src/repo/Ingest.ts` — what an agent reads next to describe a codebase: files whose entry is incomplete, then folders.
+- `src/repo/Refine.ts`, `src/repo/RefineGuide.ts` — the second pass: layer breaks, better-fitting layers and systems, and the instructions for acting on them.
+- `src/repo/Ledger.ts`, `src/repo/Sync.ts` — what each description was based on, and the housekeeping before an update: moved files keep their entries and deleted ones lose theirs.
+- `src/repo/Install.ts` — leaves the upkeep rules in the repository being mapped, so its architecture file is kept true.
 - `src/server/Guard.ts` — who may change anything or use the chat: this machine only.
 - `src/agent/Chat.ts` — the chat built into the map: a pi agent in the repository, its saved chats, and its reply streamed to the page.
 - `src/agent/Instructions.ts` — what the chat's agent is told: drawing on the map and describing the repository.
@@ -156,6 +169,16 @@ node --experimental-transform-types src/cli/Cli.ts apply --file batch.json --rep
 `{"systems": {"server": {"summary": "..."}}, "files": {"src/a.ts": {"summary": "...", "system": "server", "tags": ["core"], "layer": "repo"}}, "folders": {"src": {"summary": "..."}}}`. Layers and systems are declared once and shared: a layer may hold files from several systems.
 Repeat `next` then `apply` until `next` reports `"remaining": 0`; folders come last. Generated
 and vendored files are summarized for you and never handed back. `--size` is at most 40.
+
+## Keeping it current
+
+The first thing ingest does is `install`: it leaves a short marked note in the repository's own
+`AGENTS.md` (or `CLAUDE.md`; one is created if there is neither) and the full upkeep rules in
+`.codespace/README.md`. After that, any agent that works in the repository is told to update a file's
+entry in the same change as the file, so the map stays true without another ingest. Running `install`
+again only refreshes its own marked block. A file added without an entry is drawn greyed out as
+undescribed, and the Repo panel counts it, along with changed files, and **Update Map** describes just
+what is new or changed.
 
 Every batch is written as soon as it is applied, so there is nothing to save afterwards and an
 interrupted run picks up where it stopped. A batch only ever holds files and folders that still

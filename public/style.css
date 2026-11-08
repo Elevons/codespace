@@ -347,6 +347,10 @@
     font-size: 12px; font-weight: 600; cursor: pointer; }
   #repo-ingest-run:hover { background: #388bfd; }
   #repo-ingest-run:disabled { opacity: .6; cursor: default; }
+  #repo-ingest-refine { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 7px; padding: 6px 12px;
+    font-size: 12px; font-weight: 600; cursor: pointer; }
+  #repo-ingest-refine:hover { background: #30363d; }
+  #repo-ingest-refine:disabled { opacity: .6; cursor: default; }
   #repo-ingest-copy.link { background: none; border: 0; padding: 0; color: #8b91ad; font-size: 11px; text-decoration: underline; }
   #repo-ingest-copy.link:hover { background: none; color: #c9d1d9; }
   #repo-prompt { width: 100%; margin-top: 8px; min-height: 70px; resize: vertical; background: #0d1117;

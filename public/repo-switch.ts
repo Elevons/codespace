@@ -19,6 +19,14 @@ interface IIngestStatus
   incomplete: number;
   folders: number;
   remaining: number;
+  /** Described files whose text has changed since their entry was written. */
+  changed?: number;
+  /** Entries for files and folders that are gone. */
+  stale?: number;
+  /** How many files already have a description, so the button can say whether this is a first ingest or an update. */
+  described?: number;
+  /** What the second pass still finds: layer breaks and anything else worth a look. */
+  refine?: { remaining: number; breaks: number };
   prompt: string;
 }
 
@@ -48,6 +56,7 @@ const ingest = byId<HTMLDivElement>("repo-ingest");
 const ingestNote = byId<HTMLParagraphElement>("repo-ingest-note");
 const copyButton = byId<HTMLButtonElement>("repo-ingest-copy");
 const runButton = byId<HTMLButtonElement>("repo-ingest-run");
+const refineButton = byId<HTMLButtonElement>("repo-ingest-refine");
 const promptBox = byId<HTMLTextAreaElement>("repo-prompt");
 const savedNote = byId<HTMLParagraphElement>("repo-ingest-saved");
 const recent = byId<HTMLDivElement>("repo-recent");
@@ -92,13 +101,28 @@ async function refreshStatus(): Promise<void>
     ingest.hidden = false;
     ingestPrompt = status.prompt;
     savedNote.textContent = "The chat saves to .codespace/architecture.json as it goes.";
+    // A server older than the page may not send the newer counts, so each one defaults to nothing.
+    const changed = status.changed ?? 0, stale = status.stale ?? 0;
+    const refine = status.refine ?? { remaining: 0, breaks: 0 };
+    const described = status.described ?? (status.remaining === 0 ? 1 : 0);
     const parts: string[] = [];
     if (status.files > 0) parts.push(status.files + (status.files === 1 ? " file" : " files"));
+    if (changed > 0) parts.push(changed + " changed");
+    if (stale > 0) parts.push(stale + " gone");
     if (status.incomplete > 0) parts.push(status.incomplete + " to fill in");
     if (status.folders > 0) parts.push(status.folders + (status.folders === 1 ? " folder" : " folders"));
-    ingestNote.textContent = parts.length === 0 ? "Fully described." : parts.join(" · ") + " to describe";
-    copyButton.hidden = status.remaining === 0;
-    runButton.hidden = status.remaining === 0;
+    // Once everything is described, the second pass says how many imports still point up the layers.
+    const breaks = refine.breaks;
+    ingestNote.textContent = parts.length === 0
+      ? "Up to date." + (refine.remaining > 0 ? " " + (breaks > 0 ? breaks + (breaks === 1 ? " layer break" : " layer breaks") + " to refine." : "Layers could be refined.") : "")
+      : (described > 0 ? "To update: " : "To describe: ") + parts.join(" · ");
+    refineButton.hidden = status.remaining !== 0 || refine.remaining === 0;
+    copyButton.hidden = status.remaining === 0 && described === 0;
+    // Once there is a description the button stays, as Update Map, so an update can be run on demand at any
+    // time: it picks up whatever changed, even when the page has not counted it yet.
+    runButton.hidden = status.remaining === 0 && described === 0;
+    runButton.textContent = described > 0 ? "Update Map" : "Ingest Codebase";
+    runButton.title = described > 0 ? "Have the built-in agent bring the description up to date with the changes, in the chat" : "Have the built-in agent describe this repository, in the chat";
   }
   catch
   {
@@ -290,12 +314,12 @@ deleteYes.addEventListener("click", () => void deleteArchitecture());
 
 // Ingest hands the describing to the chat's agent: the server starts a new chat with the prompt,
 // and the chat opens so its progress can be followed while the map fills in.
-runButton.addEventListener("click", async () =>
+async function startChat(action: "describe" | "refine", from: HTMLButtonElement): Promise<void>
 {
-  runButton.disabled = true;
+  from.disabled = true;
   try
   {
-    const response = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "describe" }) });
+    const response = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
     if (!response.ok) throw new Error(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "The chat could not start.");
     hidePanel();
     window.dispatchEvent(new Event("codespace:open-chat"));
@@ -305,8 +329,13 @@ runButton.addEventListener("click", async () =>
     errorNote.textContent = (error as Error).message;
     errorNote.hidden = false;
   }
-  finally { runButton.disabled = false; }
-});
+  finally { from.disabled = false; }
+}
+
+runButton.addEventListener("click", () => startChat("describe", runButton));
+
+// Refine hands the second pass to the chat's agent the same way, on a repository already described.
+refineButton.addEventListener("click", () => startChat("refine", refineButton));
 
 copyButton.addEventListener("click", async () =>
 {

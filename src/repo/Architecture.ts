@@ -60,6 +60,8 @@ export interface IArchitecturePatch
     folders?: Record<string, { summary?: string | null }>
     /** Entries to move to a new path, for a file that was moved or renamed. Applied first. */
     renames?: Array<{ from: string, to: string }>
+    /** Entries to delete for files and folders that are gone. A path that still exists is refused. */
+    forget?: string[]
 }
 
 /** The result of a change that was made. */
@@ -188,6 +190,28 @@ export class Architecture
     }
 
     /**
+     * Lists the entries the file keeps for files and folders that are gone: read from the raw file,
+     * since reading it for the map drops them.
+     * @param root the repository's real path
+     * @param known every file in the repository
+     */
+    public static async StaleAsync(root: string, known: readonly string[]): Promise<{ files: string[], folders: string[] }>
+    {
+        const stale = { files: [] as string[], folders: [] as string[] }
+        try
+        {
+            const real = await realpath(join(root, ArchitecturePath))
+            if (!real.startsWith(root + sep)) return stale
+            const parsed = JSON.parse(await readFile(real, 'utf8')) as { files?: unknown, folders?: unknown } | null
+            const exists = new Set(known), folders = Architecture.Folders(known)
+            if (typeof parsed?.files === 'object' && parsed.files !== null) stale.files = Object.keys(parsed.files).filter((path) => !exists.has(path)).sort()
+            if (typeof parsed?.folders === 'object' && parsed.folders !== null) stale.folders = Object.keys(parsed.folders).filter((path) => !folders.has(path)).sort()
+        }
+        catch { /* No readable file means nothing is stale. */ }
+        return stale
+    }
+
+    /**
      * Deletes a repository's architecture folder, so the map draws it with no layers, systems, or
      * summaries, as a repository that was never described. Nothing else in the repository is touched.
      * @param root the repository's real path
@@ -256,6 +280,12 @@ export class Architecture
             else if (!exists.has(to)) problems.push(`Cannot rename "${from}" to "${to}": "${to}" is not a file in the repository.`)
             else if (files[to] !== undefined) problems.push(`Cannot rename "${from}" to "${to}": "${to}" already has an entry.`)
             else { files[to] = files[from]!; delete files[from] }
+        }
+
+        for (const path of patch.forget ?? [])
+        {
+            if (exists.has(path) || Architecture.Folders(known).has(path)) problems.push(`Cannot forget "${path}": it is still in the repository.`)
+            else { delete files[path]; delete folders[path] }
         }
 
         if (patch.layers !== undefined)

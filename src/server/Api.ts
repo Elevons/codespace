@@ -3,6 +3,9 @@ import type { Chat } from '../agent/Chat.ts'
 import { Architecture, type IArchitecturePatch } from '../repo/Architecture.ts'
 import { Graph } from '../repo/Graph.ts'
 import { StatusAsync } from '../repo/Ingest.ts'
+import { Ledger } from '../repo/Ledger.ts'
+import { Refine } from '../repo/Refine.ts'
+import { RefineGuide } from '../repo/RefineGuide.ts'
 import { Snapshot } from '../repo/Snapshot.ts'
 import { ReadJsonAsync, RefuseOutside, RefuseWrite, SendJson } from './Guard.ts'
 import type { IShownFile, View } from './View.ts'
@@ -26,7 +29,10 @@ function PromptFor(cli: string, root: string): string
     return `Describe this repository for the Codespace map. Its CLI needs no server or MCP; run it from a shell:
   node --experimental-transform-types ${cli} status --repo ${root}
   node --experimental-transform-types ${cli} next --repo ${root}
-Write each batch to a JSON file and save it with:
+First, once, run this so that whoever changes the repository later keeps the map true. It adds a short marked
+note to the repository's AGENTS.md (creating one if there is none) and writes the rules to .codespace/README.md:
+  node --experimental-transform-types ${cli} install --repo ${root}
+Then write each batch to a JSON file and save it with:
   node --experimental-transform-types ${cli} apply --file batch.json --repo ${root}
 
 A batch is one JSON object shaped like this:
@@ -60,7 +66,7 @@ Three ideas, each answering a different question. Keep them apart:
 
 Placing files on layers:
 - Declare the ladder once, bottom plane first, e.g.
-  ["meta","config","data","domain","integration","security","tool","api","ui","entry"],
+  ["meta","config","data","domain","integration","security","tool","api","ui","entry","tests"],
   and give each file the single level it belongs to.
 - Use the "imports" and "usedBy" lists that "next" prints. A file must sit at or above every
   file in its "imports", and at or below every file in its "usedBy". Files nothing uses (boot
@@ -72,18 +78,22 @@ Placing files on layers:
   wrong — pick the level from the file's role and imports, not from the folder it sits in.
 - Layers are shared by every system: declare each once in "layers" and let it hold files from
   many systems. Do not declare the same layer once per system.
-- Tests, docs, and config go on low layers of their own (e.g. "meta", "config"), since nothing
-  in the app imports them.
+- Docs and config go on low layers of their own (e.g. "meta", "config"), since they import
+  nothing. Tests import the code they test, so a "tests" layer goes above everything it imports,
+  at the top of the ladder; put it lower and every test file is a red line on the map.
 
 Rules:
 - Every file entry needs all four: a one-sentence summary, a system, tags from entry/orchestrate/core/data/io/ui/config/test, and a layer.
 - Declare a system or layer before a file uses it. A system or layer not listed is refused, and a system that files still use cannot be removed.
 - If the architecture file declares no systems or layers yet, declare them in the first apply, as in the example above.
 - "next" gives back the next batch plus the declared "systems" and "layers". Files come before folders, and each file's "missing" list says which of summary, system, layer, or tags it still needs. "next" also returns files that already have a summary but still lack a system, layer, or tags.
+- The same loop updates a repository that was described before, so run it whenever the repository has changed; it only hands back what needs work. Each file has a "reason": "new", "changed" (its text is not what its entry was written from, and "current" shows that entry), or "incomplete". For a changed file, read it again: if its entry is still true, apply the same summary again to confirm it, otherwise rewrite what no longer fits. Before it reads anything, "next" moves the entry of a file that was moved (same text, new path) to its new path and drops the entries of files that were deleted.
 - Describe every file a batch names, including tests and docs; generated and vendored files are already settled for you, so do not read them.
 - Until the repository is fully described, the map draws only the files that already have an entry; describing a file makes it appear.
 - Repeat until "status" reports "remaining": 0.
-- If these commands fail, stop and say so rather than editing .codespace/architecture.json by hand.`
+- If these commands fail, stop and say so rather than editing .codespace/architecture.json by hand.
+
+${RefineGuide(cli, root)}`
 }
 
 /** The endpoints tools and the page use to read the architecture and change what the map shows. */
@@ -145,8 +155,14 @@ export class Api
         else if (path === '/api/ingest/status' && reading)
         {
             const repo = this.workspace.repo
+            const architecture = await Architecture.ReadAsync(repo.Root, await repo.ListFilesAsync())
+            const status = await StatusAsync(repo, architecture)
+            // The second pass only has something to say once the first is done.
+            const refine = status.remaining === 0 ? Refine(architecture, (await Snapshot.ReadAsync(repo)).edges, 1) : null
             SendJson(response, 200, {
-                ...await StatusAsync(repo, await Architecture.ReadAsync(repo.Root, await repo.ListFilesAsync())),
+                ...status,
+                described: Object.values(architecture.files).filter((entry) => entry.summary !== undefined).length,
+                refine: refine === null ? { remaining: 0, breaks: 0 } : { remaining: refine.remaining, breaks: refine.breakCount },
                 prompt: PromptFor(this.cli, repo.Root),
             })
         }
@@ -202,13 +218,14 @@ export class Api
     {
         const repo = this.workspace.repo
         const updated = await Architecture.UpdateAsync(repo.Root, await repo.ListFilesAsync(), body as IArchitecturePatch)
+        await Ledger.RecordAsync(repo, Object.keys((body as IArchitecturePatch).files ?? {}))
         this.view.ArchitectureChanged()
         SendJson(response, 200, updated)
     }
 
     /**
-     * Sends a message to the chat, stops its reply, starts a new chat (plain, or one that describes the
-     * repository), or reopens a past one.
+     * Sends a message to the chat, stops its reply, starts a new chat (plain, or one that describes or
+     * refines the repository), or reopens a past one.
      * @param chat the chat
      * @param body the request, as sent
      */
@@ -218,8 +235,9 @@ export class Api
         else if (body.action === 'stop') await chat.StopAsync()
         else if (body.action === 'new') await chat.NewAsync()
         else if (body.action === 'describe') await chat.DescribeAsync()
+        else if (body.action === 'refine') await chat.RefineAsync()
         else if (body.action === 'open' && typeof body.id === 'string') await chat.ResumeAsync(body.id)
-        else throw new Error('action must be "send", "stop", "new", "describe", or "open".')
+        else throw new Error('action must be "send", "stop", "new", "describe", "refine", or "open".')
     }
 
     /**

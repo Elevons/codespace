@@ -84,7 +84,16 @@ Every field is optional. A file with no entry sits on the ground, uncoloured by 
 3. Draw tags only from the vocabulary above, systems only from `systems`, and layers only from
    `layers`. A layer may appear in more than one system.
 4. Keep summaries to one sentence.
-5. Entries can be written by an agent in batches: `node src/cli/Cli.ts next` hands back the
+5. A repository keeps its own entries true: `Cli.ts install` leaves a marked note in its `AGENTS.md`
+   (or `CLAUDE.md`) and the full rules in `.codespace/README.md`, so whoever changes the code updates
+   the entry in the same change. `Cli.ts refine` is the second pass over a described repository: it
+   lists imports that point up the layers, files that would sit in fewer breaks on another layer, files
+   whose imports are mostly in another system, and layers or systems that look wrong as a whole.
+   The ingest is incremental: `Cli.ts apply` records each file it names in `.codespace/ingested.json`
+   (a hash, size, and time, git-ignored), so `next` can hand back files that changed since their entry
+   was written, and `Cli.ts sync` carries an entry along with a file that was moved (same text) and drops
+   entries for files that are gone.
+6. Entries can be written by an agent in batches: `node src/cli/Cli.ts next` hands back the
    files and folders still missing a summary, a system, a layer, or tags, and `apply` writes
    them back. Declare the systems and layers first; a system or layer not listed is refused.
    Generated and vendored files are summarized for it, so it does not spend effort on lockfiles

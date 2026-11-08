@@ -47,10 +47,12 @@ test('The first batch is files, with their source and imports, and the generated
         assert.equal(batch.remaining, 5)
         assert.deepEqual(batch.layers, [])
         assert.deepEqual(batch.systems, [])
-        assert.deepEqual(await StatusAsync(repo, architecture), { files: 3, incomplete: 0, folders: 2, remaining: 5 })
+        assert.deepEqual(await StatusAsync(repo, architecture), { files: 3, incomplete: 0, changed: 0, stale: 0, folders: 2, remaining: 5 })
 
         const a = batch.files.find((file) => file.path === 'src/a.ts')!
         assert.deepEqual(a.missing, ['summary', 'system', 'layer', 'tags'])
+        assert.equal(a.reason, 'new')
+        assert.deepEqual(a.current, {})
         assert.match(a.source, /export const a/)
         assert.deepEqual(a.imports, ['src/b.ts'])
         assert.deepEqual(a.usedBy, [])
@@ -136,7 +138,7 @@ test('A summarized file with no system comes back as incomplete', async () =>
         })
 
         const architecture = await Architecture.ReadAsync(repo.Root, known)
-        assert.deepEqual(await StatusAsync(repo, architecture), { files: 2, incomplete: 1, folders: 3, remaining: 6 })
+        assert.deepEqual(await StatusAsync(repo, architecture), { files: 2, incomplete: 1, changed: 0, stale: 0, folders: 3, remaining: 6 })
 
         const batch = await NextBatchAsync(repo, architecture, await Graph.BuildAsync(repo), 12)
         const a = batch.files.find((file) => file.path === 'src/a.ts')!

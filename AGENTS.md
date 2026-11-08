@@ -67,6 +67,31 @@ Repeat until `next` reports `"remaining": 0`; folders come last.
 Generated and vendored files are settled for you and never handed back. `--size` is at most
 40. Each `apply` writes immediately, so a stopped run picks up where it left off.
 
+The same loop updates a repository that was described before, so run it on demand whenever the code has
+changed: `next` only hands back what needs work. Each file in a batch has a `reason`: `new`, `changed` (its
+text is not what its entry was written from, with the entry as `current`), or `incomplete`. For a changed
+file, read it again and apply its entry once more, rewritten if it no longer fits, so it is not offered
+again. Before it reads anything `next` runs `sync`: an entry follows a file that was moved (same text, new
+path) and an entry for a deleted file is dropped. `apply` records each file it names in
+`.codespace/ingested.json` (git-ignored, per machine), which is how a change is noticed.
+
+Three more commands finish the job:
+
+```sh
+node --experimental-transform-types src/cli/Cli.ts sync --repo .      # entries follow moved files; drop deleted ones
+node --experimental-transform-types src/cli/Cli.ts install --repo .   # once, before the first batch
+node --experimental-transform-types src/cli/Cli.ts refine --repo .    # the second pass, after "remaining": 0
+```
+
+`install` leaves the upkeep rules in the repository being mapped: a short marked block in its `AGENTS.md`
+(or `CLAUDE.md`, if that is the one it has), and the full rules in its `.codespace/README.md`, so any agent
+that later works there keeps `architecture.json` true in the same change. It is safe to run again.
+`refine` is the second pass: it checks the layers and systems against the imports and prints the imports
+that point up the layers (the map's red lines, grouped by pair of layers), files that would sit in fewer
+breaks on another layer, files whose neighbours are mostly in another system, and layering problems. It
+decides nothing; read the files it names, then `apply` the layer, system, and file changes it calls for, and
+run it again. A `tests` layer belongs at the top, since tests import what they test.
+
 The page's Repo panel shows the current repository and its absolute path, and copies these
 commands with the path filled in. It can switch repositories at runtime. The server accepts
 writes from this machine and localhost, or from anywhere with `--allow-writes`.
@@ -131,7 +156,7 @@ comes from `.env` beside `package.json` (git-ignored; see `.env.example`): `CODE
 `CODESPACE_MODEL_KEY_FILE` and `CODESPACE_MODEL_KEY_NAME`. What the agent is told lives in
 `src/agent/Instructions.ts`; **when the map API or the CLI changes, change it there too**, as well as in the
 sections above. `/api/chat` takes `GET` for the chat and `POST` with `{"action": "send", "text"}`, `"stop"`,
-`"new"`, `"describe"` (Ingest Codebase), or `{"action": "open", "id"}`; its progress reaches pages on this
+`"new"`, `"describe"` (Ingest Codebase), `"refine"` (Refine layers), or `{"action": "open", "id"}`; its progress reaches pages on this
 machine as `chat` events on the view stream. Chats and pi's settings live in `~/.codespace/agent`.
 
 ## Layout worth knowing

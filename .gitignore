@@ -7,3 +7,6 @@ public/*.js
 
 # A scratch batch an agent writes for `apply`; it is not part of the project.
 batch.json
+
+# What each description in .codespace/architecture.json was based on; it holds file times, so it is per machine.
+.codespace/ingested.json

@@ -4,6 +4,9 @@
  *
  *   node src/cli/Cli.ts next [--size N]      the next files or folders without a complete entry
  *   node src/cli/Cli.ts apply --file <json>  write systems, layers, tags, and summaries back; - reads stdin
+ *   node src/cli/Cli.ts refine [--size N]    the second pass: layer breaks, files that fit elsewhere, and layering problems
+ *   node src/cli/Cli.ts sync                 carry entries along with moved files and drop those for files that are gone
+ *   node src/cli/Cli.ts install              leave the upkeep rules in the repository, so its architecture file is kept true
  *   node src/cli/Cli.ts status               how much is left to describe
  *   node src/cli/Cli.ts repo                 which repository it reads, and where
  *
@@ -15,19 +18,28 @@ import { pathToFileURL } from 'node:url'
 import { Architecture, type IArchitecturePatch } from '../repo/Architecture.ts'
 import { Graph } from '../repo/Graph.ts'
 import { DefaultBatch, NextBatchAsync, StatusAsync } from '../repo/Ingest.ts'
+import { InstallAsync } from '../repo/Install.ts'
+import { Ledger } from '../repo/Ledger.ts'
+import { DefaultRefineSize, Refine } from '../repo/Refine.ts'
+import { SyncAsync } from '../repo/Sync.ts'
 import { Repo } from '../repo/Repo.ts'
 
 /** The usage, printed by --help and by a command that is missing. */
 const Usage = `Usage: node src/cli/Cli.ts <command> [--repo <folder>]
 
   repo                       which repository it reads, and where
-  status                     how many files and folders still need a summary
-  next [--size N]            the next files or folders to describe, with their source
+  status                     how many files and folders still need a summary, have changed, or are stale
+  sync                       carry entries along with moved files and drop those for files that are gone (next does this too)
+  next [--size N]            the next files or folders to describe or review, with their source
+  refine [--size N]          the second pass, once everything is described: the imports that point up the layers,
+                             files that would sit better on another layer or in another system, and layering problems
+  install                    write the upkeep rules into the repository (a note in AGENTS.md, the rules in .codespace/README.md),
+                             so whoever changes the code later keeps its architecture file true
   apply --file <json>        write {"systems": {...}, "layers": [...], "files": {...}, "folders": {...}} back; - reads stdin
 
 Options:
   --repo <folder>            the repository (default CODESPACE_REPO, else the current folder)
-  --size <n>                 how many files or folders next hands back, at most 40
+  --size <n>                 how many files, folders, or report items next and refine hand back, at most 40
   --file <path>              the JSON change for apply`
 
 /**
@@ -68,8 +80,16 @@ export async function RunAsync(args: readonly string[]): Promise<number>
             return 0
         }
 
+        if (command === 'sync')
+        {
+            console.log(JSON.stringify({ ok: true, ...await SyncAsync(repo) }))
+            return 0
+        }
+
         if (command === 'next')
         {
+            // Entries follow moved files and leave deleted ones first, so neither is described again from nothing.
+            await SyncAsync(repo)
             const size = Math.max(1, Math.min(40, Number(option('--size')) || DefaultBatch))
             const known = await repo.ListFilesAsync()
             const architecture = await Architecture.ReadAsync(repo.Root, known)
@@ -85,6 +105,21 @@ export async function RunAsync(args: readonly string[]): Promise<number>
             return 0
         }
 
+        if (command === 'install')
+        {
+            console.log(JSON.stringify({ ok: true, ...await InstallAsync(repo.Root) }))
+            return 0
+        }
+
+        if (command === 'refine')
+        {
+            const size = Math.max(1, Math.min(40, Number(option('--size')) || DefaultRefineSize))
+            const architecture = await Architecture.ReadAsync(repo.Root, await repo.ListFilesAsync())
+            const graph = await Graph.BuildAsync(repo)
+            console.log(JSON.stringify({ name: repo.Name, root: repo.Root, ...Refine(architecture, graph.Edges(), size) }))
+            return 0
+        }
+
         if (command === 'apply')
         {
             const source = option('--file')
@@ -92,7 +127,10 @@ export async function RunAsync(args: readonly string[]): Promise<number>
             const text = source === '-' ? await ReadStdinAsync() : await readFile(resolve(source), 'utf8')
             const change: unknown = JSON.parse(text)
             if (typeof change !== 'object' || change === null || Array.isArray(change)) throw new Error('The change must be a JSON object: {"files": {...}, "folders": {...}}.')
-            const updated = await Architecture.UpdateAsync(repo.Root, await repo.ListFilesAsync(), change as IArchitecturePatch)
+            const patch = change as IArchitecturePatch
+            const updated = await Architecture.UpdateAsync(repo.Root, await repo.ListFilesAsync(), patch)
+            // Every file the change names is now described from its text as it stands, so it is not offered again until it changes.
+            await Ledger.RecordAsync(repo, Object.keys(patch.files ?? {}))
             console.log(JSON.stringify({ ok: true, notes: updated.notes }))
             return 0
         }

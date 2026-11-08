@@ -24,11 +24,19 @@ const MaxDetail = 160
 /** The most past chats listed. */
 const MaxChats = 30
 
-/** What the chat is asked when the Repo panel's Describe button is pressed. */
-export const DescribePrompt = 'Describe this repository for the map. Run the status, next, and apply loop from your ' +
+/** What the chat is asked when the Repo panel's Ingest Codebase button is pressed. */
+export const DescribePrompt = 'Describe this repository for the map, or bring its description up to date if it was ' +
+    'described before: the same loop does both, handing back only what is new or changed. Start by running install, as ' +
+    'your instructions say. Then run the status, next, and apply loop from your ' +
     'instructions, applying each batch as you go, until next reports "remaining": 0, folders last. Declare the systems ' +
-    'and layers first if there are none. Do not stop to ask me anything; when it is done, tell me in two or three lines ' +
-    'how you split it into systems and layers.'
+    'and layers first if there are none. Then do the second pass from your instructions: run refine, and improve the ' +
+    'layers and systems from what it finds, unless nothing changed. Do not stop to ask me anything; when it is done, tell me in a few lines how ' +
+    'you split it into systems and layers, and what the second pass changed.'
+
+/** What the chat is asked when the Repo panel's Refine button is pressed, on a repository already described. */
+export const RefinePrompt = 'This repository is already described. Do the second pass from your instructions: run refine, ' +
+    'and improve the layers and systems from what it finds, until it settles. Do not stop to ask me anything; when it is ' +
+    'done, tell me in a few lines what you changed and what you left.'
 
 /** One line of a chat, as the page shows it. */
 export interface IChatLine
@@ -175,6 +183,15 @@ export class Chat
         await this.CloseAsync()
         this.notify({ kind: 'changed' })
         await this.SendAsync(DescribePrompt)
+    }
+
+    /** Starts a new chat that refines the layers and systems of an already described repository. */
+    public async RefineAsync(): Promise<void>
+    {
+        if (this.busy) throw new Error('The chat is busy; stop its reply or wait, then try again.')
+        await this.CloseAsync()
+        this.notify({ kind: 'changed' })
+        await this.SendAsync(RefinePrompt)
     }
 
     /** Stops the reply under way, keeping what was said so far. */

@@ -1,5 +1,6 @@
 import { Architecture, type IArchitecture } from './Architecture.ts'
 import type { Graph } from './Graph.ts'
+import { Ledger } from './Ledger.ts'
 import type { Repo } from './Repo.ts'
 
 /** The most items one batch holds unless asked for more. */
@@ -31,6 +32,10 @@ export interface IIngestFile
 {
     /** Its repository-relative path. */
     path: string
+    /** Why it is here: new to the map, changed since its entry was written, or an entry still missing a field. */
+    reason: 'new' | 'changed' | 'incomplete'
+    /** What its entry says now, so a changed file is judged against it. Empty for a new file. */
+    current: { summary?: string, system?: string, layer?: string, tags?: string[] }
     /** What its entry still lacks: "summary", "system", "layer", or "tags". */
     missing: string[]
     /** Its text, cut to a readable length. */
@@ -59,6 +64,10 @@ export interface IIngestStatus
     files: number
     /** Files whose entry is missing a system, a layer, or tags. */
     incomplete: number
+    /** Described files whose text has changed since their entry was written. */
+    changed: number
+    /** Entries for files and folders that are gone, which the next batch clears. */
+    stale: number
     /** Folders that still need a summary. */
     folders: number
     /** All of them together. */
@@ -104,7 +113,9 @@ interface IPlan
 {
     known: string[]
     pending: string[]
+    changed: string[]
     incomplete: string[]
+    stale: number
     skipped: Array<{ path: string, summary: string }>
     folders: string[]
 }
@@ -139,19 +150,26 @@ async function PlanAsync(repo: Repo, architecture: IArchitecture): Promise<IPlan
     // Generated and vendored files are settled here, so the agent never spends a read on them.
     const skipped: Array<{ path: string, summary: string }> = []
     const pending: string[] = []
+    const described: string[] = []
     const incomplete: string[] = []
     for (const path of known)
     {
         const fixed = SkippedSummary(path)
         if (fixed !== null) { if (!summaries.has(path)) skipped.push({ path, summary: fixed }); continue }
         if (!summaries.has(path)) { pending.push(path); continue }
-
-        // A file that is summarized but has no system, layer, or tags comes back for a second pass.
-        if (Lacks(architecture, path).some((field) => field !== 'summary')) incomplete.push(path)
+        described.push(path)
     }
 
+    // A described file whose text is no longer what its entry was written from comes back for review.
+    const changed = await Ledger.ChangedAsync(repo, await Ledger.ReadAsync(repo.Root), described)
+    const changedSet = new Set(changed)
+
+    // A file that is summarized but has no system, layer, or tags comes back for a second pass.
+    for (const path of described) if (!changedSet.has(path) && Lacks(architecture, path).some((field) => field !== 'summary')) incomplete.push(path)
+
     const folders = [...Architecture.Folders(known)].filter((path) => architecture.folders[path] === undefined)
-    return { known, pending, incomplete, skipped, folders }
+    const stale = await Architecture.StaleAsync(repo.Root, known)
+    return { known, pending, changed, incomplete, stale: stale.files.length + stale.folders.length, skipped, folders }
 }
 
 /**
@@ -163,8 +181,8 @@ export async function StatusAsync(repo: Repo, architecture: IArchitecture): Prom
 {
     const plan = await PlanAsync(repo, architecture)
     return {
-        files: plan.pending.length, incomplete: plan.incomplete.length, folders: plan.folders.length,
-        remaining: plan.pending.length + plan.incomplete.length + plan.folders.length,
+        files: plan.pending.length, incomplete: plan.incomplete.length, changed: plan.changed.length, stale: plan.stale, folders: plan.folders.length,
+        remaining: plan.pending.length + plan.incomplete.length + plan.changed.length + plan.stale + plan.folders.length,
     }
 }
 
@@ -177,19 +195,20 @@ export async function StatusAsync(repo: Repo, architecture: IArchitecture): Prom
  */
 export async function NextBatchAsync(repo: Repo, architecture: IArchitecture, graph: Graph, size: number): Promise<IIngestBatch>
 {
-    const { known, pending, incomplete, skipped, folders } = await PlanAsync(repo, architecture)
+    const { known, pending, changed, incomplete, stale, skipped, folders } = await PlanAsync(repo, architecture)
     const summaries = new Map<string, string>()
     for (const [path, entry] of Object.entries(architecture.files)) if (entry.summary !== undefined) summaries.set(path, entry.summary)
-    const remaining = pending.length + incomplete.length + folders.length
+    const remaining = pending.length + incomplete.length + changed.length + stale + folders.length
     const layers = architecture.layers
     const systems = Object.keys(architecture.systems)
 
     /** What one file's entry still lacks. */
     const missing = (path: string): string[] => Lacks(architecture, path)
 
-    // Files come first: undescribed ones, then those whose entry is missing a system, layer, or tags. A folder
-    // is only ready once every file under it has been described.
-    const pool = [...pending, ...incomplete]
+    // Files come first: undescribed ones, then those that changed, then those whose entry is missing a system,
+    // layer, or tags. A folder is only ready once every file under it has been described.
+    const pool = [...pending, ...changed, ...incomplete]
+    const changedSet = new Set(changed), pendingSet = new Set(pending)
     if (pool.length > 0)
     {
         const usedBy = new Map<string, string[]>()
@@ -203,7 +222,8 @@ export async function NextBatchAsync(repo: Repo, architecture: IArchitecture, gr
         for (const path of pool.slice(0, size))
         {
             const full = await repo.ReadFileAsync(path).catch(() => '')
-            files.push({ path, missing: missing(path), source: full.slice(0, MaxFileChars), truncated: full.length > MaxFileChars, imports: graph.ImportsOf(path), usedBy: usedBy.get(path) ?? [] })
+            const entry = architecture.files[path]
+            files.push({ path, reason: pendingSet.has(path) ? 'new' : changedSet.has(path) ? 'changed' : 'incomplete', current: entry === undefined ? {} : { summary: entry.summary, system: entry.system, layer: entry.layer, tags: entry.tags }, missing: missing(path), source: full.slice(0, MaxFileChars), truncated: full.length > MaxFileChars, imports: graph.ImportsOf(path), usedBy: usedBy.get(path) ?? [] })
         }
         return { files, folders: [], skipped, layers, systems, remaining }
     }
