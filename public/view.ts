@@ -1,3 +1,4 @@
+import { api } from "./endpoint.js";
 import { S, V3, camera, renderEdges, pathIndex } from "./state.js";
 import { escapeHtml, select, selectFile } from "./panels.js";
 import { refreshGraph, setSpin } from "./controls.js";
@@ -82,7 +83,7 @@ document.getElementById("showing-clear")!.addEventListener("click", () =>
   clear();
   // Tell the server too, so a page opened later does not light the files again. It may refuse, from a
   // page that is not on the machine running it; the page is cleared either way.
-  fetch("/api/view", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "clear" }) }).catch(() => {});
+  fetch(api("view"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "clear" }) }).catch(() => {});
 });
 
 // Selects a file or folder and glides the camera to it.
@@ -113,7 +114,7 @@ function focus(path: string): void
 
 // The server streams what tools ask for. EventSource reconnects by itself, and the server
 // tells a page that connects late what is already being shown.
-const events = new EventSource("/api/view/events");
+const events = new EventSource(api("view/events"));
 events.onmessage = (message) =>
 {
   const event = JSON.parse(message.data);

@@ -23,6 +23,10 @@ Add `--allow-writes` (or `CODESPACE_ALLOW_WRITES=1`) to accept changes from othe
 machines too — needed when you watch from a laptop over the network or through a
 proxy such as Tailscale Serve. Without it, only this machine can change anything.
 
+Add `--no-chat` (or `CODESPACE_CHAT=0`) when another program runs its own agent against the map. One
+server can show several repositories at once: open `/?repo=/abs/folder` for each, and each page keeps
+to its own (see `AGENTS.md`).
+
 A big repository draws only the files that already have an architecture entry until it is
 fully described — the *Described only* toggle in the Outliner's grouping menu draws them all.
 
@@ -107,7 +111,7 @@ without refreshing.
 - `src/repo/Repo.ts` — reads a folder as a repository: file list, safe reads, ignored
   folders, and a cheap change stamp.
 - `src/server/Server.ts` — the page (compressed, with validators), the installed Babylon at one unversioned address, `/api/bootstrap`, the source API, the changed-line counts, and switching repositories.
-- `src/server/Workspace.ts` — the repository being read, and the recent ones the page can switch back to.
+- `src/server/Workspace.ts` — the repository being read, the recent ones the page can switch back to, and those a page or tool asks for with `?repo=`.
 - `src/repo/Architecture.ts` — reads, checks, and safely changes a repository's `.codespace/architecture.json`.
 - `src/server/Api.ts` — the endpoints the page and agents use: the architecture, the import graph, the ingest status, next and refine, the tool list, what the map shows, and the chat.
 - `src/server/Tools.ts` — the one list of what an agent can do with the map, served at `/api/tools` for a host to register as its own tools, and the source of the chat's endpoint list.
@@ -130,6 +134,7 @@ without refreshing.
 - `src/cli/Cli.ts` — the commands an agent runs to describe a repository, with no server or MCP.
 - `src/cli/Options.ts` — reads `--name value` or `--name=value` options from a command line.
 - `public/index.html` — the map page: the scene and its controls.
+- `public/endpoint.ts` — every API address the page uses, relative to the page and carrying its `?repo=`.
 - `public/main.ts` — the entry: pointer interaction, the render loop, and boot.
 - `public/state.ts` — the shared world: constants, the Babylon scene, and the live state.
 - `public/repo.ts` — reads the live repository into nodes and edges, taking the import graph from the server.

@@ -102,6 +102,12 @@
       "tags": ["core"],
       "summary": "Draws the import edges, tethers, and route strands between the files' boxes."
     },
+    "public/endpoint.ts": {
+      "system": "browser",
+      "layer": "model",
+      "tags": ["io"],
+      "summary": "Builds every address the page uses to reach the server, relative to the page and carrying its ?repo=."
+    },
     "public/filter.ts": {
       "system": "browser",
       "layer": "model",
@@ -376,7 +382,7 @@
       "system": "server",
       "layer": "api",
       "tags": ["orchestrate"],
-      "summary": "Holds the repository the map is reading now and the recent ones it can switch between."
+      "summary": "The repositories a server reads: its own, which a page can switch, and those asked for with ?repo=, each with its own view."
     },
     "tests/Api.test.ts": {
       "system": "meta",
@@ -437,6 +443,12 @@
       "layer": "tests",
       "tags": ["test"],
       "summary": "Tests the one write path: whole writes with no temporary file left, and a .codespace path that is a file being refused untouched."
+    },
+    "tests/Pinned.test.ts": {
+      "system": "meta",
+      "layer": "tests",
+      "tags": ["test"],
+      "summary": "Tests that ?repo= reads another repository beside the server's own, who may open one, and the server without its chat."
     },
     "tests/Refine.test.ts": {
       "system": "meta",

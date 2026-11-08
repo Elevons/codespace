@@ -7,7 +7,8 @@
 <link rel="stylesheet" href="style.css">
 <script>
   // Ask for the repository now, while the scene library is still downloading; the page takes the answer once it has loaded.
-  window.__bootstrap = fetch("/api/bootstrap", { cache: "no-cache" }).then((r) => r.ok ? r.json() : null).catch(() => null);
+  // The address is relative, so the map works under a proxy's path, and carries the page's ?repo= (as endpoint.ts does).
+  window.__bootstrap = fetch("api/bootstrap" + (new URLSearchParams(location.search).get("repo") ? "?repo=" + encodeURIComponent(new URLSearchParams(location.search).get("repo")) : ""), { cache: "no-cache" }).then((r) => r.ok ? r.json() : null).catch(() => null);
 </script>
 </head>
 <body>
@@ -214,7 +215,7 @@
   <p class="hint key-only">Filter the map from the Outliner's strip (<kbd>Alt</kbd>-click solos a chip); an eye hides a row in the scene. In search, <kbd>↑</kbd> <kbd>↓</kbd> pick a match, <kbd>Enter</kbd> chooses it, <kbd>Esc</kbd> empties it. In the tree, arrows move and fold, <kbd>Enter</kbd> chooses, <kbd>Shift</kbd><kbd>Enter</kbd> or a double-click opens the source, <kbd>Space</kbd> flips the eye.</p>
 </div>
 
-<script src="/vendor/babylon.js"></script>
+<script src="vendor/babylon.js"></script>
 <script type="module" src="main.js"></script>
 </body>
 </html>

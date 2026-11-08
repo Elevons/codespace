@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path'
 import type { Chat } from '../src/agent/Chat.ts'
 import { Api } from '../src/server/Api.ts'
 import { Server as CodespaceServer } from '../src/server/Server.ts'
-import { Workspace } from '../src/server/Workspace.ts'
+import { Workspace, Workspaces } from '../src/server/Workspace.ts'
 
 /** Makes an empty temporary repository folder, named with the given prefix. */
 export function makeTemp(prefix: string): Promise<string>
@@ -53,16 +53,19 @@ export interface IApiHandle
 export async function startApi(root: string, options: { allowWrites?: boolean, cli?: string, chat?: Chat | null } = {}): Promise<IApiHandle>
 {
     const workspace = await Workspace.OpenAsync(root)
+    const workspaces = new Workspaces(workspace)
     let api: Api
     const server: Server = createServer((req, res) =>
     {
-        api.HandleAsync(req, res, new URL(req.url!, 'http://localhost'))
+        const url = new URL(req.url!, 'http://localhost')
+        workspaces.ForAsync(url.searchParams.get('repo'))
+            .then((chosen) => api.HandleAsync(req, res, url, chosen))
             .then((handled) => { if (!handled) { res.writeHead(404); res.end() } })
             .catch((error) => { res.writeHead(500); res.end(String(error)) })
     })
     await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
     const port = (server.address() as AddressInfo).port
-    api = new Api(workspace, options.allowWrites ?? false, options.cli ?? 'src/cli/Cli.ts', options.chat ?? null)
+    api = new Api(options.allowWrites ?? false, options.cli ?? 'src/cli/Cli.ts', options.chat ?? null)
     return { port, workspace, api, stop: () => new Promise((done) => { server.closeAllConnections(); server.close(() => done()) }) }
 }
 
@@ -78,12 +81,12 @@ export interface IServerHandle
  * Starts the full map server on an ephemeral local port.
  * @param repoRoot the repository folder
  * @param publicRoot the folder holding the page and its assets
- * @param options the write rule and the address the chat's agent reaches the server at
+ * @param options the write rule, the address the chat's agent reaches the server at, and whether it runs the chat
  */
-export async function startServer(repoRoot: string, publicRoot: string, options: { allowWrites?: boolean, mapUrl?: string } = {}): Promise<IServerHandle>
+export async function startServer(repoRoot: string, publicRoot: string, options: { allowWrites?: boolean, mapUrl?: string, withChat?: boolean } = {}): Promise<IServerHandle>
 {
     const workspace = await Workspace.OpenAsync(repoRoot)
-    const { http } = await CodespaceServer.CreateAsync(workspace, publicRoot, options.allowWrites ?? false, options.mapUrl ?? 'http://localhost:5190')
+    const { http } = await CodespaceServer.CreateAsync(workspace, publicRoot, options.allowWrites ?? false, options.mapUrl ?? 'http://localhost:5190', options.withChat ?? true)
     await new Promise<void>((done) => http.listen(0, '127.0.0.1', done))
     const port = (http.address() as AddressInfo).port
     return { port, workspace, stop: () => new Promise((done) => { http.closeAllConnections(); http.close(() => done()) }) }

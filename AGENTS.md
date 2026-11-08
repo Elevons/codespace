@@ -155,10 +155,22 @@ Reading, for finding the right files and steps before you show them:
 
 `POST /api/architecture` is the CLI's `apply` over HTTP: same validation, same ledger stamp.
 
+### More than one repository: `?repo=`
+
+Any `/api/` call, and the page itself (`http://localhost:5190/?repo=/abs/folder`), may name a repository with
+`?repo=<absolute path>`. That repository is opened beside the server's own, with its own view and event stream,
+so pages on different repositories do not move each other's map. A pinned page cannot switch repository, and the
+chat stays with the server's own. Opening a new one is accepted only from this machine (as for writes);
+one already open is read like the server's own. Up to 16 are held open, the least recently used let go first.
+The page reaches the server by relative addresses (`public/endpoint.ts`), so a proxy may serve it under a path.
+
+Start the server with `--no-chat` (or `CODESPACE_CHAT=0`) when a host runs its own agent; the page then hides
+the chat and its Ingest buttons. Set `HOST=127.0.0.1` to keep it off the network.
+
 ### The tool list
 
 `src/server/Tools.ts` (`MapTools`) is the one list of what an agent can do with the map. `GET /api/tools`
-serves it as `{"version": 1, "tools": [...]}` so a host such as Bartleby can register each as a tool of its
+serves it as `{"version": 1, "repoQuery": {...}, "tools": [...]}` so a host such as Bartleby can register each as a tool of its
 own that forwards the call (a GET sends the arguments as query values, a POST sends them as the JSON body with
 `fixed` merged in), and the built-in chat's endpoint list is generated from it. **When you add or change an
 endpoint an agent should use, add or change its entry in `MapTools` in the same change**; `tests/Tools.test.ts`
@@ -190,7 +202,7 @@ machine as `chat` events on the view stream. Chats and pi's settings live in `~/
   the write guard, and the switchable workspace.
 - `src/agent/` — the built-in chat: its pi agent, what that agent is told, and which model it uses.
 - `public/` — the browser side: the 3D city, the Outliner with its system/layer filters,
-  the panels and controls, the chat, and the phone sheet. `public/filter.ts`, `public/rules.ts`, and
+  the panels and controls, the chat, and the phone sheet. `public/endpoint.ts` builds every API address. `public/filter.ts`, `public/rules.ts`, and
   `public/symbols.ts` hold the pure filter, layout/visibility, and symbol rules; `public/tags.ts` is
   the one tag vocabulary the server shares.
 - `tests/` — one test file per piece of the server side, plus the dependency-free browser

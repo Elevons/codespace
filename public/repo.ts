@@ -1,3 +1,4 @@
+import { api } from "./endpoint.js";
 import { S } from "./state.js";
 import { folderOf } from "./rules.js";
 import type { Graph, GraphNode } from "./types.js";
@@ -82,7 +83,7 @@ async function fetchBootstrap(since: string | null): Promise<Bootstrap>
 {
   const early = since === null ? takePrefetched() : undefined;
   const body = (early && await early) ||
-    await fetch("/api/bootstrap" + (since === null ? "" : "?since=" + encodeURIComponent(since)), { cache: "no-cache" })
+    await fetch(api("bootstrap", since === null ? {} : { since }), { cache: "no-cache" })
       .then((response) => { if (!response.ok) throw new Error("bootstrap " + response.status); return response.json(); });
   return body as Bootstrap;
 }
@@ -223,7 +224,7 @@ async function loadGraph(since: string | null = null): Promise<Graph | null>
 // Reads one file's text from the server, refusing a stale cached copy.
 async function readSource(path: string): Promise<string>
 {
-  const response = await fetch("/api/source?path=" + encodeURIComponent(path), { cache: "no-cache" });
+  const response = await fetch(api("source", { path }), { cache: "no-cache" });
   if (!response.ok) throw new Error("source " + response.status);
   return response.text();
 }
@@ -233,7 +234,7 @@ async function loadRepo(): Promise<void>
 {
   try
   {
-    const response = await fetch("/api/repo", { cache: "no-cache" });
+    const response = await fetch(api("repo"), { cache: "no-cache" });
     if (!response.ok) return;
     const repo = await response.json();
     const name = repo.name || "Codespace";

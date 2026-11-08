@@ -11,20 +11,14 @@ import { RefineGuide } from '../repo/RefineGuide.ts'
 import { MaxFileNote, MaxNote, MaxShown, MaxTitle } from '../repo/ShowLimits.ts'
 import { Snapshot } from '../repo/Snapshot.ts'
 import { ReadJsonAsync, RefuseOutside, RefuseWrite, SendJson } from './Guard.ts'
-import { MapTools, type IToolList } from './Tools.ts'
-import type { IShownFile, View } from './View.ts'
+import { MapTools, RepoQueryDescription, type IToolList } from './Tools.ts'
+import type { IShownFile } from './View.ts'
 import type { Workspace } from './Workspace.ts'
 import type { IIngestStatus } from '../../public/ingest.ts'
 
 /** The endpoints tools and the page use to read the architecture and change what the map shows. */
 export class Api
 {
-    /** The repository being mapped. */
-    private readonly workspace: Workspace
-
-    /** What the map is showing, and the pages watching it. */
-    private readonly view: View
-
     /** Whether changes are accepted from any machine, as started with --allow-writes. */
     private readonly allowWrites: boolean
 
@@ -36,18 +30,21 @@ export class Api
 
     /**
      * Prepares the endpoints.
-     * @param workspace the repository being mapped
      * @param allowWrites whether changes are accepted from any machine, as started with --allow-writes
      * @param cli the absolute path of the ingest CLI
      * @param chat the chat built into the map, if any
      */
-    public constructor(workspace: Workspace, allowWrites = false, cli = 'src/cli/Cli.ts', chat: Chat | null = null)
+    public constructor(allowWrites = false, cli = 'src/cli/Cli.ts', chat: Chat | null = null)
     {
         this.chat = chat
-        this.workspace = workspace
         this.allowWrites = allowWrites
         this.cli = cli
-        this.view = workspace.view
+    }
+
+    /** Whether this server runs the built-in chat. */
+    public get HasChat(): boolean
+    {
+        return this.chat !== null
     }
 
     /**
@@ -55,31 +52,33 @@ export class Api
      * @param request the incoming request
      * @param response the response to write
      * @param url the request's URL
+     * @param workspace the repository the request reads, its own ?repo= or the server's
      * @returns whether the request was one of these endpoints, and so has been answered
      */
-    public async HandleAsync(request: IncomingMessage, response: ServerResponse, url: URL): Promise<boolean>
+    public async HandleAsync(request: IncomingMessage, response: ServerResponse, url: URL, workspace: Workspace): Promise<boolean>
     {
         const path = url.pathname
+        const view = workspace.view
         const reading = request.method === 'GET' || request.method === 'HEAD'
 
         if (path === '/api/tools' && reading)
         {
-            const body: IToolList = { version: 1, tools: [...MapTools] }
+            const body: IToolList = { version: 1, repoQuery: { name: 'repo', description: RepoQueryDescription }, tools: [...MapTools] }
             SendJson(response, 200, body, request)
         }
         else if (path === '/api/architecture' && reading)
         {
-            const repo = this.workspace.repo
+            const repo = workspace.repo
             SendJson(response, 200, await Architecture.ReadAsync(repo.Root, await repo.ListFilesAsync()), request)
         }
         else if (path === '/api/graph' && reading)
         {
-            const snapshot = await Snapshot.ReadAsync(this.workspace.repo)
+            const snapshot = await Snapshot.ReadAsync(workspace.repo)
             SendJson(response, 200, { edges: Graph.EdgesUnder(snapshot.edges, url.searchParams.get('folder') ?? '') }, request)
         }
         else if (path === '/api/ingest/status' && reading)
         {
-            const repo = this.workspace.repo
+            const repo = workspace.repo
             const architecture = await Architecture.ReadAsync(repo.Root, await repo.ListFilesAsync())
             const status = await StatusAsync(repo, architecture)
             // The second pass only has something to say once the first is done.
@@ -94,21 +93,23 @@ export class Api
         }
         else if (path === '/api/ingest/refine' && reading)
         {
-            const repo = this.workspace.repo
+            const repo = workspace.repo
             const architecture = await Architecture.ReadAsync(repo.Root, await repo.ListFilesAsync())
             const size = ClampSize(url.searchParams.get('size'), DefaultRefineSize)
             SendJson(response, 200, { name: repo.Name, root: repo.Root, ...Refine(architecture, (await Snapshot.ReadAsync(repo)).edges, size) })
         }
-        else if (path === '/api/view' && reading) SendJson(response, 200, { shown: this.view.Shown })
-        else if (path === '/api/view/events' && reading) this.view.Subscribe(response, RefuseOutside(request, this.allowWrites) === null)
-        else if (path === '/api/chat' && this.chat !== null)
+        else if (path === '/api/view' && reading) SendJson(response, 200, { shown: view.Shown })
+        else if (path === '/api/view/events' && reading) view.Subscribe(response, RefuseOutside(request, this.allowWrites) === null)
+        else if (path === '/api/chat' && (this.chat === null || workspace.pinned)) SendJson(response, 404, { error: this.chat === null ? 'This server was started without the chat.' : "The chat reads only the server's own repository, not one opened with ?repo=." })
+        else if (path === '/api/chat')
         {
+            const chat = this.chat!
             // The chat runs commands in the repository, so even reading it is kept to this machine.
             const refusal = reading ? RefuseOutside(request, this.allowWrites) : RefuseWrite(request, this.allowWrites)
             if (refusal !== null) { SendJson(response, 403, { error: refusal }); return true }
-            if (reading) { SendJson(response, 200, await this.chat.StateAsync()); return true }
+            if (reading) { SendJson(response, 200, await chat.StateAsync()); return true }
             if (request.method !== 'POST') { SendJson(response, 405, { error: 'The chat takes GET or POST.' }); return true }
-            try { await this.ChangeChatAsync(this.chat, await ReadJsonAsync(request)); SendJson(response, 200, { ok: true }) }
+            try { await this.ChangeChatAsync(chat, await ReadJsonAsync(request)); SendJson(response, 200, { ok: true }) }
             catch (error) { SendJson(response, 400, { error: (error as Error).message }) }
         }
         else if ((path === '/api/architecture' || path === '/api/view' || path === '/api/ingest/next') && request.method === 'POST')
@@ -120,9 +121,9 @@ export class Api
             catch (error) { SendJson(response, 400, { error: (error as Error).message }); return true }
             try
             {
-                if (path === '/api/architecture') await this.UpdateArchitectureAsync(response, body)
-                else if (path === '/api/ingest/next') await this.SendNextAsync(response, body)
-                else await this.ChangeViewAsync(response, body)
+                if (path === '/api/architecture') await this.UpdateArchitectureAsync(response, body, workspace)
+                else if (path === '/api/ingest/next') await this.SendNextAsync(response, body, workspace)
+                else await this.ChangeViewAsync(response, body, workspace)
             }
             catch (error) { SendJson(response, 400, { error: (error as Error).message }) }
         }
@@ -132,9 +133,9 @@ export class Api
             if (refusal !== null) { SendJson(response, 403, { error: refusal }); return true }
             try
             {
-                await Architecture.DeleteAsync(this.workspace.repo.Root)
-                this.view.ArchitectureChanged()
-                const repo = this.workspace.repo
+                await Architecture.DeleteAsync(workspace.repo.Root)
+                view.ArchitectureChanged()
+                const repo = workspace.repo
                 SendJson(response, 200, await Architecture.ReadAsync(repo.Root, await repo.ListFilesAsync()))
             }
             catch (error) { SendJson(response, 400, { error: (error as Error).message }) }
@@ -147,13 +148,14 @@ export class Api
      * Changes the architecture file, and tells the pages to read it again.
      * @param response the response to write
      * @param body the change, as sent
+     * @param workspace the repository it changes
      */
-    private async UpdateArchitectureAsync(response: ServerResponse, body: Record<string, unknown>): Promise<void>
+    private async UpdateArchitectureAsync(response: ServerResponse, body: Record<string, unknown>, workspace: Workspace): Promise<void>
     {
-        const repo = this.workspace.repo
+        const repo = workspace.repo
         const updated = await Architecture.UpdateAsync(repo.Root, await repo.ListFilesAsync(), body as IArchitecturePatch)
         await Ledger.RecordAsync(repo, Object.keys((body as IArchitecturePatch).files ?? {}))
-        this.view.ArchitectureChanged()
+        workspace.view.ArchitectureChanged()
         SendJson(response, 200, updated)
     }
 
@@ -162,12 +164,13 @@ export class Api
      * can write: moved entries follow their files and generated files are settled.
      * @param response the response to write
      * @param body the request, as sent, with an optional size
+     * @param workspace the repository to describe
      */
-    private async SendNextAsync(response: ServerResponse, body: Record<string, unknown>): Promise<void>
+    private async SendNextAsync(response: ServerResponse, body: Record<string, unknown>, workspace: Workspace): Promise<void>
     {
-        const repo = this.workspace.repo
+        const repo = workspace.repo
         const batch = await TakeNextAsync(repo, ClampSize(body.size, DefaultBatch))
-        this.view.ArchitectureChanged()
+        workspace.view.ArchitectureChanged()
         SendJson(response, 200, { name: repo.Name, root: repo.Root, ...batch })
     }
 
@@ -192,14 +195,16 @@ export class Api
      * Shows files, focuses one, or clears what is shown.
      * @param response the response to write
      * @param body the request, as sent
+     * @param workspace the repository whose map it changes
      */
-    private async ChangeViewAsync(response: ServerResponse, body: Record<string, unknown>): Promise<void>
+    private async ChangeViewAsync(response: ServerResponse, body: Record<string, unknown>, workspace: Workspace): Promise<void>
     {
-        const known = new Set(await this.workspace.repo.ListFilesAsync())
+        const view = workspace.view
+        const known = new Set(await workspace.repo.ListFilesAsync())
 
         if (body.action === 'clear')
         {
-            this.view.Clear()
+            view.Clear()
             SendJson(response, 200, { ok: true })
         }
         else if (body.action === 'focus')
@@ -207,7 +212,7 @@ export class Api
             const path = typeof body.path === 'string' ? body.path.replace(/^\.?\/+|\/+$/g, '') : ''
             const isFolder = path === '' || [...known].some((file) => file.startsWith(path + '/'))
             if (!known.has(path) && !isFolder) throw new Error(`"${path}" is not a file or folder in the repository.`)
-            this.view.Focus(path)
+            view.Focus(path)
             SendJson(response, 200, { ok: true })
         }
         else if (body.action === 'show')
@@ -223,7 +228,7 @@ export class Api
                 else unknown.push(path)
             }
             if (files.length === 0) throw new Error('None of those paths are files in the repository.')
-            this.view.Show({
+            view.Show({
                 files, trace: body.trace === true,
                 title: typeof body.title === 'string' ? body.title.slice(0, MaxTitle) : '',
                 note: typeof body.note === 'string' ? body.note.slice(0, MaxNote) : '',

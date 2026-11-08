@@ -725,3 +725,8 @@
   #mpane-chat .starter { font-size: 14px; padding: 8px 12px; }
   #mpane-chat .csteps { font-size: 13px; }
   #mpane-chat .csteps summary { padding: 6px 0; }
+
+/* A server run without its chat, or a page opened on one repository with ?repo=, hides what cannot work there. */
+body.no-chat #chat-btn, body.no-chat #chat-panel, body.no-chat #mtabs [data-tab="chat"],
+body.no-chat #repo-ingest-run, body.no-chat #repo-ingest-refine, body.no-chat #repo-ingest-saved { display: none !important; }
+body.pinned #repo-form, body.pinned #repo-browse, body.pinned #repo-recent { display: none !important; }

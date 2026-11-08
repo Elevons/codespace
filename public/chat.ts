@@ -4,6 +4,7 @@
 // phone's Chat tab) only says when it is working or has a reply waiting. Open, a status line says
 // what it is doing now, its steps fold into one line, and file names in a reply lead to the file.
 
+import { api } from "./endpoint.js";
 import { S } from "./state.js";
 import { escapeHtml } from "./panels.js";
 import { focusPath } from "./view.js";
@@ -189,7 +190,7 @@ function renderControls(): void
 
 async function post(body: Record<string, unknown>): Promise<boolean>
 {
-  const response = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+  const response = await fetch(api("chat"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
   if (response && response.ok) return true;
   const error = response ? ((await response.json().catch(() => ({}))) as { error?: string }).error : "The server could not be reached.";
   lines.push({ role: "error", text: error || "That did not work." });
@@ -200,13 +201,16 @@ async function post(body: Record<string, unknown>): Promise<boolean>
 // Reads the whole chat back from the server, which holds the truth once a reply has ended.
 async function load(): Promise<void>
 {
-  const response = await fetch("/api/chat", { cache: "no-store" }).catch(() => null);
+  const response = await fetch(api("chat"), { cache: "no-store" }).catch(() => null);
   if (!response || !response.ok)
   {
     // A server started before the chat existed has no /api/chat at all, so say to restart it.
+    // A server without the chat, or a page on a repository opened with ?repo=, says why in its error.
+    const said = response ? ((await response.json().catch(() => ({}))) as { error?: string }).error ?? "" : "";
     const error = !response ? "The server could not be reached."
+      : said !== "" ? said
       : response.status === 404 ? "This server has no chat yet. Restart it (npm start) to load the chat."
-      : ((await response.json().catch(() => ({}))) as { error?: string }).error ?? "";
+      : "";
     available = false;
     modelNote.textContent = error || "The chat is not available.";
     modelNote.classList.add("problem");

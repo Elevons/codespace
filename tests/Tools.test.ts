@@ -71,6 +71,7 @@ test('The map serves its tool list, and every tool answers through the real serv
         const listed = await send(port, '/api/tools')
         assert.equal(listed.status, 200)
         assert.equal(listed.body.version, 1)
+        assert.equal(listed.body.repoQuery.name, 'repo')
         assert.deepEqual(listed.body.tools, JSON.parse(JSON.stringify(MapTools)))
 
         // Switching repositories is last, so every other tool reads the test repository.

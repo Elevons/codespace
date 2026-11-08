@@ -2,6 +2,7 @@
 // how much of the codebase is still undescribed. Describing it is an agent's job, with the CLI: this
 // panel copies the command prompt for an agent outside, and the Chat panel (chat.ts) runs one inside.
 
+import { api } from "./endpoint.js";
 import { copyText } from "./state.js";
 import type { IIngestStatus } from "./ingest.js";
 
@@ -11,6 +12,10 @@ interface IRepoInfo
   name: string;
   root: string;
   recent: Array<{ name: string; root: string }>;
+  /** Whether the page was opened on this repository with ?repo=, so it cannot switch. */
+  pinned?: boolean;
+  /** Whether the built-in chat is there for this page. */
+  chat?: boolean;
 }
 
 /** One folder the picker can walk into. */
@@ -80,7 +85,7 @@ async function refreshStatus(): Promise<void>
 {
   try
   {
-    const status: IIngestStatus = await fetch("/api/ingest/status", { cache: "no-cache" }).then((response) => response.json());
+    const status: IIngestStatus = await fetch(api("ingest/status"), { cache: "no-cache" }).then((response) => response.json());
     ingest.hidden = false;
     ingestPrompt = status.prompt;
     savedNote.textContent = "The chat saves to .codespace/architecture.json as it goes.";
@@ -121,8 +126,7 @@ async function browse(path: string | null): Promise<void>
 {
   try
   {
-    const query = path === null ? "" : "?path=" + encodeURIComponent(path);
-    const response = await fetch("/api/browse" + query, { cache: "no-cache" });
+    const response = await fetch(api("browse", path === null ? {} : { path }), { cache: "no-cache" });
     const body: IBrowse & { error?: string } = await response.json();
     if (!response.ok) throw new Error(body.error ?? "That folder cannot be listed.");
     browsing = body.path;
@@ -173,12 +177,16 @@ function renderRecent(): void
 /** Reads what the server is reading, and updates the button and list. */
 async function refreshInfo(): Promise<void>
 {
-  info = await fetch("/api/repo", { cache: "no-cache" }).then((response) => response.json());
+  info = await fetch(api("repo"), { cache: "no-cache" }).then((response) => response.json());
+  // A page opened with ?repo= keeps to that repository, and a server run by a host with its own agent has no
+  // chat, so the controls for either are taken away (style.css).
+  document.body.classList.toggle("pinned", info!.pinned === true);
+  document.body.classList.toggle("no-chat", info!.chat === false);
   const name = document.createElement("span");
   name.className = "repo-name";
   name.textContent = info!.name;
   button.replaceChildren("Repo", name);
-  button.title = info!.root + " — click to open another repository";
+  button.title = info!.root + (info!.pinned ? "" : " — click to open another repository");
   pathInput.placeholder = info!.root;
   renderRecent();
 }
@@ -193,7 +201,7 @@ async function open(path: string): Promise<void>
   openButton.disabled = true;
   try
   {
-    const response = await fetch("/api/repo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
+    const response = await fetch(api("repo"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error ?? "That folder could not be opened.");
     location.reload();
@@ -220,7 +228,7 @@ async function deleteArchitecture(): Promise<void>
   deleteCancel.disabled = true;
   try
   {
-    const response = await fetch("/api/architecture", { method: "DELETE", headers: { "Content-Type": "application/json" } });
+    const response = await fetch(api("architecture"), { method: "DELETE", headers: { "Content-Type": "application/json" } });
     const body = await response.json();
     if (!response.ok) throw new Error(body.error ?? "The architecture folder could not be deleted.");
     location.reload();
@@ -301,7 +309,7 @@ async function startChat(action: "describe" | "refine", from: HTMLButtonElement)
   from.disabled = true;
   try
   {
-    const response = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
+    const response = await fetch(api("chat"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
     if (!response.ok) throw new Error(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "The chat could not start.");
     hidePanel();
     window.dispatchEvent(new Event("codespace:open-chat"));

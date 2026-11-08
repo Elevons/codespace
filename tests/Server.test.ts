@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { request as httpRequest } from 'node:http'
 import { execFile } from 'node:child_process'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { gunzipSync } from 'node:zlib'
@@ -148,10 +148,18 @@ test('Server hands out the installed Babylon at one address, with a validator', 
     finally { await removeTemp(repoRoot, publicRoot) }
 })
 
-test('The page loads Babylon from the one installed build', async () =>
+test('The page loads Babylon from the one installed build, and reaches the server by relative addresses', async () =>
 {
     const html = await readFile(join(import.meta.dirname, '..', 'public', 'index.html'), 'utf8')
-    assert.ok(html.includes('/vendor/babylon.js'), 'index.html must load /vendor/babylon.js')
+    assert.ok(html.includes('src="vendor/babylon.js"'), 'index.html must load vendor/babylon.js, relative to the page')
+    // A proxy may serve the map under a path of its own, so no address may start at the site's root.
+    assert.doesNotMatch(html, /(src|href)="\/|fetch\("\//)
+    for (const name of await readdir(join(import.meta.dirname, '..', 'public')))
+    {
+        if (!name.endsWith('.ts') || name.endsWith('.d.ts')) continue
+        const text = await readFile(join(import.meta.dirname, '..', 'public', name), 'utf8')
+        assert.doesNotMatch(text, /["'`]\/api\//, `${name} reaches the server through endpoint.ts`)
+    }
 })
 
 test('The repository endpoint lists the current repository and switches to another', async () =>
