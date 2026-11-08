@@ -1,8 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdir, rename, rm, utimes, writeFile } from 'node:fs/promises'
+import { rename, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { makeTemp, removeTemp } from './support.ts'
+import { makeRepo, removeTemp } from './support.ts'
 import { Architecture } from '../src/repo/Architecture.ts'
 import { Graph } from '../src/repo/Graph.ts'
 import { NextBatchAsync, StatusAsync } from '../src/repo/Ingest.ts'
@@ -13,10 +13,7 @@ import { SyncAsync } from '../src/repo/Sync.ts'
 /** A described repository: two files, fully described and recorded the way `apply` does. */
 async function described(): Promise<{ root: string, repo: Repo }>
 {
-    const root = await makeTemp('codespace-update-')
-    await mkdir(join(root, 'src'))
-    await writeFile(join(root, 'src', 'a.ts'), 'export const a = 1\n')
-    await writeFile(join(root, 'src', 'b.ts'), 'export const b = 2\n')
+    const root = await makeRepo({ 'src/a.ts': 'export const a = 1\n', 'src/b.ts': 'export const b = 2\n' }, 'codespace-update-')
     const repo = await Repo.OpenAsync(root)
     const files = {
         'src/a.ts': { summary: 'A.', system: 'app', layer: 'base', tags: ['core'] },
@@ -113,6 +110,25 @@ test('Forgetting an entry for a file that is still there is refused', async () =
     try
     {
         await assert.rejects(Architecture.UpdateAsync(repo.Root, await repo.ListFilesAsync(), { forget: ['src/a.ts'] }), /still in the repository/)
+    }
+    finally { await removeTemp(root) }
+})
+
+test('A file whose size and time are unchanged but whose text differs still counts as changed', async () =>
+{
+    const { root, repo } = await described()
+    try
+    {
+        const path = join(root, 'src', 'a.ts')
+        const before = await stat(path)
+        await writeFile(path, 'export const a = 2\n')
+        await utimes(path, before.atime, before.mtime)
+        const after = await stat(path)
+        assert.equal(after.size, before.size)
+        assert.ok(Math.abs(after.mtimeMs - before.mtimeMs) <= 1)
+
+        const record = await Ledger.ReadAsync(repo.Root)
+        assert.deepEqual(await Ledger.ChangedAsync(repo, record, ['src/a.ts']), ['src/a.ts'])
     }
     finally { await removeTemp(root) }
 })

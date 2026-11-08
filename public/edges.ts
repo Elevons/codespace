@@ -2,6 +2,9 @@ import { S, V3, scene, glowMaterial, materialFor, filePath, matchesFilters, hasF
 import { routeFolderHues, routeRuns, runLine } from "./route.js";
 import type { FileRecord } from "./types.js";
 
+/** The width of a folder's bus, the corridor its traces to one other folder share. */
+const STRIP_WIDTH = 1.25;
+
 /** One import on screen: its two ends, its trace when it has one, and how it should look. */
 interface Edge
 {
@@ -412,8 +415,6 @@ function rebuildEdges(): void
     tetherShapes.push(rim);
   }
 }
-
-const STRIP_WIDTH = 1.25;
 
 // One solid strand from the imported end to the user, with an arrowhead where it is used.
 // A trace's strand follows its straight runs exactly; any other is sampled along its curve.

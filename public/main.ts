@@ -1,6 +1,7 @@
 import { S, V3, scene, camera, canvas, engine, loadingNote, render } from "./state.js";
 import { settleCamera, updatePulses } from "./meshes.js";
-import { pickFile, placeBox, flushBoxes, rayBox } from "./boxes.js";
+import { pickFile, placeBox, flushBoxes } from "./boxes.js";
+import { rayBox } from "./rules.js";
 import { applyHighlight } from "./highlight.js";
 import { rebuildEdges, updateFlow } from "./edges.js";
 import { updateLabels } from "./labels.js";

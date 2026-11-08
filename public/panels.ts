@@ -1,8 +1,9 @@
-import { S, camera, colorFor, colorForSystem, copyText, folderColor, folderOf, frameFile, frameFolder, hasFilters, inScene as isInScene, isFileVisible, labelFor, matchesFilters, matchesTagFilter, passesSlice, systemLabel, filePath, render, renderEdges } from "./state.js";
-import { ancestorFolders, foldersToKeepOpen, matchesQueryTerms, queryTerms, type SliceAxis } from "./filter.js";
+import { S, camera, colorFor, colorForSystem, copyText, frameFile, frameFolder, hasFilters, inScene as isInScene, isFileVisible, matchesFilters, matchesTagFilter, passesSlice, sliceValue, systemLabel, filePath, pathIndex, render, renderEdges } from "./state.js";
+import { folderColor, folderOf, labelFor } from "./rules.js";
+import { ancestorFolders, foldersToKeepOpen, matchesQueryTerms, queryTerms } from "./filter.js";
 import { displayName, readSource } from "./repo.js";
 import { symbolsOf, type SymbolInfo } from "./symbols.js";
-import type { GroupAxis } from "./types.js";
+import type { FileSpot, GroupAxis } from "./types.js";
 /* --------------------------------------------------------------- panels ---- */
 
 // Escapes the characters that would otherwise break the info panel's HTML.
@@ -317,26 +318,10 @@ function select(i: number, outline = true): void
   if (outline) renderOutliner();
 }
 
-/** One file in the outliner: its path, where its box lives, and its name. */
-interface OutlineFile { path: string; node: number; file: number; name: string }
-
 // Every file the map holds, in the order the folders were built.
-function outlineFiles(): OutlineFile[]
+function outlineFiles(): FileSpot[]
 {
-  const files: OutlineFile[] = [];
-  S.NODES.forEach((node, nodeIndex) =>
-  {
-    node.files.forEach((name, fileIndex) => files.push({ path: filePath(nodeIndex, fileIndex), node: nodeIndex, file: fileIndex, name }));
-  });
-  return files;
-}
-
-/** The value one file takes on an axis, with "" for a file that has none. */
-function axisValue(path: string, axis: GroupAxis): string
-{
-  if (axis === "system") return S.FILE_SYSTEMS.get(path) ?? "";
-  if (axis === "layer") return S.FILE_LAYERS.get(path) ?? "";
-  return folderOf(path);
+  return pathIndex().ordered;
 }
 
 /** The name a group row or filter chip shows for one value on an axis. */
@@ -362,6 +347,13 @@ function hasSystems(): boolean
   return S.SYSTEMS.length > 0 || [...S.FILE_SYSTEMS.values()].some((value) => value !== "");
 }
 
+// Whether the repository declares any layers. Until it does, the Layer grouping and its chips
+// would only name "no layer", so both stay out of the panel.
+function hasLayers(): boolean
+{
+  return S.LAYERS.length > 0;
+}
+
 /** The values on one axis, in the repository's declared order with unassigned last. */
 function groupKeys(axis: GroupAxis, present: string[]): string[]
 {
@@ -372,14 +364,14 @@ function groupKeys(axis: GroupAxis, present: string[]): string[]
 }
 
 /** The set a filter chip switches: the systems or layers the strip has selected. */
-function sliceSet(axis: SliceAxis): Set<string>
+function sliceSet(axis: GroupAxis): Set<string>
 {
   return axis === "system" ? S.outliner.systems : S.outliner.layers;
 }
 
 // Whether a file is drawn for the strip's purposes, ignoring one slice so that slice can count its
 // own values. A folder eye or Extras being off keeps a file out of the count, as it does the scene.
-function passesSlices(path: string, skip: SliceAxis | null, eyes = true, crossed = true): boolean
+function passesSlices(path: string, skip: GroupAxis | null, eyes = true, crossed = true): boolean
 {
   if (eyes && !isFileVisible(path)) return false;
   if (!crossed) return matchesTagFilter(path);
@@ -387,13 +379,13 @@ function passesSlices(path: string, skip: SliceAxis | null, eyes = true, crossed
 }
 
 /** Whether a search names this file: each word appears in its path or in one of its symbols. */
-function matchesQuery(item: OutlineFile, terms: string[]): boolean
+function matchesQuery(item: FileSpot, terms: string[]): boolean
 {
   return matchesQueryTerms(item.path, S.FILE_SYMBOLS.get(item.path) ?? [], terms);
 }
 
 /** The files the outliner shows: those that pass every filter and, if asked, the search. */
-function shownFiles(terms: string[]): OutlineFile[]
+function shownFiles(terms: string[]): FileSpot[]
 {
   return outlineFiles().filter((item) => matchesFilters(item.path) && matchesQuery(item, terms));
 }
@@ -507,7 +499,7 @@ function groupRow(axis: GroupAxis, value: string, count: number, depth: number, 
 }
 
 // One coloured dot on a file row: its system or layer, clickable to switch that value in the strip.
-function sliceDot(axis: SliceAxis, value: string): string
+function sliceDot(axis: GroupAxis, value: string): string
 {
   return '<button type="button" tabindex="-1" class="odot oswitch" data-slice="' + axis + '" data-value="' + escapeHtml(value) + '" title="' +
     escapeHtml(axis + ": " + groupLabel(axis, value)) + '" aria-label="Filter to this ' + axis + '" style="background:' +
@@ -526,7 +518,7 @@ function fileDots(path: string): string
 }
 
 // One file row: its name, the tag it roles as, the dots for its system and layer, and its eye.
-function fileRow(item: OutlineFile, depth: number, terms: string[]): string
+function fileRow(item: FileSpot, depth: number, terms: string[]): string
 {
   const hidden = !isFileVisible(item.path);
   const chosen = S.selected === item.node && S.selectedFile === item.file;
@@ -549,7 +541,7 @@ function fileRow(item: OutlineFile, depth: number, terms: string[]): string
     const names = (S.FILE_SYMBOLS.get(item.path) ?? []).filter((symbol) => terms.some((term) => symbol.toLowerCase().includes(term))).slice(0, 6);
     for (const symbol of names)
     {
-      html += '<div class="orow osymrow" data-depth="' + (depth + 1) + '" style="--depth:' + (depth + 1) + '" data-symbol="' + escapeHtml(symbol) +
+      html += '<div class="orow" data-depth="' + (depth + 1) + '" style="--depth:' + (depth + 1) + '" data-symbol="' + escapeHtml(symbol) +
         '" data-symbolpath="' + escapeHtml(item.path) + '" data-key="' + escapeHtml("sym:" + item.path + "#" + symbol) +
         '" role="treeitem" tabindex="-1"><span class="ocaret"></span><span class="osym">ƒ ' + markQuery(symbol, terms) + "</span></div>";
     }
@@ -558,10 +550,10 @@ function fileRow(item: OutlineFile, depth: number, terms: string[]): string
 }
 
 /** One folder in the nested folder tree: the files directly in it, and the folders beneath it. */
-interface FolderNode { path: string; files: OutlineFile[]; children: Map<string, FolderNode>; total: number }
+interface FolderNode { path: string; files: FileSpot[]; children: Map<string, FolderNode>; total: number }
 
 // Builds the folder tree the files sit in, so each folder row holds its own files and sub-folders.
-function folderTree(files: OutlineFile[]): FolderNode
+function folderTree(files: FileSpot[]): FolderNode
 {
   const root: FolderNode = { path: "", files: [], children: new Map(), total: 0 };
   for (const item of files)
@@ -604,16 +596,16 @@ function folderLevel(node: FolderNode, depth: number, terms: string[]): string
     html += groupRow("folder", shown.path, shown.total, depth, folded, name + "/");
     if (!folded) html += folderLevel(shown, depth + 1, terms);
   }
-  return html + [...node.files].sort((a, b) => a.name.localeCompare(b.name)).map((item) => fileRow(item, depth, terms)).join("");
+  return html + [...node.files].sort((a, b) => a.path.split("/").pop()!.localeCompare(b.path.split("/").pop()!)).map((item) => fileRow(item, depth, terms)).join("");
 }
 
 // Draws files flat under one row per system or layer value, folding each group as a whole.
-function groupedLevel(files: OutlineFile[], axis: SliceAxis, depth: number, terms: string[]): string
+function groupedLevel(files: FileSpot[], axis: GroupAxis, depth: number, terms: string[]): string
 {
-  const buckets = new Map<string, OutlineFile[]>();
+  const buckets = new Map<string, FileSpot[]>();
   for (const item of files)
   {
-    const value = axisValue(item.path, axis);
+    const value = sliceValue(item.path, axis);
     const bucket = buckets.get(value);
     if (bucket) bucket.push(item);
     else buckets.set(value, [item]);
@@ -635,12 +627,13 @@ function renderFilterStrip(): void
 {
   const files = outlineFiles();
   const anyShown: boolean[] = [];
-  for (const axis of ["system", "layer"] as SliceAxis[])
+  for (const axis of ["system", "layer"] as GroupAxis[])
   {
     const group = document.getElementById("filter-group-" + axis);
     const row = document.getElementById("filter-" + axis);
     if (!group || !row) continue;
-    const present = axis === "system" && !hasSystems() ? [] : [...new Set(files.map((item) => axisValue(item.path, axis)))];
+    const absent = (axis === "system" && !hasSystems()) || (axis === "layer" && !hasLayers());
+    const present = absent ? [] : [...new Set(files.map((item) => sliceValue(item.path, axis)))];
     const keys = groupKeys(axis, present);
     const selected = sliceSet(axis);
     const all = selected.size === 0;
@@ -651,7 +644,7 @@ function renderFilterStrip(): void
     const bump = (map: Map<string, number>, value: string) => map.set(value, (map.get(value) ?? 0) + 1);
     for (const item of files)
     {
-      const value = axisValue(item.path, axis);
+      const value = sliceValue(item.path, axis);
       if (passesSlices(item.path, axis, false)) bump(held, value);
       if (passesSlices(item.path, axis)) bump(counts, value);
       if (passesSlices(item.path, axis, true, false)) bump(reach, value);
@@ -738,7 +731,7 @@ function groupsStayingOpen(): Set<string>
   for (const item of outlineFiles())
   {
     if (!isEyeHidden(item.path)) continue;
-    for (const axis of ["system", "layer"] as SliceAxis[]) stay.add(axis + ":" + axisValue(item.path, axis));
+    for (const axis of ["system", "layer"] as GroupAxis[]) stay.add(axis + ":" + sliceValue(item.path, axis));
   }
   return stay;
 }
@@ -760,7 +753,7 @@ function groupFoldKeys(): string[]
 {
   if (S.outliner.group === "folder") return allFolderKeys().map((path) => "folder:" + path);
   const axis = S.outliner.group;
-  return [...new Set(outlineFiles().map((item) => axis + ":" + axisValue(item.path, axis)))];
+  return [...new Set(outlineFiles().map((item) => axis + ":" + sliceValue(item.path, axis)))];
 }
 
 // The group rows a fold-all may close: those that do not hold an eye-hidden item.
@@ -807,7 +800,7 @@ function revealInOutliner(path: string, isFolder: boolean): void
     return;
   }
   if (isFolder) return;
-  const key = S.outliner.group + ":" + axisValue(path, S.outliner.group);
+  const key = S.outliner.group + ":" + sliceValue(path, S.outliner.group);
   S.outliner.collapsed.delete(key);
   searchFolds.delete(key);
 }
@@ -834,6 +827,7 @@ function renderOutliner(): void
   const chosenFolder = S.selected >= 0 && S.selectedFile < 0 && S.NODES[S.selected] ? S.NODES[S.selected].id : null;
   const chosen = chosenFile ?? (chosenFolder !== null && chosenFolder !== "" ? chosenFolder + "/" : null);
   if (S.outliner.group === "system" && !hasSystems()) S.outliner.group = "folder";
+  if (S.outliner.group === "layer" && !hasLayers()) S.outliner.group = "folder";
   if (chosen !== null && chosen !== revealedPath) revealInOutliner(chosenFile ?? chosenFolder!, chosenFile === null);
   const files = shownFiles(terms);
   countFolderSeen();
@@ -841,7 +835,7 @@ function renderOutliner(): void
   document.querySelectorAll<HTMLInputElement>("[data-group]").forEach((box) =>
   {
     box.checked = box.dataset.group === S.outliner.group;
-    box.disabled = box.dataset.group === "system" && !hasSystems();
+    box.disabled = (box.dataset.group === "system" && !hasSystems()) || (box.dataset.group === "layer" && !hasLayers());
   });
 
   const tree = document.getElementById("outliner-tree");

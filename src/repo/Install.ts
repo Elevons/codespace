@@ -1,5 +1,7 @@
-import { lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import { lstat, readFile, realpath } from 'node:fs/promises'
 import { join, sep } from 'node:path'
+import { TAG_VOCABULARY } from '../../public/tags.ts'
+import { GitignorePath, GuidePath, JsonStore } from './JsonStore.ts'
 
 /** The lines that mark the block Codespace owns in an agent instructions file. */
 const BlockStart = '<!-- codespace:start -->'
@@ -28,7 +30,7 @@ change to the code carries its entry along. **Whoever changes a file updates its
 
 ## What to do when
 
-- **A file is added:** add its entry (below). A file with no entry is drawn greyed out, as undescribed.
+- **A file is added:** add its entry (below). Until it has one, the map leaves it out while only described files are shown.
 - **A file is moved or renamed:** move its entry to the new path, key and all. An entry for a path that no
   longer exists is reported as stale.
 - **A file is deleted:** delete its entry.
@@ -57,8 +59,11 @@ change to the code carries its entry along. **Whoever changes a file updates its
 - **system:** the functional part of the app the file belongs to. It must be listed under \`systems\`.
 - **layer:** the file's level in the stack, from \`layers\` (listed bottom first). It is the file's job, not its
   system and not its folder.
-- **tags:** its roles, primary first, from \`entry\`, \`orchestrate\`, \`core\`, \`data\`, \`io\`, \`ui\`, \`config\`, \`test\`.
+- **tags:** its roles, primary first, from ${TAG_VOCABULARY.map((tag) => `\`${tag}\``).join(', ')}. Other tags are stored and shown grey.
 - Use a layer and a system that already exist. Add a new one only when nothing fits, and declare it first.
+
+Every ordinary file entry needs a summary, a system, a layer, and tags. A generated or vendored file is the
+exception: its entry may be a summary alone.
 
 ## Keep the layers honest
 
@@ -75,7 +80,7 @@ and reports anything wrong, and \`refine\` lists imports that point up the layer
 `
 
 /** What `install` did. */
-export interface IInstalled
+interface IInstalled
 {
     /** The instruction file the note went in, relative to the repository. */
     instructions: string
@@ -121,15 +126,17 @@ export async function InstallAsync(root: string): Promise<IInstalled>
             next = text.replace(/\s*$/, '') + '\n\n' + Block
             note = 'added'
         }
-        if (note !== 'unchanged') await writeFile(real, next, 'utf8')
+        if (note !== 'unchanged') await JsonStore.WriteTextAsync(root, name, next)
     }
-    else await writeFile(path, `# Working in this repository\n\n${Block}`, 'utf8')
+    else await JsonStore.WriteTextAsync(root, name, `# Working in this repository\n\n${Block}`)
 
-    await mkdir(join(root, '.codespace'), { recursive: true })
-    await writeFile(join(root, '.codespace', 'README.md'), Guide, 'utf8')
-    // The record of what each description was based on holds file times, which differ on every machine.
-    await writeFile(join(root, '.codespace', '.gitignore'), 'ingested.json\n', 'utf8')
-    return { instructions: name, note, guide: '.codespace/README.md' }
+    await JsonStore.RunAsync(root, async () =>
+    {
+        await JsonStore.WriteAsync(root, GuidePath, Guide)
+        // The record of what each description was based on holds file times, which differ on every machine.
+        await JsonStore.WriteAsync(root, GitignorePath, 'ingested.json\n')
+    })
+    return { instructions: name, note, guide: GuidePath }
 }
 
 /** Whether something is at a path, without following a link at the end of it. */

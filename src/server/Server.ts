@@ -8,8 +8,10 @@ import { brotliCompress, constants, gzip } from 'node:zlib'
 import { pathToFileURL } from 'node:url'
 import { Api } from './Api.ts'
 import { Chat } from '../agent/Chat.ts'
+import { ReadOption } from '../cli/Options.ts'
 import { ReadJsonAsync, RefuseRemoteRead, RefuseWrite, SendJson } from './Guard.ts'
 import { Architecture } from '../repo/Architecture.ts'
+import { CodespaceFolder } from '../repo/JsonStore.ts'
 import { Snapshot } from '../repo/Snapshot.ts'
 import { Workspace } from './Workspace.ts'
 
@@ -24,9 +26,6 @@ const BabylonRoot = join(import.meta.dirname, '..', '..', 'node_modules', 'babyl
 
 /** The static types worth compressing; images and fonts are already compact. */
 const Compressible = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg'])
-
-/** Sent with a file whose address names its version, so a browser never asks for it again. */
-const ImmutableCache = 'public, max-age=31536000, immutable'
 
 /** The content type sent for each static file type. */
 const ContentTypes: Readonly<Record<string, string>> = {
@@ -84,8 +83,7 @@ export class Server
     public static async CreateAsync(workspace: Workspace, publicRoot: string, allowWrites = false, mapUrl = 'http://localhost:5190'): Promise<{ server: Server, http: HttpServer }>
     {
         const cli = resolve(publicRoot, '..', 'src', 'cli', 'Cli.ts')
-        const guide = resolve(publicRoot, '..', 'docs', 'architecture.md')
-        const chat = new Chat(() => workspace.repo.Root, { mapUrl, cli, guide }, (event) => workspace.view.Chat(event))
+        const chat = new Chat(() => workspace.repo.Root, { mapUrl, cli }, (event) => workspace.view.Chat(event))
         const server = new Server(workspace, publicRoot, new Api(workspace, allowWrites, cli, chat), allowWrites)
         const http = createServer((request, response) =>
         {
@@ -160,12 +158,6 @@ export class Server
         if (url.pathname === '/api/changes')
         {
             SendJson(response, 200, await Server.ReadChangesAsync(this.workspace.repo.Root))
-            return
-        }
-
-        if (url.pathname === '/api/fingerprint')
-        {
-            SendJson(response, 200, { fingerprint: await this.workspace.repo.FingerprintAsync() })
             return
         }
 
@@ -256,7 +248,7 @@ export class Server
                 .map((entry) => ({ name: entry.name, path: join(target, entry.name) }))
                 .sort((a, b) => a.name.localeCompare(b.name))
                 .slice(0, 300)
-            const repository = names.has('.git') || names.has('.codespace')
+            const repository = names.has('.git') || names.has(CodespaceFolder)
             SendJson(response, 200, { path: target, parent, repository, folders })
         }
         catch (error)
@@ -299,14 +291,11 @@ export class Server
      */
     private async SendStaticAsync(request: IncomingMessage, response: ServerResponse, pathname: string): Promise<void>
     {
-        // Babylon is served from the installed package at an address that names its version, so
-        // the browser keeps it for good; any other version is not here.
-        const vendor = /^\/vendor\/babylon-([\w.-]+)\.js$/.exec(pathname)
-        if (vendor !== null)
+        // Babylon is served from the installed package at one fixed address. Its ETag makes an unchanged
+        // build a 304, and an upgrade is picked up on the next revalidation, with no version in the page.
+        if (pathname === '/vendor/babylon.js')
         {
-            const version = JSON.parse(await readFile(join(BabylonRoot, 'package.json'), 'utf8').catch(() => '{}')).version
-            if (version === vendor[1]) await this.SendFileAsync(request, response, join(BabylonRoot, 'babylon.js'), ImmutableCache)
-            else SendJson(response, 404, { error: 'Not found' })
+            await this.SendFileAsync(request, response, join(BabylonRoot, 'babylon.js'), 'no-cache')
             return
         }
 
@@ -403,19 +392,6 @@ export class Server
             return { files: {} }
         }
     }
-
-    /**
-     * Reads `--name value` or `--name=value` from the command line.
-     * @param args the command-line arguments
-     * @param name the option name, with its dashes
-     */
-    public static ReadOption(args: readonly string[], name: string): string | undefined
-    {
-        const withEquals = args.find((arg) => arg.startsWith(name + '='))
-        if (withEquals) return withEquals.slice(name.length + 1)
-        const index = args.indexOf(name)
-        return index >= 0 ? args[index + 1] : undefined
-    }
 }
 
 // First we read the repository from --repo or CODESPACE_REPO, defaulting to the
@@ -428,8 +404,8 @@ if (started)
     const envFile = join(import.meta.dirname, '..', '..', '.env')
     if (existsSync(envFile)) process.loadEnvFile(envFile)
     const args = process.argv.slice(2)
-    const repoArg = Server.ReadOption(args, '--repo') ?? process.env.CODESPACE_REPO ?? process.cwd()
-    const port = Number(Server.ReadOption(args, '--port') ?? process.env.PORT ?? 5190)
+    const repoArg = ReadOption(args, '--repo') ?? process.env.CODESPACE_REPO ?? process.cwd()
+    const port = Number(ReadOption(args, '--port') ?? process.env.PORT ?? 5190)
     const host = process.env.HOST ?? '0.0.0.0'
     const publicRoot = join(import.meta.dirname, '..', '..', 'public')
     const allowWrites = args.includes('--allow-writes') || process.env.CODESPACE_ALLOW_WRITES === '1'

@@ -28,8 +28,6 @@
   #codeblock-close { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
     padding: 2px 8px; font-size: 11px; cursor: pointer; }
   #codeblock-close:hover { background: #30363d; }
-  #symbol-code { margin: 0; padding: 10px 14px 12px; overflow: auto; white-space: pre;
-    font: 11.5px/1.5 ui-monospace, Menlo, monospace; color: #c9d1d9; }
   #info li.sym { cursor: pointer; }
   #info li.sym:hover span { color: #79c0ff; }
   #info .open { cursor: pointer; }
@@ -283,7 +281,7 @@
     border-radius: 7px; color: #e6edf3; font: 13px ui-monospace, Menlo, monospace; outline: none; }
   #search:focus { border-color: #1f6feb; box-shadow: 0 0 0 3px rgba(31,111,235,.25); }
   #search::placeholder { color: #6e7681; }
-  #search-key { position: absolute; right: 18px; top: 15px; color: #6e7681; pointer-events: none; }
+  #search-key { color: #6e7681; pointer-events: none; }
   /* Breadcrumbs: click any folder to walk back up. */
   .crumbs { display: flex; flex-wrap: wrap; gap: 1px; margin: 0 0 8px; font: 11.5px ui-monospace, Menlo, monospace; }
   .crumb { padding: 1px 3px; border-radius: 4px; color: #8b91ad; text-decoration: none; cursor: pointer; }
@@ -309,7 +307,7 @@
   #info li.sym span.n { color: #484f58; }
 
   /* The code panel: a line-number gutter and coloured tokens. */
-  #symbol-code { margin: 0; padding: 0; overflow: auto; white-space: normal; font: 11.5px/1.5 ui-monospace, Menlo, monospace; }
+  #symbol-code { margin: 0; padding: 0; overflow: auto; white-space: normal; font: 11.5px/1.5 ui-monospace, Menlo, monospace; color: #c9d1d9; }
   .code-wrap { display: flex; align-items: flex-start; min-width: max-content; }
   .code-gutter { margin: 0; padding: 10px 8px 12px 10px; border-right: 1px solid #21262d; color: #484f58;
     text-align: right; user-select: none; font: inherit; }
@@ -333,7 +331,6 @@
     border-radius: 7px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
   #repo-form button:hover, #repo-ingest-copy:hover, #repo-delete button:hover { background: #30363d; }
   #repo-form button:disabled { opacity: .6; cursor: default; }
-  #repo-current { margin: 8px 0 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #repo-error { margin: 8px 0 0; color: #f85149; }
   #repo-panel .panel-title { margin-bottom: 10px; }
   #repo-ingest { display: flex; align-items: center; justify-content: space-between; gap: 10px;

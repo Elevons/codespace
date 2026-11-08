@@ -4,6 +4,9 @@
  * so the folder layout, the meshes, and the panels agree on one owner per field.
  */
 
+import type { GroupAxis } from "./filter.js";
+export type { GroupAxis };
+
 /** One folder node in the live graph, keyed by its repository-relative path. */
 export interface GraphNode
 {
@@ -70,6 +73,14 @@ export interface Box
     terraceSize: BABYLON.Vector3;
 }
 
+/** One file's place in the node list. */
+export interface FileSpot
+{
+    path: string;
+    node: number;
+    file: number;
+}
+
 /** Where one file's box stands and how big it is this frame. */
 interface Shape
 {
@@ -104,12 +115,6 @@ export interface FileRecord
 /** What the map colours files by: their role, layer, system, folder, size, or recent changes. */
 export type ColorBy = "tag" | "layer" | "system" | "folder" | "size" | "changes";
 
-/** One axis a filter or group row can name: a system, a layer, or a folder. */
-export type GroupAxis = "system" | "layer" | "folder";
-
-/** How the outliner lists files: in the folder tree, or flat under one group per system or layer. */
-export type GroupMode = "folder" | "system" | "layer";
-
 /** The outliner's view state: what it filters to, how it lists files, and what the scene hides. */
 export interface OutlinerState
 {
@@ -120,11 +125,13 @@ export interface OutlinerState
   /** The layers switched on in the filter strip; empty means every layer. */
   layers: Set<string>;
   /** How the tree lists files. */
-  group: GroupMode;
+  group: GroupAxis;
   /** Files hidden from the 3D scene by an eye in the outliner. */
   hiddenFiles: Set<string>;
   /** Files shown in the 3D scene even when an eye hides their folder. */
   shownFiles: Set<string>;
+  /** Extras folders the person re-showed while the Extras toggle is off. */
+  shownExtraFolders: Set<string>;
   /** Which group rows are folded shut, keyed by "axis:value". */
   collapsed: Set<string>;
 }

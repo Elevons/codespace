@@ -1,13 +1,15 @@
 import { Architecture, type IArchitecture } from './Architecture.ts'
 import type { Graph } from './Graph.ts'
+import { CodespaceFolder } from './JsonStore.ts'
 import { Ledger } from './Ledger.ts'
 import type { Repo } from './Repo.ts'
+import type { IIngestStatus } from '../../public/ingest.ts'
 
 /** The most items one batch holds unless asked for more. */
 export const DefaultBatch = 12
 
 /** The largest file read for a batch, in characters. */
-const MaxFileChars = 20_000
+const MaxBatchFileChars = 20_000
 
 /** Files whose text is generated, with the summary each gets instead of being read. */
 const Skipped = new Map<string, string>([
@@ -25,10 +27,10 @@ const Skipped = new Map<string, string>([
 ])
 
 /** The folders whose files are someone else's code or built output, not written by hand. */
-const SkippedFolders = ['vendor', 'third_party', 'dist', 'build', 'out', '.codespace']
+const SkippedFolders = ['vendor', 'third_party', 'dist', 'build', 'out', CodespaceFolder]
 
 /** One file in a batch: what it is, and enough of it to write its summary. */
-export interface IIngestFile
+interface IIngestFile
 {
     /** Its repository-relative path. */
     path: string
@@ -49,7 +51,7 @@ export interface IIngestFile
 }
 
 /** One folder in a batch: its files and folders, each with the summary it has so far. */
-export interface IIngestFolder
+interface IIngestFolder
 {
     /** Its repository-relative path. */
     path: string
@@ -57,25 +59,11 @@ export interface IIngestFolder
     children: Array<{ path: string, summary: string }>
 }
 
-/** How much of the codebase still has to be described. */
-export interface IIngestStatus
-{
-    /** Files that still need a summary. */
-    files: number
-    /** Files whose entry is missing a system, a layer, or tags. */
-    incomplete: number
-    /** Described files whose text has changed since their entry was written. */
-    changed: number
-    /** Entries for files and folders that are gone, which the next batch clears. */
-    stale: number
-    /** Folders that still need a summary. */
-    folders: number
-    /** All of them together. */
-    remaining: number
-}
+/** The counts the status reports, before the HTTP response adds the describe prompt and the second pass. */
+type IIngestCounts = Pick<IIngestStatus, 'files' | 'incomplete' | 'changed' | 'stale' | 'folders' | 'remaining'>
 
 /** What `next` answers. */
-export interface IIngestBatch
+interface IIngestBatch
 {
     /** Files that still need a summary, for the agent to read. */
     files: IIngestFile[]
@@ -103,7 +91,7 @@ export function SkippedSummary(path: string): string | null
     if (/\.min\.(js|css)$/.test(name) || name.endsWith('.map')) return 'Built or minified output, generated from source.'
     const segments = path.split('/').slice(0, -1)
     const vendored = segments.find((segment) => SkippedFolders.includes(segment))
-    if (vendored === '.codespace') return 'Codespace metadata, written by the map and its tools rather than by hand.'
+    if (vendored === CodespaceFolder) return 'Codespace metadata, written by the map and its tools rather than by hand.'
     if (vendored !== undefined) return `Built or third-party code under "${vendored}", not written in this repository.`
     return null
 }
@@ -118,23 +106,6 @@ interface IPlan
     stale: number
     skipped: Array<{ path: string, summary: string }>
     folders: string[]
-}
-
-/**
- * What one file's entry still lacks: "summary", "system", "layer", or "tags". A system the
- * architecture does not declare counts as missing, since the map refuses to place the file.
- * @param architecture what the architecture file says
- * @param path the file's repository-relative path
- */
-function Lacks(architecture: IArchitecture, path: string): string[]
-{
-    const entry = architecture.files[path]
-    const lacks: string[] = []
-    if (entry?.summary === undefined) lacks.push('summary')
-    if (entry?.system === undefined || !(entry.system in architecture.systems)) lacks.push('system')
-    if (entry?.layer === undefined) lacks.push('layer')
-    if ((entry?.tags?.length ?? 0) === 0) lacks.push('tags')
-    return lacks
 }
 
 /**
@@ -165,7 +136,7 @@ async function PlanAsync(repo: Repo, architecture: IArchitecture): Promise<IPlan
     const changedSet = new Set(changed)
 
     // A file that is summarized but has no system, layer, or tags comes back for a second pass.
-    for (const path of described) if (!changedSet.has(path) && Lacks(architecture, path).some((field) => field !== 'summary')) incomplete.push(path)
+    for (const path of described) if (!changedSet.has(path) && Architecture.Lacks(architecture, path).some((field) => field !== 'summary')) incomplete.push(path)
 
     const folders = [...Architecture.Folders(known)].filter((path) => architecture.folders[path] === undefined)
     const stale = await Architecture.StaleAsync(repo.Root, known)
@@ -177,7 +148,7 @@ async function PlanAsync(repo: Repo, architecture: IArchitecture): Promise<IPlan
  * @param repo the repository being mapped
  * @param architecture what the architecture file says
  */
-export async function StatusAsync(repo: Repo, architecture: IArchitecture): Promise<IIngestStatus>
+export async function StatusAsync(repo: Repo, architecture: IArchitecture): Promise<IIngestCounts>
 {
     const plan = await PlanAsync(repo, architecture)
     return {
@@ -203,7 +174,7 @@ export async function NextBatchAsync(repo: Repo, architecture: IArchitecture, gr
     const systems = Object.keys(architecture.systems)
 
     /** What one file's entry still lacks. */
-    const missing = (path: string): string[] => Lacks(architecture, path)
+    const missing = (path: string): string[] => Architecture.Lacks(architecture, path)
 
     // Files come first: undescribed ones, then those that changed, then those whose entry is missing a system,
     // layer, or tags. A folder is only ready once every file under it has been described.
@@ -223,7 +194,7 @@ export async function NextBatchAsync(repo: Repo, architecture: IArchitecture, gr
         {
             const full = await repo.ReadFileAsync(path).catch(() => '')
             const entry = architecture.files[path]
-            files.push({ path, reason: pendingSet.has(path) ? 'new' : changedSet.has(path) ? 'changed' : 'incomplete', current: entry === undefined ? {} : { summary: entry.summary, system: entry.system, layer: entry.layer, tags: entry.tags }, missing: missing(path), source: full.slice(0, MaxFileChars), truncated: full.length > MaxFileChars, imports: graph.ImportsOf(path), usedBy: usedBy.get(path) ?? [] })
+            files.push({ path, reason: pendingSet.has(path) ? 'new' : changedSet.has(path) ? 'changed' : 'incomplete', current: entry === undefined ? {} : { summary: entry.summary, system: entry.system, layer: entry.layer, tags: entry.tags }, missing: missing(path), source: full.slice(0, MaxBatchFileChars), truncated: full.length > MaxBatchFileChars, imports: graph.ImportsOf(path), usedBy: usedBy.get(path) ?? [] })
         }
         return { files, folders: [], skipped, layers, systems, remaining }
     }
@@ -239,7 +210,7 @@ export async function NextBatchAsync(repo: Repo, architecture: IArchitecture, gr
     {
         const children = known
             .filter((file) => file.slice(0, file.lastIndexOf('/')) === path)
-            .map((file) => ({ path: file, summary: summaries.get(file) ?? architecture.folders[file] ?? '' }))
+            .map((file) => ({ path: file, summary: summaries.get(file) ?? '' }))
         const childFolders = [...Architecture.Folders(known)]
             .filter((folder) => folder.slice(0, folder.lastIndexOf('/')) === path)
             .map((folder) => ({ path: folder, summary: architecture.folders[folder] ?? '' }))

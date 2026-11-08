@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdir, symlink, writeFile } from 'node:fs/promises'
-import { makeTemp, removeTemp } from './support.ts'
+import { makeRepo, makeTemp, removeTemp } from './support.ts'
 import { join } from 'node:path'
 import { Repo } from '../src/repo/Repo.ts'
 
@@ -108,15 +108,31 @@ test('Repo fingerprints its files and notices a change', async () =>
         const repo = await Repo.OpenAsync(root)
 
         // Then we check the stamp is steady while nothing changes...
-        const first = await repo.FingerprintAsync()
-        assert.equal(await repo.FingerprintAsync(), first)
+        const first = (await repo.StampAsync()).fingerprint
+        assert.equal((await repo.StampAsync()).fingerprint, first)
 
         // ...and moves when a file does.
         await writeFile(join(root, 'a.ts'), 'export const a = 2\nexport const b = 3\n')
-        assert.notEqual(await repo.FingerprintAsync(), first)
+        assert.notEqual((await repo.StampAsync()).fingerprint, first)
     }
     finally
     {
         await removeTemp(root)
     }
+})
+
+test('Repo always hides the machine-local ledger, even when .gitignore does not name it', async () =>
+{
+    const root = await makeRepo({
+        'a.ts': 'export const a = 1\n',
+        '.codespace/ingested.json': '{"files":{}}\n',
+        '.gitignore': '# nothing here\n',
+    }, 'codespace-ledger-')
+    try
+    {
+        const repo = await Repo.OpenAsync(root)
+        assert.deepEqual(await repo.ListFilesAsync(), ['a.ts'])
+        assert.equal(repo.IsAllowed('.codespace/ingested.json'), false)
+    }
+    finally { await removeTemp(root) }
 })

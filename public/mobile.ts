@@ -4,7 +4,8 @@
 // (the map's controls).
 // One sheet holds whichever tab is open. The panels are moved into it, not copied, so every handler
 // and every render keeps working on the same elements; leaving the narrow layout puts them back.
-import { S, filePath, fileColor, hasFilters, labelFor } from "./state.js";
+import { S, filePath, fileColor, hasFilters } from "./state.js";
+import { labelFor } from "./rules.js";
 import { select } from "./panels.js";
 
 /** The tabs that open a sheet; Map closes it. */
@@ -161,7 +162,7 @@ function syncPeek(): void
     const path = filePath(S.selected, S.selectedFile);
     name.textContent = path.split("/").pop()!;
     sub.textContent = S.FILE_SUMMARIES.get(path) ?? path;
-    dot.style.background = fileColor(path, S.FILE_LAYERS.get(path) ?? "");
+    dot.style.background = fileColor(path);
   }
   else
   {

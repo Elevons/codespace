@@ -1,4 +1,5 @@
-import { S, V3, FILE_SIZE, FILE_H, TILE_GAP, MARGIN, PLATE_H, FLOOR_STEP, AREA_PER_WEIGHT, isCode, inScene, layerRank, linesOf, renderEdges, filePath } from "./state.js";
+import { S, V3, FILE_SIZE, FILE_H, TILE_GAP, MARGIN, PLATE_H, FLOOR_STEP, AREA_PER_WEIGHT, isCode, inScene, layerRank, linesOf, renderEdges, filePath, hiddenByExtras } from "./state.js";
+import { ancestorFolders } from "./filter.js";
 import { syncMeshes } from "./meshes.js";
 import type { Entry, GraphNode } from "./types.js";
 
@@ -19,10 +20,7 @@ function build(): void
 
   // Folders that hold a file whose own eye brings it back stay open, so that file can still be drawn.
   keptOpen.clear();
-  for (const path of S.outliner.shownFiles)
-  {
-    for (let cut = path.lastIndexOf("/"); cut > 0; cut = path.lastIndexOf("/", cut - 1)) keptOpen.add(path.slice(0, cut));
-  }
+  for (const path of S.outliner.shownFiles) for (const folder of ancestorFolders(path)) keptOpen.add(folder);
   markHidden(root, false);
   liveLayers.clear();
   weighNode(root);
@@ -44,7 +42,7 @@ const keptOpen = new Set<string>();
 // a file shown on its own; the files' own visibility then decides what is drawn inside it.
 function markHidden(n: GraphNode, parentHidden: boolean): void
 {
-  n.hidden = (parentHidden || S.hiddenFolders.has(n.id)) && !keptOpen.has(n.id);
+  n.hidden = (parentHidden || S.hiddenFolders.has(n.id) || hiddenByExtras(n.id)) && !keptOpen.has(n.id);
   for (const child of n.children) markHidden(child, n.hidden);
 }
 
@@ -62,7 +60,7 @@ function weighNode(n: GraphNode): void
     if (child.entries!.length === 0) { child.hidden = true; continue; }
     n.entries.push({ dir: child, weight: child.weight ?? 0, x: 0, z: 0, w: 0, d: 0 });
   }
-  n.files.forEach((name, fileIndex) =>
+  n.files.forEach((_name, fileIndex) =>
   {
     const path = filePath(n.index!, fileIndex);
     // An eye in the outliner hides a file, its system, its layer, or its folder from the scene,

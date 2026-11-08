@@ -1,24 +1,13 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { LedgerPath, JsonStore } from './JsonStore.ts'
 import type { Repo } from './Repo.ts'
 
-/** Where the record of what each description was based on lives, relative to the repository root. */
-const LedgerPath = '.codespace/ingested.json'
-
 /** What a file looked like when its entry was last written or confirmed. */
-export interface IStamp
+interface IStamp
 {
-    /** A hash of its text. */
+    /** A hash of its text, which is all the record needs to tell a rewrite from an edit. */
     hash: string
-    /** Its size in bytes, so a file whose size and time have not moved is not read again. */
-    size: number
-    /** Its modification time, in milliseconds. */
-    mtime: number
 }
-
-/** Changes wait their turn, so two at once cannot read the same file and overwrite each other. */
-let writeQueue: Promise<unknown> = Promise.resolve()
 
 /**
  * The record of what each file looked like when its entry was written, so a later pass can tell which
@@ -35,14 +24,16 @@ export class Ledger
     {
         try
         {
-            const parsed: unknown = JSON.parse(await readFile(join(root, LedgerPath), 'utf8'))
+            const text = await JsonStore.ReadAsync(root, LedgerPath)
+            if (text === null) return {}
+            const parsed: unknown = JSON.parse(text)
             const files = (parsed as { files?: unknown } | null)?.files
             if (typeof files !== 'object' || files === null || Array.isArray(files)) return {}
             const result: Record<string, IStamp> = {}
             for (const [path, raw] of Object.entries(files))
             {
                 const stamp = raw as Partial<IStamp> | null
-                if (typeof stamp?.hash === 'string' && typeof stamp.size === 'number' && typeof stamp.mtime === 'number') result[path] = { hash: stamp.hash, size: stamp.size, mtime: stamp.mtime }
+                if (typeof stamp?.hash === 'string') result[path] = { hash: stamp.hash }
             }
             return result
         }
@@ -82,8 +73,8 @@ export class Ledger
     }
 
     /**
-     * Finds the described files whose text is no longer what their entry was written from. A file whose
-     * size and time have not moved is not read; one that was only touched is read and found unchanged.
+     * Finds the described files whose text is no longer what their entry was written from. Each file's
+     * text is read and hashed, and a file whose hash has not moved is unchanged.
      * @param repo the repository
      * @param record what each file looked like when it was described
      * @param paths the files to check
@@ -96,13 +87,13 @@ export class Ledger
             const before = record[path]
             if (before === undefined) return
             const now = await Ledger.StampAsync(repo, path)
-            if (now !== null && (now.size !== before.size || now.mtime !== before.mtime) && now.hash !== before.hash) changed.push(path)
+            if (now !== null && now.hash !== before.hash) changed.push(path)
         }))
         return changed.sort()
     }
 
     /**
-     * A file's hash, size, and time as they are now, or null when it cannot be read.
+     * A file's hash as it is now, or null when it cannot be read.
      * @param repo the repository
      * @param path the repository-relative path
      */
@@ -110,8 +101,8 @@ export class Ledger
     {
         try
         {
-            const [text, info] = await Promise.all([repo.ReadFileAsync(path), stat(join(repo.Root, path))])
-            return { hash: createHash('sha1').update(text).digest('hex'), size: info.size, mtime: info.mtimeMs }
+            const text = await repo.ReadFileAsync(path)
+            return { hash: createHash('sha1').update(text).digest('hex') }
         }
         catch { return null }
     }
@@ -119,19 +110,12 @@ export class Ledger
     /** Reads the record, lets a change edit it, and writes it back whole, one change at a time. */
     private static ChangeAsync(root: string, change: (files: Record<string, IStamp>) => Promise<void>): Promise<void>
     {
-        const run = async (): Promise<void> =>
+        return JsonStore.RunAsync(root, async () =>
         {
             const files = await Ledger.ReadAsync(root)
             await change(files)
             const sorted = Object.fromEntries(Object.entries(files).sort(([a], [b]) => (a < b ? -1 : 1)))
-            await mkdir(join(root, '.codespace'), { recursive: true })
-            const target = join(root, LedgerPath)
-            const temporary = `${target}.${process.pid}.tmp`
-            await writeFile(temporary, JSON.stringify({ files: sorted }, null, 1) + '\n', 'utf8')
-            await rename(temporary, target)
-        }
-        const result = writeQueue.then(run, run)
-        writeQueue = result.catch(() => undefined)
-        return result
+            await JsonStore.WriteAsync(root, LedgerPath, JSON.stringify({ files: sorted }, null, 1) + '\n')
+        })
     }
 }

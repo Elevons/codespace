@@ -67,3 +67,21 @@ test('Graph still links TypeScript imports by relative specifier', async () =>
     }
     finally { await removeTemp(root) }
 })
+
+test('A .mts file importing ./a.mjs links to a.mts, and .cts to .cjs the same way', async () =>
+{
+    const root = await makeTemp('codespace-graph-')
+    try
+    {
+        await writeFile(join(root, 'a.mts'), 'export const a = 1\n')
+        await writeFile(join(root, 'b.mts'), "import { a } from './a.mjs'\nexport const b = a\n")
+        await writeFile(join(root, 'c.cts'), 'export const c = 1\n')
+        await writeFile(join(root, 'd.cts'), "import { c } from './c.cjs'\nexport const d = c\n")
+
+        const repo = await Repo.OpenAsync(root)
+        const graph = await Graph.BuildAsync(repo)
+        assert.deepEqual(graph.ImportsOf('b.mts'), ['a.mts'])
+        assert.deepEqual(graph.ImportsOf('d.cts'), ['c.cts'])
+    }
+    finally { await removeTemp(root) }
+})

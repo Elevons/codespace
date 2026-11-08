@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { Workspace } from '../src/server/Workspace.ts'
 import { makeTemp, removeTemp } from './support.ts'
@@ -41,4 +42,11 @@ test('Opening a folder that is not there fails without moving the map', async ()
         assert.equal(workspace.repo.Root, root)
     }
     finally { await removeTemp(root) }
+})
+
+test('A typed path resolves ~/ to the home folder and a relative path to the current folder', () =>
+{
+    assert.equal(Workspace.ResolvePath('~'), homedir())
+    assert.equal(Workspace.ResolvePath('~/projects/../repo '), join(homedir(), 'repo'))
+    assert.equal(Workspace.ResolvePath(' relative/folder '), join(process.cwd(), 'relative', 'folder'))
 })

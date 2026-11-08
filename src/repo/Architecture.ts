@@ -1,14 +1,16 @@
-import { mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
-import { join, sep } from 'node:path'
-
-/** Where a repository's architecture file lives, relative to its root. */
-const ArchitecturePath = '.codespace/architecture.json'
+import { rm } from 'node:fs/promises'
+import { join } from 'node:path'
+import { TAG_VOCABULARY } from '../../public/tags.ts'
+import { ArchitecturePath, CodespaceFolder, JsonStore } from './JsonStore.ts'
 
 /** The longest summary kept, in characters. */
 const MaxSummary = 600
 
-/** The tags the map knows how to colour. Others are allowed, and shown grey. */
-const TagVocabulary: readonly string[] = ['entry', 'orchestrate', 'core', 'data', 'io', 'ui', 'config', 'test']
+/** Whether a value is a plain JSON object, not null and not a list. */
+function IsObject(value: unknown): value is Record<string, unknown>
+{
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
 /** What the architecture file says about one file. */
 interface IFileEntry
@@ -73,9 +75,6 @@ interface IUpdated
     notes: string[]
 }
 
-/** Changes wait their turn, so two at once cannot read the same file and overwrite each other. */
-let writeQueue: Promise<unknown> = Promise.resolve()
-
 /** Reads the one file that says how a repository is laid out: its layers, tags, and summaries. */
 export class Architecture
 {
@@ -89,18 +88,14 @@ export class Architecture
         const result: IArchitecture = { layers: [], systems: {}, files: {}, folders: {}, warnings: [], error: '' }
 
         // First we read the file, making sure a link cannot point it outside the repository.
-        let text: string
-        try
-        {
-            const real = await realpath(join(root, ArchitecturePath))
-            if (!real.startsWith(root + sep)) throw new Error('it points outside the repository')
-            text = await readFile(real, 'utf8')
-        }
+        let text: string | null
+        try { text = await JsonStore.ReadAsync(root, ArchitecturePath) }
         catch (error)
         {
-            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') result.error = `${ArchitecturePath} could not be read: ${(error as Error).message}`
+            result.error = `${ArchitecturePath} could not be read: ${(error as Error).message}`
             return result
         }
+        if (text === null) return result
 
         // Then we parse it, and keep what is well formed.
         let data: unknown
@@ -183,10 +178,7 @@ export class Architecture
      */
     public static UpdateAsync(root: string, known: readonly string[], patch: IArchitecturePatch): Promise<IUpdated>
     {
-        const run = (): Promise<IUpdated> => Architecture.ApplyAsync(root, known, patch)
-        const result = writeQueue.then(run, run)
-        writeQueue = result.catch(() => undefined)
-        return result
+        return JsonStore.RunAsync(root, () => Architecture.ApplyAsync(root, known, patch))
     }
 
     /**
@@ -200,9 +192,9 @@ export class Architecture
         const stale = { files: [] as string[], folders: [] as string[] }
         try
         {
-            const real = await realpath(join(root, ArchitecturePath))
-            if (!real.startsWith(root + sep)) return stale
-            const parsed = JSON.parse(await readFile(real, 'utf8')) as { files?: unknown, folders?: unknown } | null
+            const text = await JsonStore.ReadAsync(root, ArchitecturePath)
+            if (text === null) return stale
+            const parsed = JSON.parse(text) as { files?: unknown, folders?: unknown } | null
             const exists = new Set(known), folders = Architecture.Folders(known)
             if (typeof parsed?.files === 'object' && parsed.files !== null) stale.files = Object.keys(parsed.files).filter((path) => !exists.has(path)).sort()
             if (typeof parsed?.folders === 'object' && parsed.folders !== null) stale.folders = Object.keys(parsed.folders).filter((path) => !folders.has(path)).sort()
@@ -213,14 +205,18 @@ export class Architecture
 
     /**
      * Deletes a repository's architecture folder, so the map draws it with no layers, systems, or
-     * summaries, as a repository that was never described. Nothing else in the repository is touched.
+     * summaries, as a repository that was never described. This removes the whole `.codespace` folder,
+     * including the upkeep rules and ledger kept there, and nothing else in the repository.
      * @param root the repository's real path
      */
-    public static async DeleteAsync(root: string): Promise<void>
+    public static DeleteAsync(root: string): Promise<void>
     {
-        // The path is fixed and inside the repository. A symlink of that name is removed, not followed,
-        // so this can never delete through it.
-        await rm(join(root, '.codespace'), { recursive: true, force: true })
+        return JsonStore.RunAsync(root, async () =>
+        {
+            // The path is fixed and inside the repository. A symlink of that name is removed, not followed,
+            // so this can never delete through it.
+            await rm(join(root, CodespaceFolder), { recursive: true, force: true })
+        })
     }
 
     /**
@@ -231,20 +227,25 @@ export class Architecture
      */
     private static async ApplyAsync(root: string, known: readonly string[], patch: IArchitecturePatch): Promise<IUpdated>
     {
-        // First we read what is there, refusing to overwrite a file we cannot understand.
-        const target = join(root, ArchitecturePath)
+        // First we check the change's shape, so a wrongly typed field can never reach the file.
+        const shape = Architecture.ShapeProblems(patch)
+        if (shape.length > 0) throw new Error(shape.join('\n'))
+
+        // Then we read what is there, refusing to overwrite a file we cannot understand.
         let raw: Record<string, unknown> = {}
         try
         {
-            const real = await realpath(target)
-            if (!real.startsWith(root + sep)) throw new Error('it points outside the repository')
-            const parsed: unknown = JSON.parse(await readFile(real, 'utf8'))
-            if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error('it is not a JSON object')
-            raw = parsed as Record<string, unknown>
+            const text = await JsonStore.ReadAsync(root, ArchitecturePath)
+            if (text !== null)
+            {
+                const parsed: unknown = JSON.parse(text)
+                if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new Error('it is not a JSON object')
+                raw = parsed as Record<string, unknown>
+            }
         }
         catch (error)
         {
-            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`${ArchitecturePath} cannot be changed until it is fixed: ${(error as Error).message}`)
+            throw new Error(`${ArchitecturePath} cannot be changed until it is fixed: ${(error as Error).message}`)
         }
         const { layers: oldLayers, systems: oldSystems, files: oldFiles, folders: oldFolders, ...others } = raw
         let layers = Array.isArray(oldLayers) ? oldLayers.filter((layer): layer is string => typeof layer === 'string') : []
@@ -350,7 +351,7 @@ export class Architecture
                 else
                 {
                     entry.tags = change.tags.map((tag) => tag.trim())
-                    for (const tag of entry.tags as string[]) if (!TagVocabulary.includes(tag)) notes.push(`"${path}": tag "${tag}" is not in the vocabulary (${TagVocabulary.join(', ')}); it will be grey.`)
+                    for (const tag of entry.tags as string[]) if (!(TAG_VOCABULARY as readonly string[]).includes(tag)) notes.push(`"${path}": tag "${tag}" is not in the vocabulary (${TAG_VOCABULARY.join(', ')}); it will be grey.`)
                 }
             }
             if (change.summary !== undefined)
@@ -374,11 +375,8 @@ export class Architecture
         }
         if (problems.length > 0) throw new Error(problems.join('\n'))
 
-        // Finally we write it whole to a temporary file and move it into place, so a reader never sees half of it.
-        await mkdir(join(root, '.codespace'), { recursive: true })
-        const temporary = `${target}.${process.pid}.tmp`
-        await writeFile(temporary, Architecture.Serialize(layers, systems, files, folders, others), 'utf8')
-        await rename(temporary, target)
+        // Finally we write it whole, so a reader never sees half of it.
+        await JsonStore.WriteAsync(root, ArchitecturePath, Architecture.Serialize(layers, systems, files, folders, others))
         return { architecture: await Architecture.ReadAsync(root, known), notes }
     }
 
@@ -413,6 +411,62 @@ export class Architecture
     }
 
     /**
+     * Checks that a change has the shape it claims, before any of it is applied.
+     * @param patch the change to make
+     * @returns a sentence for each field whose type or shape is wrong
+     */
+    private static ShapeProblems(patch: IArchitecturePatch): string[]
+    {
+        if (!IsObject(patch)) return ['The change must be a JSON object: {"files": {...}, "folders": {...}}.']
+        const problems: string[] = []
+
+        if (patch.layers !== undefined && (!Array.isArray(patch.layers) || patch.layers.some((layer) => typeof layer !== 'string')))
+            problems.push('"layers" must be a list of layer names.')
+
+        if (patch.systems !== undefined)
+        {
+            if (!IsObject(patch.systems)) problems.push('"systems" must be an object keyed by system name.')
+            else for (const [name, change] of Object.entries(patch.systems))
+            {
+                if (change === null) continue
+                if (!IsObject(change)) { problems.push(`The system "${name}" must be an object with an optional summary.`); continue }
+                if (change.summary !== undefined && change.summary !== null && typeof change.summary !== 'string') problems.push(`The system "${name}": summary must be text.`)
+            }
+        }
+
+        if (patch.files !== undefined)
+        {
+            if (!IsObject(patch.files)) problems.push('"files" must be an object keyed by file path.')
+            else for (const [path, change] of Object.entries(patch.files))
+            {
+                if (!IsObject(change)) { problems.push(`The entry for "${path}" must be an object.`); continue }
+                for (const field of ['system', 'layer', 'summary'] as const)
+                    if (change[field] !== undefined && change[field] !== null && typeof change[field] !== 'string') problems.push(`"${path}": ${field} must be text.`)
+                const tags = change.tags
+                if (tags !== undefined && tags !== null && (!Array.isArray(tags) || tags.some((tag) => typeof tag !== 'string'))) problems.push(`"${path}": tags must be a list of names.`)
+            }
+        }
+
+        if (patch.folders !== undefined)
+        {
+            if (!IsObject(patch.folders)) problems.push('"folders" must be an object keyed by folder path.')
+            else for (const [path, change] of Object.entries(patch.folders))
+            {
+                if (!IsObject(change)) { problems.push(`The folder "${path}" must be an object with an optional summary.`); continue }
+                if (change.summary !== undefined && change.summary !== null && typeof change.summary !== 'string') problems.push(`"${path}": summary must be text.`)
+            }
+        }
+
+        if (patch.renames !== undefined && (!Array.isArray(patch.renames) || patch.renames.some((rename) => !IsObject(rename) || typeof rename.from !== 'string' || typeof rename.to !== 'string')))
+            problems.push('"renames" must be a list of {"from", "to"} paths.')
+
+        if (patch.forget !== undefined && (!Array.isArray(patch.forget) || patch.forget.some((path) => typeof path !== 'string')))
+            problems.push('"forget" must be a list of paths.')
+
+        return problems
+    }
+
+    /**
      * Lists every folder that holds a file, at any depth. The repository root is not one.
      * @param known every file in the repository
      */
@@ -430,6 +484,24 @@ export class Architecture
     private static Inline(value: unknown): string
     {
         return Array.isArray(value) ? `[${value.map((item) => JSON.stringify(item)).join(', ')}]` : JSON.stringify(value)
+    }
+
+    /**
+     * What one file's entry still lacks: "summary", "system", "layer", or "tags". A system or layer the
+     * architecture does not declare counts as missing, since the map cannot place it on a layer or colour it by system.
+     * @param architecture what the architecture file says
+     * @param path the file's repository-relative path
+     */
+    public static Lacks(architecture: IArchitecture, path: string): string[]
+    {
+        const entry = architecture.files[path]
+        const lacks: string[] = []
+        if (entry?.summary === undefined) lacks.push('summary')
+        if (entry?.system === undefined || !(entry.system in architecture.systems)) lacks.push('system')
+        const layer = entry?.layer
+        if (layer === undefined || (architecture.layers.length > 0 && !architecture.layers.includes(layer))) lacks.push('layer')
+        if ((entry?.tags?.length ?? 0) === 0) lacks.push('tags')
+        return lacks
     }
 
     /**

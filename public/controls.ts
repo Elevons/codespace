@@ -1,9 +1,9 @@
-import { S, camera, DEFAULT_ALPHA, filePath, frameFile, frameFolder, glow, hasFilters, isFileVisible, matchesTagFilter, render, renderEdges, extraFolderIds } from "./state.js";
+import { S, camera, DEFAULT_ALPHA, filePath, frameFile, frameFolder, glow, hasFilters, isFileVisible, matchesTagFilter, render, renderEdges, fileIndex, pathIndex, sliceValue } from "./state.js";
 import { build } from "./city.js";
 import { centerView, recenterTarget, pulseFile } from "./meshes.js";
 import { collapseAllOutliner, folderNode, select, selectFile, setOutlinerFocus, openSymbol, openFile, renderOutliner, toggleFold } from "./panels.js";
 import { loadGraph } from "./repo.js";
-import type { ColorBy, GroupAxis, GroupMode } from "./types.js";
+import type { ColorBy, GroupAxis } from "./types.js";
 
 function setToggleText(button: HTMLButtonElement, label: string, state: string): void
 {
@@ -64,7 +64,6 @@ async function refreshGraph(force = false): Promise<void>
     S.selected = -1;
     S.selectedFile = -1;
     S.focusSet = null;
-    if (!S.hasCentered) applyExtrasToggle();
     build();
     if (!S.hasCentered) { centerView(true); S.hasCentered = true; }
     // A file whose line count moved since the last poll gets a ring on its folder's floor.
@@ -77,7 +76,7 @@ async function refreshGraph(force = false): Promise<void>
       }
     }
     const folder = keptFolder === null ? -1 : S.NODES.findIndex((n) => n.id === keptFolder);
-    const file = folder >= 0 && keptFile !== null ? S.NODES[folder].files.findIndex((name, i) => filePath(folder, i) === keptFile) : -1;
+    const file = folder >= 0 && keptFile !== null ? S.NODES[folder].files.findIndex((_name, i) => filePath(folder, i) === keptFile) : -1;
     if (file >= 0) selectFile(folder, file);
     else select(folder);
     renderOutliner();
@@ -151,17 +150,6 @@ function stepMatch(direction: number): void
   next.scrollIntoView({ block: "nearest" });
   const path = next.dataset.path ?? next.dataset.symbolpath ?? null;
   if (path !== S.hoveredPath) { S.hoveredPath = path; render(); }
-}
-
-// Finds the folder and file index of a path, whichever folder holds it.
-function locateFile(path: string): [number, number]
-{
-  for (let nodeIndex = 0; nodeIndex < S.NODES.length; nodeIndex++)
-  {
-    const fileIndex = S.NODES[nodeIndex].files.findIndex((_, i) => filePath(nodeIndex, i) === path);
-    if (fileIndex >= 0) return [nodeIndex, fileIndex];
-  }
-  return [-1, -1];
 }
 
 // Clears the search, every chip, and the tag filter in one go; the Clear button also opens every fold.
@@ -349,9 +337,7 @@ document.getElementById("outliner-collapse")!.addEventListener("click", collapse
 // Every file on the map, for the bulk all-or-none buttons.
 function allFilePaths(): string[]
 {
-  const paths: string[] = [];
-  S.NODES.forEach((node, nodeIndex) => node.files.forEach((_, fileIndex) => paths.push(filePath(nodeIndex, fileIndex))));
-  return paths;
+  return pathIndex().ordered.map((spot) => spot.path);
 }
 
 // Hides every file box at once; the rows stay, so any single file can still be brought back by its eye.
@@ -359,6 +345,7 @@ document.getElementById("outliner-hide-all")!.addEventListener("click", () =>
 {
   S.outliner.shownFiles.clear();
   for (const path of allFilePaths()) S.outliner.hiddenFiles.add(path);
+  S.outliner.shownExtraFolders.clear();
   build();
   recenterTarget();
   renderOutliner();
@@ -372,10 +359,11 @@ document.getElementById("outliner-show-all-files")!.addEventListener("click", ()
   S.outliner.layers.clear();
   S.outliner.hiddenFiles.clear();
   S.outliner.shownFiles.clear();
+  S.outliner.shownExtraFolders.clear();
   S.tagFilter = null;
   S.hiddenFolders.clear();
   S.extrasShown = true;
-  applyExtrasToggle();
+  extrasBox.checked = true;
   build();
   recenterTarget();
   renderOutliner();
@@ -430,16 +418,15 @@ function reachSlices(axis: GroupAxis): void
   const mine = axis === "system" ? S.outliner.systems : S.outliner.layers;
   const theirs = other === "system" ? S.outliner.systems : S.outliner.layers;
   if (mine.size === 0 || theirs.size === 0) return;
-  const valueOf = (path: string, which: GroupAxis) => (which === "system" ? S.FILE_SYSTEMS.get(path) : S.FILE_LAYERS.get(path)) ?? "";
   const drawable = allFilePaths().filter((path) => isFileVisible(path) && matchesTagFilter(path));
   for (const value of mine)
   {
-    const files = drawable.filter((path) => valueOf(path, axis) === value);
-    if (files.length === 0 || files.some((path) => theirs.has(valueOf(path, other)))) continue;
-    for (const path of files) theirs.add(valueOf(path, other));
+    const files = drawable.filter((path) => sliceValue(path, axis) === value);
+    if (files.length === 0 || files.some((path) => theirs.has(sliceValue(path, other)))) continue;
+    for (const path of files) theirs.add(sliceValue(path, other));
   }
   // A selection that names every value is the same as naming none, and reads more simply as "all".
-  const everyOther = new Set(allFilePaths().map((path) => valueOf(path, other)));
+  const everyOther = new Set(allFilePaths().map((path) => sliceValue(path, other)));
   if ([...everyOther].every((value) => theirs.has(value))) theirs.clear();
 }
 
@@ -456,16 +443,15 @@ function toggleEye(key: string): void
     if (under.some(isFileVisible))
     {
       S.hiddenFolders.add(value);
+      S.outliner.shownExtraFolders.delete(value);
       for (const path of under) { S.outliner.shownFiles.delete(path); S.outliner.hiddenFiles.delete(path); }
     }
     else
     {
       for (const id of [...S.hiddenFolders]) if (id === value || id.startsWith(value + "/")) S.hiddenFolders.delete(id);
-      for (const path of under)
-      {
-        S.outliner.hiddenFiles.delete(path);
-        if (!isFileVisible(path)) S.outliner.shownFiles.add(path);
-      }
+      for (const path of under) S.outliner.hiddenFiles.delete(path);
+      if (pathIndex().extras.has(value)) S.outliner.shownExtraFolders.add(value);
+      else for (const path of under) if (!isFileVisible(path)) S.outliner.shownFiles.add(path);
     }
   }
   else
@@ -511,8 +497,8 @@ outlinerTree.addEventListener("click", (event) =>
   if (symbol)
   {
     const path = symbol.dataset.symbolpath!;
-    const [nodeIndex, fileIndex] = locateFile(path);
-    if (nodeIndex >= 0) { selectFile(nodeIndex, fileIndex); openSymbol(path, symbol.dataset.symbol!); settleOutliner(); }
+    const [nodeIndex, at] = fileIndex(path);
+    if (nodeIndex >= 0) { selectFile(nodeIndex, at); openSymbol(path, symbol.dataset.symbol!); settleOutliner(); }
     return;
   }
 
@@ -543,8 +529,8 @@ outlinerTree.addEventListener("click", (event) =>
     if (lastRowClick.path === path && now - lastRowClick.at < 450) { lastRowClick.path = null; void openFile(path); settleOutliner(); return; }
     lastRowClick.path = path;
     lastRowClick.at = now;
-    const [nodeIndex, fileIndex] = locateFile(path);
-    if (nodeIndex >= 0) selectFile(nodeIndex, fileIndex);
+    const [nodeIndex, at] = fileIndex(path);
+    if (nodeIndex >= 0) selectFile(nodeIndex, at);
     settleOutliner(460);
   }
 });
@@ -645,7 +631,7 @@ document.querySelectorAll<HTMLInputElement>("[data-group]").forEach((box) =>
   box.addEventListener("change", () =>
   {
     if (!box.checked) return;
-    S.outliner.group = box.dataset.group as GroupMode;
+    S.outliner.group = box.dataset.group as GroupAxis;
     renderOutliner();
   });
 });
@@ -655,7 +641,7 @@ const extrasBox = document.getElementById("opt-extras") as HTMLInputElement;
 extrasBox.addEventListener("change", () =>
 {
   S.extrasShown = extrasBox.checked;
-  applyExtrasToggle();
+  S.outliner.shownExtraFolders.clear();
   build();
   centerView(false);
   renderOutliner();
@@ -680,19 +666,6 @@ document.getElementById("reset")!.addEventListener("click", resetView);
 // Choosing something on the map stops the spin, so the page's button stays truthful.
 window.addEventListener("codespace:spin", () => setSpin(S.autoSpin));
 
-// Shows or hides the extras at once — tests, docs, scripts, assets, loose top-level
-// files, and library code (dependencies and vendored folders). They start hidden so the
-// map shows only the code that does the work.
-function applyExtrasToggle(): void
-{
-  for (const id of extraFolderIds())
-  {
-    if (S.extrasShown) S.hiddenFolders.delete(id);
-    else S.hiddenFolders.add(id);
-  }
-  extrasBox.checked = S.extrasShown;
-}
-
 // While a big repository is only partly described, only the described files are drawn, so the
 // map stays quick. This shows everything, or goes back to the described files.
 function applyIngestToggle(): void
@@ -713,8 +686,8 @@ function pathFromHash(): string | null
 }
 function openPath(path: string): void
 {
-  const [nodeIndex, fileIndex] = locateFile(path);
-  if (nodeIndex >= 0) { selectFile(nodeIndex, fileIndex); return; }
+  const [nodeIndex, at] = fileIndex(path);
+  if (nodeIndex >= 0) { selectFile(nodeIndex, at); return; }
   select(S.NODES.findIndex((n) => n.id === path));
 }
 window.addEventListener("codespace:built", () =>

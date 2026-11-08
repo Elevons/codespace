@@ -8,6 +8,9 @@ import
 } from '@earendil-works/pi-coding-agent'
 import { Instructions, type IInstructionPlaces } from './Instructions.ts'
 import { ReadModelSettings, type IModelSettings } from './ModelSettings.ts'
+import type { ChatEvent, IChatLine, IChatSummary, IChatState } from '../../public/chatwire.ts'
+
+export type { ChatEvent, IChatLine, IChatSummary, IChatState }
 
 /** The pi tools the agent works with: enough to read, search, run commands, and edit. */
 const Tools = ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls']
@@ -24,8 +27,17 @@ const MaxDetail = 160
 /** The most past chats listed. */
 const MaxChats = 30
 
+/** How a test points the chat away from the person's home, or replaces the pi session layer. */
+interface IChatOptions
+{
+    /** Where pi's settings and chats live; defaults to ~/.codespace/agent. */
+    agentDir?: string
+    /** Opens a pi session for a saved or new chat; defaults to a real one under agentDir. */
+    openSession?: (sessions: SessionManager) => Promise<AgentSession>
+}
+
 /** What the chat is asked when the Repo panel's Ingest Codebase button is pressed. */
-export const DescribePrompt = 'Describe this repository for the map, or bring its description up to date if it was ' +
+const DescribePrompt = 'Describe this repository for the map, or bring its description up to date if it was ' +
     'described before: the same loop does both, handing back only what is new or changed. Start by running install, as ' +
     'your instructions say. Then run the status, next, and apply loop from your ' +
     'instructions, applying each batch as you go, until next reports "remaining": 0, folders last. Declare the systems ' +
@@ -34,57 +46,11 @@ export const DescribePrompt = 'Describe this repository for the map, or bring it
     'you split it into systems and layers, and what the second pass changed.'
 
 /** What the chat is asked when the Repo panel's Refine button is pressed, on a repository already described. */
-export const RefinePrompt = 'This repository is already described. Do the second pass from your instructions: run refine, ' +
+const RefinePrompt = 'This repository is already described. Do the second pass from your instructions: run refine, ' +
     'and improve the layers and systems from what it finds, until it settles. Do not stop to ask me anything; when it is ' +
     'done, tell me in a few lines what you changed and what you left.'
 
 /** One line of a chat, as the page shows it. */
-export interface IChatLine
-{
-    /** Who it is from: the person, the model, a tool the model ran, or a failure. */
-    role: 'user' | 'assistant' | 'tool' | 'error'
-    /** What it says. For a tool, a short account of what it was asked. */
-    text: string
-    /** The tool's name, for a tool line. */
-    tool?: string
-}
-
-/** One past chat in the list. */
-export interface IChatSummary
-{
-    /** The chat's id, for reopening it. */
-    id: string
-    /** Its first message, shortened. */
-    title: string
-    /** When it last changed, as an ISO date. */
-    updated: string
-}
-
-/** Something the page is told while a reply is under way. */
-export type ChatEvent =
-    | { kind: 'start' }
-    | { kind: 'text', delta: string }
-    | { kind: 'tool', name: string, detail: string }
-    | { kind: 'tool-end', name: string, error: boolean }
-    | { kind: 'end', error?: string }
-    | { kind: 'changed' }
-
-/** What the page shows of the chat. */
-export interface IChatState
-{
-    /** The model, as `model at endpoint`. */
-    model: string
-    /** Why the chat cannot run, or empty when it can. */
-    problem: string
-    /** Whether a reply is under way. */
-    busy: boolean
-    /** The open chat's id, or empty before the first message. */
-    current: string
-    /** The open chat, line by line. */
-    lines: IChatLine[]
-    /** The repository's past chats, newest first. */
-    chats: IChatSummary[]
-}
 
 /**
  * The chat built into the map: a pi agent working in the repository being mapped, talking to any
@@ -106,6 +72,12 @@ export class Chat
     /** Reads the model settings, again for each new chat so a changed key is picked up. */
     private readonly readSettings: () => IModelSettings
 
+    /** Where pi's settings and chats live, apart from the person's own setup. */
+    private readonly agentDir: string
+
+    /** Opens a pi session, or a stand-in a test supplies. */
+    private readonly openSession: (sessions: SessionManager) => Promise<AgentSession>
+
     /** The model runtime, made on first use. */
     private runtime: ModelRuntime | null = null
 
@@ -121,16 +93,19 @@ export class Chat
     /**
      * Prepares the chat; nothing is started until the first message.
      * @param root reads the repository being mapped
-     * @param places where the map server, the CLI, and the guide are
+     * @param places where the map server and the CLI are
      * @param notify tells the pages what is happening
      * @param readSettings reads the model settings
+     * @param options where pi keeps its files, or a stand-in session factory for a test
      */
-    public constructor(root: () => string, places: Omit<IInstructionPlaces, 'root'>, notify: (event: ChatEvent) => void, readSettings: () => IModelSettings = () => ReadModelSettings(process.env))
+    public constructor(root: () => string, places: Omit<IInstructionPlaces, 'root'>, notify: (event: ChatEvent) => void, readSettings: () => IModelSettings = () => ReadModelSettings(process.env), options: IChatOptions = {})
     {
         this.root = root
         this.places = places
         this.notify = notify
         this.readSettings = readSettings
+        this.agentDir = options.agentDir ?? AgentDir
+        this.openSession = options.openSession ?? ((sessions) => this.OpenAsync(sessions))
     }
 
     /** What the page shows: the model, the open chat, and the past ones. */
@@ -161,7 +136,7 @@ export class Chat
         try
         {
             this.ForgetOtherRepo()
-            this.session ??= await this.OpenAsync(SessionManager.create(this.root(), this.ChatDir()))
+            this.session ??= await this.openSession(SessionManager.create(this.root(), this.ChatDir()))
         }
         catch (error)
         {
@@ -217,7 +192,7 @@ export class Chat
         if (found === undefined) throw new Error('That chat is not one of this repository\'s.')
         await this.CloseAsync()
         this.busy = true
-        try { this.session = await this.OpenAsync(SessionManager.open(found.path, this.ChatDir(), this.root())) }
+        try { this.session = await this.openSession(SessionManager.open(found.path, this.ChatDir(), this.root())) }
         finally { this.busy = false }
         this.notify({ kind: 'changed' })
     }
@@ -255,7 +230,7 @@ export class Chat
         this.runtime ??= await ModelRuntime.create({
             credentials: new InMemoryCredentialStore(),
             modelsPath: null,
-            modelsStorePath: join(AgentDir, 'models-store.json'),
+            modelsStorePath: join(this.agentDir, 'models-store.json'),
             refreshOnCreate: false,
         })
         this.runtime.registerProvider(ProviderId, {
@@ -275,14 +250,14 @@ export class Chat
         // The repository's own AGENTS.md is still read; the person's pi extensions and skills are not.
         const settingsManager = SettingsManager.inMemory({ compaction: { enabled: true }, retry: { enabled: true, maxRetries: 2 } })
         const resourceLoader = new DefaultResourceLoader({
-            cwd: root, agentDir: AgentDir, settingsManager,
+            cwd: root, agentDir: this.agentDir, settingsManager,
             noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true,
             appendSystemPrompt: [Instructions({ root, ...this.places })],
         })
         await resourceLoader.reload()
 
         const { session } = await createAgentSession({
-            cwd: root, agentDir: AgentDir, model, modelRuntime: this.runtime, thinkingLevel: 'off',
+            cwd: root, agentDir: this.agentDir, model, modelRuntime: this.runtime, thinkingLevel: 'off',
             tools: Tools, resourceLoader, sessionManager: sessions, settingsManager,
         })
         session.subscribe((event) => this.Relay(event))
@@ -329,7 +304,7 @@ export class Chat
     /** Where this repository's chats are saved. */
     private ChatDir(): string
     {
-        return join(AgentDir, 'chats', this.root().replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, ''))
+        return join(this.agentDir, 'chats', this.root().replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, ''))
     }
 }
 

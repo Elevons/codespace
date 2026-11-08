@@ -1,33 +1,14 @@
 import type { ServerResponse } from 'node:http'
 import type { ChatEvent } from '../agent/Chat.ts'
+import type { IShown } from '../../public/shown.ts'
+
+export type { IShown, IShownFile } from '../../public/shown.ts'
 
 /** How often an idle event stream is nudged, so a proxy does not close it, in milliseconds. */
 const KeepAliveInterval = 25_000
 
-/** One file the map is showing, with what to say about it. */
-export interface IShownFile
-{
-    /** The repository-relative path. */
-    path: string
-    /** What to say about this file, or empty. */
-    note: string
-}
-
-/** What a tool has asked the map to show. */
-export interface IShown
-{
-    /** The files, in order. */
-    files: IShownFile[]
-    /** Whether to draw a route through them in that order, as a code path. */
-    trace: boolean
-    /** A heading for what is shown, or empty. */
-    title: string
-    /** A short explanation of what is shown, or empty. */
-    note: string
-}
-
 /** One thing sent to every page that is watching. */
-export type ViewEvent =
+type ViewEvent =
     | { type: 'show', shown: IShown }
     | { type: 'clear' }
     | { type: 'focus', path: string }

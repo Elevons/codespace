@@ -4,8 +4,8 @@
  * the chip counts cannot disagree.
  */
 
-/** One axis a filter can name: the systems or the layers. */
-export type SliceAxis = "system" | "layer";
+/** One axis a filter or group row can name: a system, a layer, or a folder. */
+export type GroupAxis = "system" | "layer" | "folder";
 
 /**
  * Whether a file passes the selected systems and layers. An empty set means every value, and
@@ -16,7 +16,7 @@ export type SliceAxis = "system" | "layer";
  * @param layers the selected layers
  * @param skip the axis to ignore, or null for both
  */
-export function passesSliceValues(fileSystem: string | undefined, fileLayer: string | undefined, systems: ReadonlySet<string>, layers: ReadonlySet<string>, skip: SliceAxis | null = null): boolean
+export function passesSliceValues(fileSystem: string | undefined, fileLayer: string | undefined, systems: ReadonlySet<string>, layers: ReadonlySet<string>, skip: GroupAxis | null = null): boolean
 {
     if (skip !== 'system' && systems.size > 0 && !systems.has(fileSystem ?? '')) return false;
     if (skip !== 'layer' && layers.size > 0 && !layers.has(fileLayer ?? '')) return false;

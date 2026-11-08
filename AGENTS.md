@@ -25,8 +25,8 @@ move, rename, or repurpose a file, update its entry in the same change**, by edi
 file or with `src/cli/Cli.ts apply` (all or nothing; it validates and reports problems).
 The file has:
 
-- `layers` — bottom plane first (`config`, `docs`, `tests`, `model`, `repo`, `api`, `render`,
-  `panels`, `shell`, `entry` here). Layers are shared, so one layer can hold files from several systems.
+- `layers` — bottom plane first (`config`, `docs`, `model`, `repo`, `api`, `render`,
+  `panels`, `shell`, `entry`, `tests` here). Layers are shared, so one layer can hold files from several systems.
 - `systems` — keyed by name (`browser`, `server`, `meta` here), each with an optional `summary`.
   A system groups files; it does not own a private layer list.
 - A layer is a file's level or role in the stack — its job — not its system and not its folder.
@@ -38,7 +38,8 @@ The file has:
 - `folders` — keyed by folder path: optional `summary`.
 
 Tags come only from: `entry`, `orchestrate`, `core`, `data`, `io`, `ui`, `config`,
-`test`. Summaries are one plain sentence about what a thing is *for*, not how it works.
+`test`. Other tags are accepted and stored, but drawn grey. Summaries are one plain sentence
+about what a thing is *for*, not how it works.
 Write folder summaries once the files and folders inside them are described. Keep it
 in sync with `docs/architecture.md`, which is the full explanation.
 
@@ -49,6 +50,7 @@ no MCP. Every command takes `--repo <folder>`, which defaults to `CODESPACE_REPO
 current folder.
 
 ```sh
+node --experimental-transform-types src/cli/Cli.ts repo --repo .
 node --experimental-transform-types src/cli/Cli.ts status --repo .
 node --experimental-transform-types src/cli/Cli.ts next --repo . --size 12
 node --experimental-transform-types src/cli/Cli.ts apply --file batch.json --repo .
@@ -58,7 +60,11 @@ node --experimental-transform-types src/cli/Cli.ts apply --file batch.json --rep
 and importers, and says what each one's entry still lacks in `missing`. Write each entry to a
 JSON file shaped like
 `{"files": {"src/a.ts": {"summary": "...", "system": "server", "tags": ["core"], "layer": "repo"}}, "folders": {"src": {"summary": "..."}}}`
-and pass it to `apply`. **Every file entry needs a summary, a system, tags, and a layer.** A system
+and pass it to `apply`. **Every ordinary file entry needs a summary, a system, tags, and a layer.**
+Generated and vendored files are the exception: `Ingest.SkippedSummary` settles them with a summary
+alone (`package-lock.json` and `.codespace/architecture.json` here), so they never need the other three. The
+architecture file covers the repository's readable text files; tracked root files with no extension,
+such as `.gitignore` and `.env.example`, are outside it and need no entry. A system
 and a layer must already be declared, so if the file has none yet, declare them in the first
 apply — for example `{"systems": {"browser": {}}, "layers": ["model", "render", "entry"]}` — before
 entries can name them. Layers are shared by every system, so a layer may span systems.
@@ -129,7 +135,7 @@ curl -s -X POST localhost:5190/api/view -H 'Content-Type: application/json' -d @
   camera to it; an empty path is the repository root.
 - **`clear`** — `{"action": "clear"}` takes down whatever is shown.
 
-A new `show` replaces the last one. `GET /api/view` returns what is shown now, or `null`.
+A new `show` replaces the last one. `GET /api/view` returns `{"shown": <what is shown>}`, or `{"shown": null}`.
 
 Reading, for finding the right files and steps before you show them:
 
@@ -161,15 +167,17 @@ machine as `chat` events on the view stream. Chats and pi's settings live in `~/
 
 ## Layout worth knowing
 
-- `src/cli/` — the commands an agent runs to describe a repository.
+- `src/cli/` — the commands an agent runs to describe a repository, and `Options.ts` for reading their flags.
 - `src/repo/` — reading a repository, its architecture file, the import graph, and
-  what to ingest next. No HTTP in here.
+  what to ingest next. No HTTP in here. `DescribeGuide.ts`, `JsonStore.ts`, and `ShowLimits.ts`
+  hold the first-pass instructions, the repository-scoped JSON access, and the show limits.
 - `src/server/` — the HTTP server, the endpoints, the view stream, the write guard,
   and the switchable workspace.
 - `src/agent/` — the built-in chat: its pi agent, what that agent is told, and which model it uses.
 - `public/` — the browser side: the 3D city, the Outliner with its system/layer filters,
-  the panels and controls, the chat, and the phone sheet. `public/filter.ts` and `public/symbols.ts`
-  hold the pure filter and symbol rules.
+  the panels and controls, the chat, and the phone sheet. `public/filter.ts`, `public/rules.ts`, and
+  `public/symbols.ts` hold the pure filter, layout/visibility, and symbol rules; `public/tags.ts` is
+  the one tag vocabulary the server shares.
 - `tests/` — one test file per piece of the server side, plus the dependency-free browser
   helpers; run `npm test`.
 - `docs/` — architecture file details, the review rubric, and deferred ideas.

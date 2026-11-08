@@ -16,7 +16,7 @@ interface LabelItem
 }
 
 /** A screen box already claimed, so names never pile up. */
-interface Box { left: number; right: number; top: number; bottom: number }
+interface ScreenBox { left: number; right: number; top: number; bottom: number }
 
 const labelPool: HTMLDivElement[] = [];
 
@@ -145,7 +145,7 @@ function openSpan(width: number): [number, number]
 
 // Places the rail, its leader lines, and the pins for this frame, and returns the screen
 // boxes they take so the other labels keep clear of them.
-function updateRail(width: number, height: number, transform: BABYLON.Matrix, viewport: BABYLON.Viewport): Box[]
+function updateRail(width: number, height: number, transform: BABYLON.Matrix, viewport: BABYLON.Viewport): ScreenBox[]
 {
   const steps = S.trace && S.trace.trace ? S.trace.paths : [];
   if (steps.length === 0)
@@ -309,8 +309,8 @@ function updateLabels(): void
     // Try the label with its caption, nudged a little up or down if its spot is crowded;
     // failing that, the name alone; failing that, it is left off this frame.
     const nameHalf = item.text.length * (item.cls.startsWith("file") ? 3.1 : 3.5) + 6;
-    const fits = (b: Box) => !taken.some((t) => b.left < t.right && b.right > t.left && b.top < t.bottom && b.bottom > t.top);
-    let caption = "", box: Box | null = null, shift = 0;
+    const fits = (b: ScreenBox) => !taken.some((t) => b.left < t.right && b.right > t.left && b.top < t.bottom && b.bottom > t.top);
+    let caption = "", box: ScreenBox | null = null, shift = 0;
     const tries: [boolean, number][] = [];
     for (const withCaption of item.caption ? [true, false] : [false])
     {

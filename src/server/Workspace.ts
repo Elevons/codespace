@@ -4,7 +4,7 @@ import { Repo } from '../repo/Repo.ts'
 import { View } from './View.ts'
 
 /** One repository the map has been pointed at, as the page lists it. */
-export interface IRecentRepo
+interface IRecentRepo
 {
     /** Its folder name. */
     name: string
@@ -13,7 +13,7 @@ export interface IRecentRepo
 }
 
 /** What the page needs to know about the repository being read. */
-export interface IWorkspaceInfo extends IRecentRepo
+interface IWorkspaceInfo extends IRecentRepo
 {
     /** The repositories opened before this one, newest first. */
     recent: IRecentRepo[]

@@ -1,8 +1,11 @@
-import { S, V3, scene, camera, engine, DEFAULT_BETA, colorFor, materialFor } from "./state.js";
-import { resizeBoxes } from "./boxes.js";
+import { S, V3, scene, camera, engine, DEFAULT_BETA, colorFor, materialFor, fileColor } from "./state.js";
+import { resizeBoxes, paintBox, flushBoxes } from "./boxes.js";
+import { colorOf } from "./batch.js";
 import { resizePads } from "./pads.js";
 
 let gridMesh: BABYLON.Mesh | null = null;
+let plateMesh: BABYLON.Mesh | null = null;
+let plateLines: BABYLON.Mesh | null = null;
 
 // Builds, reuses, or retires each file's record so its box sits on its folder's tile.
 function syncMeshes(): void
@@ -43,8 +46,8 @@ function syncMeshes(): void
 
   // Every folder tile is batched into one mesh, with the outlines in one line system, so a
   // repository with thousands of folders still costs a handful of draws instead of thousands.
-  if (S.plateMesh) { S.plateMesh.dispose(); S.plateMesh = null; }
-  if (S.plateLines) { S.plateLines.dispose(); S.plateLines = null; }
+  if (plateMesh) { plateMesh.dispose(); plateMesh = null; }
+  if (plateLines) { plateLines.dispose(); plateLines = null; }
   const tileParts: BABYLON.Mesh[] = [];
   const outlineLines: BABYLON.Vector3[][] = [];
   const outlineColors: BABYLON.Color4[][] = [];
@@ -63,18 +66,18 @@ function syncMeshes(): void
   }
   if (tileParts.length > 0)
   {
-    S.plateMesh = BABYLON.Mesh.MergeMeshes(tileParts, true, true);
-    if (S.plateMesh)
+    plateMesh = BABYLON.Mesh.MergeMeshes(tileParts, true, true);
+    if (plateMesh)
     {
-      S.plateMesh.name = "tiles";
-      S.plateMesh.material = materialFor("#22303f", 0.26, 0.08);
-      S.plateMesh.isPickable = false;
+      plateMesh.name = "tiles";
+      plateMesh.material = materialFor("#22303f", 0.26, 0.08);
+      plateMesh.isPickable = false;
     }
   }
   if (outlineLines.length > 0)
   {
-    S.plateLines = BABYLON.MeshBuilder.CreateLineSystem("tile-outlines", { lines: outlineLines, colors: outlineColors, useVertexAlpha: true }, scene);
-    S.plateLines.isPickable = false;
+    plateLines = BABYLON.MeshBuilder.CreateLineSystem("tile-outlines", { lines: outlineLines, colors: outlineColors, useVertexAlpha: true }, scene);
+    plateLines.isPickable = false;
   }
 
   buildGrid();
@@ -150,9 +153,9 @@ function sceneBounds(): { min: BABYLON.Vector3; max: BABYLON.Vector3 } | null
     min = min ? V3.Minimize(min, low) : low;
     max = max ? V3.Maximize(max, high) : high;
   }
-  if (S.plateMesh)
+  if (plateMesh)
   {
-    const info = S.plateMesh.getBoundingInfo().boundingBox;
+    const info = plateMesh.getBoundingInfo().boundingBox;
     min = min ? V3.Minimize(min, info.minimumWorld) : info.minimumWorld.clone();
     max = max ? V3.Maximize(max, info.maximumWorld) : info.maximumWorld.clone();
   }
@@ -196,11 +199,18 @@ function settleCamera(share: number): void
 interface Ring { mesh: BABYLON.Mesh; material: BABYLON.StandardMaterial; start: number; life: number }
 const rings: Ring[] = [];
 
+// A file box that flashes bright after a live change, alongside the ring on its folder's floor.
+interface Flash { start: number }
+const flashes = new Map<string, Flash>();
+const FLASH_COLOR = BABYLON.Color3.FromHexString("#c8ffd2");
+const FLASH_LIFE = 2.5;
+
 // Marks a file that just changed with a green ring on its folder's floor, drawn out from its tile.
 export function pulseFile(path: string): void
 {
   const rec = S.fileRecords.get(path);
   if (!rec) return;
+  flashes.set(path, { start: -1 });
   const folder = S.NODES[rec.node];
   const y = (folder && folder.topY !== undefined ? folder.topY : rec.terrace.y) + 0.02;
   const mesh = BABYLON.MeshBuilder.CreateTorus("pulse:" + path, { diameter: 1, thickness: 0.03, tessellation: 32 }, scene);
@@ -211,10 +221,20 @@ export function pulseFile(path: string): void
   material.emissiveColor = BABYLON.Color3.FromHexString("#3fb950");
   material.alpha = 0.9;
   mesh.material = material;
-  rings.push({ mesh, material, start: -1, life: 1.4 });
+  rings.push({ mesh, material, start: -1, life: 2.5 });
 }
 
-// Grows and fades each pulse ring; `now` is the page clock in seconds.
+// The base colour of a file, blended toward the flash tint by `k` (0 for its own colour).
+function flashTint(path: string, k: number): BABYLON.Color3
+{
+  const base = colorOf(fileColor(path));
+  return new BABYLON.Color3(
+    base.r + (FLASH_COLOR.r - base.r) * k,
+    base.g + (FLASH_COLOR.g - base.g) * k,
+    base.b + (FLASH_COLOR.b - base.b) * k);
+}
+
+// Grows and fades each pulse ring and flashes each changed file's box; `now` is the page clock in seconds.
 export function updatePulses(now: number): void
 {
   for (let i = rings.length - 1; i >= 0; i--)
@@ -228,6 +248,20 @@ export function updatePulses(now: number): void
     ring.mesh.scaling.set(scale, 1, scale);
     ring.material.alpha = 0.9 * (1 - t);
   }
+
+  // A changed file's box brightens, then settles back to its own colour.
+  let painted = false;
+  for (const [path, flash] of flashes)
+  {
+    const rec = S.fileRecords.get(path);
+    if (!rec) { flashes.delete(path); continue; }
+    if (flash.start < 0) flash.start = now;
+    const age = now - flash.start;
+    if (age > FLASH_LIFE) { paintBox(rec, colorOf(fileColor(path))); flashes.delete(path); }
+    else paintBox(rec, flashTint(path, (1 - age / FLASH_LIFE) ** 2));
+    painted = true;
+  }
+  if (painted) flushBoxes();
 }
 
 export { syncMeshes, centerView, recenterTarget, settleCamera };

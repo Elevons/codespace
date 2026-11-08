@@ -66,8 +66,9 @@ with `--allow-writes`.
 - **Click a block** to trace a folder, or a box to see the file's symbols, line counts,
   and what it uses. The breadcrumb at the top walks back up.
 - **One outliner for everything.** A filter strip at the top lists every system and layer with a
-  live count. Clicking a chip narrows the scene to that value, and chips combine: systems and
-  layers are independent slices. Only matching files are drawn, with just the folders and layer
+  live count. Clicking a chip narrows the scene to that value, and chips combine: a system and a
+  layer narrow together, and selecting one switches on the values its files need on the other axis,
+  so a choice never draws nothing. Only matching files are drawn, with just the folders and layer
   planes that still hold one, and the planes close up so no empty layer leaves a gap. The tree
   below lists each folder once; the *List by* switch can instead flatten files under system or
   layer groups. Click a group to fold it. Every file row carries a tag badge and coloured dots for
@@ -104,8 +105,8 @@ without refreshing.
 ## What is here
 
 - `src/repo/Repo.ts` — reads a folder as a repository: file list, safe reads, ignored
-  folders, and a cheap change fingerprint.
-- `src/server/Server.ts` — the page (compressed, with validators), the installed Babylon at a versioned address, `/api/bootstrap`, the source API, the changed-line counts, and switching repositories.
+  folders, and a cheap change stamp.
+- `src/server/Server.ts` — the page (compressed, with validators), the installed Babylon at one unversioned address, `/api/bootstrap`, the source API, the changed-line counts, and switching repositories.
 - `src/server/Workspace.ts` — the repository being read, and the recent ones the page can switch back to.
 - `src/repo/Architecture.ts` — reads, checks, and safely changes a repository's `.codespace/architecture.json`.
 - `src/server/Api.ts` — the endpoints the page uses: the architecture, the import graph, the ingest status, what the map shows, and the chat.
@@ -115,6 +116,9 @@ without refreshing.
   JavaScript and by namespace for C#, for the tools.
 - `src/repo/Ingest.ts` — what an agent reads next to describe a codebase: files whose entry is incomplete, then folders.
 - `src/repo/Refine.ts`, `src/repo/RefineGuide.ts` — the second pass: layer breaks, better-fitting layers and systems, and the instructions for acting on them.
+- `src/repo/DescribeGuide.ts` — the first-pass instructions for describing a repository, shared by the copied prompt and the built-in chat.
+- `src/repo/JsonStore.ts` — reads and writes the JSON files Codespace keeps in a repository, refusing any path that leaves it.
+- `src/repo/ShowLimits.ts` — the limits on one show request: how many files, and how long each note, the title, and the overall note may be.
 - `src/repo/Ledger.ts`, `src/repo/Sync.ts` — what each description was based on, and the housekeeping before an update: moved files keep their entries and deleted ones lose theirs.
 - `src/repo/Install.ts` — leaves the upkeep rules in the repository being mapped, so its architecture file is kept true.
 - `src/server/Guard.ts` — who may change anything or use the chat: this machine only.
@@ -122,14 +126,20 @@ without refreshing.
 - `src/agent/Instructions.ts` — what the chat's agent is told: drawing on the map and describing the repository.
 - `src/agent/ModelSettings.ts` — which OpenAI-compatible endpoint, model, and key the chat uses.
 - `src/cli/Cli.ts` — the commands an agent runs to describe a repository, with no server or MCP.
+- `src/cli/Options.ts` — reads `--name value` or `--name=value` options from a command line.
 - `public/index.html` — the map page: the scene and its controls.
 - `public/main.ts` — the entry: pointer interaction, the render loop, and boot.
 - `public/state.ts` — the shared world: constants, the Babylon scene, and the live state.
 - `public/repo.ts` — reads the live repository into nodes and edges, taking the import graph from the server.
 - `public/symbols.ts` — reads the declarations a source file lists, for the code panel and search.
 - `public/filter.ts` — the pure rules behind the systems/layers filter and the outliner search.
+- `public/rules.ts` — the pure folder, colour, layer-rank, visibility, and ray-picking rules, kept testable away from the scene.
+- `public/tags.ts` — the one ordered tag vocabulary and its colours, shared by the browser and the server.
+- `public/ingest.ts` — the shape of the ingest-status response, shared by the page and the server.
 - `public/city.ts` — lays out the map as a treemap: each folder a tile, each file a box of the same footprint, as tall as its line count.
-- `public/meshes.ts` — builds the boxes and grid, and moves the camera.
+- `public/meshes.ts` — builds, reuses, and retires each file's mesh so its box sits on its folder's tile and animates into place.
+- `public/boxes.ts` — draws and places every file box, batching the crowd and borrowing a real mesh for the few files that stand out.
+- `public/batch.ts` — draws many copies of one shape in a single Babylon batch, tinted per slot for the file boxes and layer pads.
 - `public/highlight.ts`, `public/edges.ts`, `public/labels.ts`, `public/route.ts`, `public/pads.ts` — the selection glow, the import strands, the names, the route lane, and the layer rings.
 - `public/view.ts` — the Showing panel, and what tools ask the map to light up or focus.
 - `public/repo-switch.ts` — the Repo picker: open another folder, list recent ones, show how much is left to describe, and hand that to the chat.
@@ -155,6 +165,9 @@ no client to install: `src/cli/Cli.ts` reads the repository, writes its architec
 map picks the change up while it runs.
 
 ```sh
+# which repository it reads, and where
+node --experimental-transform-types src/cli/Cli.ts repo --repo /path/to/repo
+
 # which repository, and how much is left to describe
 node --experimental-transform-types src/cli/Cli.ts status --repo /path/to/repo
 
@@ -176,13 +189,14 @@ The first thing ingest does is `install`: it leaves a short marked note in the r
 `AGENTS.md` (or `CLAUDE.md`; one is created if there is neither) and the full upkeep rules in
 `.codespace/README.md`. After that, any agent that works in the repository is told to update a file's
 entry in the same change as the file, so the map stays true without another ingest. Running `install`
-again only refreshes its own marked block. A file added without an entry is drawn greyed out as
-undescribed, and the Repo panel counts it, along with changed files, and **Update Map** describes just
-what is new or changed.
+again only refreshes its own marked block. While only described files are shown, a file added
+without an entry is left off the map, and the Repo panel counts it, along with changed files, and
+**Update Map** describes just what is new or changed.
 
 Every batch is written as soon as it is applied, so there is nothing to save afterwards and an
-interrupted run picks up where it stopped. A batch only ever holds files and folders that still
-lack a summary, a system, a layer, or tags, so re-running never overwrites what is already written, by hand or otherwise.
+interrupted run picks up where it stopped. A batch holds files and folders that are undescribed,
+changed, or incomplete, so a changed file may already be complete and comes back for review with its
+current entry to judge against. Re-running never overwrites what is already current, by hand or otherwise.
 The file does not exist until the first batch is written; opening a repository creates nothing.
 
 `AGENTS.md` here spells the loop out for an agent working in this repository. For another one,
@@ -210,8 +224,8 @@ higher layer — is a thin red line on the folder plates, from the importing fil
 to the imported file's, brightest at the end that uses it. A reload — or the 15-second poll —
 redraws it as the code changes.
 
-The poll first asks for a change fingerprint (a hash of the file list and each file's size and
-modification time); when it has not moved, the map reads no source at all. Imports and pale
+The poll sends the change stamp it already holds to `/api/bootstrap?since=`; when the files have not
+moved, the server answers with just the stamp and the map reads no source at all. Imports and pale
 pillars are batched into line systems, the strands and labels redraw at a capped rate while
 boxes move, and a settled map rebuilds nothing.
 

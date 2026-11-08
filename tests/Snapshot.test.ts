@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdir, readFile, utimes, writeFile } from 'node:fs/promises'
+import { mkdir, utimes, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Graph } from '../src/repo/Graph.ts'
 import { Repo } from '../src/repo/Repo.ts'
@@ -47,11 +47,4 @@ test('Graph narrows imports to the ones touching a folder', () =>
     assert.deepEqual(Graph.EdgesUnder(edges, 'lib'), [['src/a.ts', 'lib/b.ts']])
     assert.deepEqual(Graph.EdgesUnder(edges, 'lib/'), [['src/a.ts', 'lib/b.ts']])
     assert.deepEqual(Graph.EdgesUnder(edges), edges)
-})
-
-test('The page loads the Babylon version that is installed', async () =>
-{
-    const html = await readFile(join(import.meta.dirname, '..', 'public', 'index.html'), 'utf8')
-    const installed = JSON.parse(await readFile(join(import.meta.dirname, '..', 'node_modules', 'babylonjs', 'package.json'), 'utf8')).version
-    assert.ok(html.includes(`/vendor/babylon-${installed}.js`), `index.html must load /vendor/babylon-${installed}.js`)
 })

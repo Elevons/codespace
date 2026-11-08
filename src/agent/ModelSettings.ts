@@ -8,7 +8,7 @@ export const DefaultBaseUrl = 'https://openrouter.ai/api/v1'
 export const DefaultModel = 'deepseek/deepseek-v4.1-flash'
 
 /** The variable read from a key file when none is named. */
-export const DefaultKeyName = 'MODEL_API_KEY'
+const DefaultKeyName = 'MODEL_API_KEY'
 
 /** The model the chat talks to, and how to reach it. */
 export interface IModelSettings

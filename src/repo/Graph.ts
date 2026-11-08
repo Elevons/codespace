@@ -1,14 +1,12 @@
 import { dirname, posix } from 'node:path'
+import { TS_JS_FILE } from '../../public/symbols.ts'
 import type { Repo } from './Repo.ts'
-
-/** The files whose imports are read as TypeScript or JavaScript, by relative specifier. */
-const CodeFile = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/
 
 /** The files whose imports are read as C#, by namespace. */
 const CSharpFile = /\.cs$/
 
 /** The largest file read for its imports, in characters. */
-const MaxFileChars = 400_000
+const MaxImportScanChars = 400_000
 
 /** The import graph between a repository's code files. */
 export class Graph
@@ -48,7 +46,7 @@ export class Graph
         for (const path of files)
         {
             if (!CSharpFile.test(path)) continue
-            const text = (await read(path).catch(() => '')).slice(0, MaxFileChars)
+            const text = (await read(path).catch(() => '')).slice(0, MaxImportScanChars)
             csharpUses.set(path, Graph.CSharpUses(text))
             const namespace = Graph.CSharpNamespace(text)
             if (namespace !== null) declared.set(namespace, [...(declared.get(namespace) ?? []), path])
@@ -63,10 +61,10 @@ export class Graph
                 for (const namespace of csharpUses.get(path) ?? [])
                     for (const target of declared.get(namespace) ?? []) if (target !== path) targets.add(target)
             }
-            else if (CodeFile.test(path))
+            else if (TS_JS_FILE.test(path))
             {
                 const text = await read(path).catch(() => '')
-                for (const specifier of Graph.ParseSpecifiers(text.slice(0, MaxFileChars)))
+                for (const specifier of Graph.ParseSpecifiers(text.slice(0, MaxImportScanChars)))
                 {
                     const folder = dirname(path) === '.' ? '' : dirname(path)
                     const target = Graph.Resolve(posix.join(folder, specifier), known)
@@ -90,14 +88,13 @@ export class Graph
 
     /**
      * Lists every import between two files.
-     * @param folder when given, only imports where either file is under this folder
      * @returns each import as the importing file and the imported one
      */
-    public Edges(folder = ''): Array<[string, string]>
+    public Edges(): Array<[string, string]>
     {
         const edges: Array<[string, string]> = []
         for (const [from, targets] of this.imports) for (const to of targets) edges.push([from, to])
-        return Graph.EdgesUnder(edges, folder)
+        return edges
     }
 
     /**
@@ -163,8 +160,10 @@ export class Graph
     {
         const base = posix.normalize(resolved)
         const candidates = [
-            base, base + '.ts', base.replace(/\.[cm]?js$/, '.ts'), base + '.tsx', base + '.js', base + '.jsx',
-            base + '.mjs', base + '.cjs', base + '/index.ts', base + '/index.tsx', base + '/index.js', base + '/index.jsx',
+            base, base + '.ts', base + '.mts', base + '.cts',
+            base.replace(/\.mjs$/, '.mts'), base.replace(/\.cjs$/, '.cts'), base.replace(/\.[cm]?js$/, '.ts'),
+            base + '.tsx', base + '.js', base + '.jsx', base + '.mjs', base + '.cjs',
+            base + '/index.ts', base + '/index.mts', base + '/index.cts', base + '/index.tsx', base + '/index.js', base + '/index.jsx',
         ]
         return candidates.find((candidate) => known.has(candidate)) ?? null
     }

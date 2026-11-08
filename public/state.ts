@@ -1,6 +1,8 @@
 import { CODE_FILE } from "./symbols.js";
-import { passesSliceValues, type SliceAxis } from "./filter.js";
-import type { Box, CamGoal, ColorBy, FileRecord, GraphNode, OutlinerState, Trace } from "./types.js";
+import { passesSliceValues } from "./filter.js";
+import { folderColor, folderOf, isFileVisible as fileVisible, layerRank as rankOf, nodeMatchesFilters as nodeMatches } from "./rules.js";
+import { TAG_COLORS, type Tag } from "./tags.js";
+import type { Box, CamGoal, ColorBy, FileRecord, FileSpot, GraphNode, GroupAxis, OutlinerState, Trace } from "./types.js";
 
 // ---- constants ----
 export const V3 = BABYLON.Vector3;
@@ -11,7 +13,6 @@ export const AREA_PER_WEIGHT = 2.0;
 export const TILE_GAP = 0.7, MARGIN = 0.55, PLATE_H = 0.06, FLOOR_STEP = 0.035;
 export const DEFAULT_ALPHA = -Math.PI / 2 - 0.62, DEFAULT_BETA = 0.95;
 const LAYER_GAP = 3;
-export { CODE_FILE };
 
 // ---- the mutable world ----
 export const S = {
@@ -35,6 +36,7 @@ export const S = {
     group: "folder",
     hiddenFiles: new Set<string>(),
     shownFiles: new Set<string>(),
+    shownExtraFolders: new Set<string>(),
     collapsed: new Set<string>(),
   } as OutlinerState,
   layerPlanes: [] as BABYLON.Mesh[],           // the translucent planes, one per layer
@@ -63,12 +65,10 @@ export const S = {
   repoRoot: "",                                // its folder on the machine running Codespace
   ingestOnly: true,                            // show only files that the architecture file already describes
   undescribed: 0,                              // how many files that leaves out of the map
-  plateMesh: null as BABYLON.Mesh | null,      // every folder tile, batched into one mesh
-  plateLines: null as BABYLON.Mesh | null,     // the tile outlines, batched into one line system
 };
 
 /** Folders the Extras toggle hides by default: tests, docs, scripts, assets, and library code. */
-const EXTRA_FOLDER = /(^|\/)(tests|node_modules|bower_components|jspm_packages|vendor|third_party|third-party|site-packages|__pycache__|\.venv|venv|Pods|Carthage)$|^docs$|^scripts$|^\.codespace$|^game\/public$/;
+const EXTRA_FOLDER = /(^|\/)(tests|node_modules|bower_components|jspm_packages|vendor|third_party|third-party|site-packages|__pycache__|\.venv|venv|Pods|Carthage)$|^docs$|^scripts$|^\.codespace$/;
 
 /** Whether a folder counts as an extra: tests, docs, scripts, assets, or library code. */
 function isExtraFolder(id: string): boolean
@@ -76,10 +76,10 @@ function isExtraFolder(id: string): boolean
   return EXTRA_FOLDER.test(id);
 }
 
-/** Every folder the Extras toggle acts on, named or user-chosen. */
-export function extraFolderIds(): string[]
+/** Whether the Extras toggle hides this folder: it is an extra, the extras are off, and no one re-showed it. */
+export function hiddenByExtras(id: string): boolean
 {
-  return S.NODES.filter((node) => isExtraFolder(node.id)).map((node) => node.id);
+  return !S.extrasShown && pathIndex().extras.has(id) && !S.outliner.shownExtraFolders.has(id);
 }
 
 // ---- the layers ----
@@ -110,47 +110,16 @@ export function colorForSystem(system: string): string
   return systemColors.get(system)!;
 }
 
-/** The folder a path lives in, or "" for the repository root. */
-export function folderOf(path: string): string
-{
-  const cut = path.lastIndexOf("/");
-  return cut < 0 ? "" : path.slice(0, cut);
-}
-
 /** The label for a system in the outliner; an unassigned file gets a readable placeholder. */
 export function systemLabel(system: string): string
 {
   return system === "" ? "unassigned" : system;
 }
 
-// The words shown for one layer in the filter strip.
-export function labelFor(layer: string): string
-{
-  return layer.replace(/[-_]+/g, " ");
-}
-
-/** The colour for each tag, so files read by role once they carry tags. */
-const TAG_COLORS: Record<string, string> = {
-  entry: "#f0883e", orchestrate: "#d2a8ff", core: "#58a6ff", data: "#7ee787",
-  io: "#ff7b72", ui: "#39d2c0", config: "#8b949e", test: "#e3b341",
-};
-
-// The colour of one tag, or a neutral grey for anything unfamiliar.
+/** The colour of one tag, or a neutral grey for anything unfamiliar. */
 function colorForTag(tag: string): string
 {
-  return TAG_COLORS[tag] ?? "#8b949e";
-}
-
-/** The colours a folder's boxes cycle through when the map is coloured by folder. */
-const FOLDER_HUES = ["#58a6ff", "#d2a8ff", "#ffa657", "#56d4dd", "#e3b341", "#f778ba", "#7ee787", "#ff7b72"];
-
-// A steady colour for the folder a path lives in, so neighbours read as one group.
-export function folderColor(path: string): string
-{
-  const folder = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
-  let hash = 0;
-  for (const ch of folder) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-  return FOLDER_HUES[hash % FOLDER_HUES.length];
+  return TAG_COLORS[tag as Tag] ?? "#8b949e";
 }
 
 // Blends two hex colours, t from 0 for the first to 1 for the second.
@@ -175,8 +144,9 @@ function changeColor(weight: number): string
 }
 
 // The colour of one file: by the map's chosen colouring, which defaults to its first tag.
-export function fileColor(path: string, layer: string): string
+export function fileColor(path: string): string
 {
+  const layer = S.FILE_LAYERS.get(path) ?? "";
   if (S.colorBy === "system") return colorForSystem(S.FILE_SYSTEMS.get(path) ?? "");
   if (S.colorBy === "folder") return folderColor(path);
   if (S.colorBy === "size") return sizeColor(linesOf(path));
@@ -193,11 +163,19 @@ export function matchesTagFilter(path: string): boolean
   return (S.FILE_TAGS.get(path) || []).includes(S.tagFilter);
 }
 
+// One file's value on an axis, with "" for a file that has none.
+export function sliceValue(path: string, axis: GroupAxis): string
+{
+  if (axis === "system") return S.FILE_SYSTEMS.get(path) ?? "";
+  if (axis === "layer") return S.FILE_LAYERS.get(path) ?? "";
+  return folderOf(path);
+}
+
 // Whether a file passes the filter strip: it must sit in a selected system and a selected layer,
 // when either strip has a selection. `skip` ignores one axis, so that axis can count its own values.
-export function passesSlice(path: string, skip: SliceAxis | null = null): boolean
+export function passesSlice(path: string, skip: GroupAxis | null = null): boolean
 {
-  return passesSliceValues(S.FILE_SYSTEMS.get(path), S.FILE_LAYERS.get(path), S.outliner.systems, S.outliner.layers, skip);
+  return passesSliceValues(sliceValue(path, "system"), sliceValue(path, "layer"), S.outliner.systems, S.outliner.layers, skip);
 }
 
 // Whether a file passes both the tag filter and the filter strip, so the scene can draw only the rest.
@@ -244,23 +222,19 @@ export function hasFilters(): boolean
 export function nodeMatchesFilters(nodeIndex: number): boolean
 {
   const n = S.NODES[nodeIndex];
-  return n.files.some((_, i) => matchesFilters(filePath(nodeIndex, i)));
+  return nodeMatches(n.files.map((_, i) => filePath(nodeIndex, i)), matchesFilters);
 }
 
 // Whether a file is hidden from the scene altogether: an eye on its file, or on a folder above it.
 export function isFileVisible(path: string): boolean
 {
-  // A file's own eye wins over its folder, so any file can be brought back.
-  if (S.outliner.shownFiles.has(path)) return true;
-  if (S.outliner.hiddenFiles.has(path)) return false;
-  // Loose top-level files (readme, package files) count as extras.
-  if (!S.extrasShown && !path.includes("/")) return false;
-  for (let dir = folderOf(path); ; dir = folderOf(dir))
-  {
-    if (S.hiddenFolders.has(dir)) return false;
-    if (dir === "") break;
-  }
-  return true;
+  return fileVisible(path, {
+    shownFiles: S.outliner.shownFiles,
+    hiddenFiles: S.outliner.hiddenFiles,
+    hiddenFolders: S.hiddenFolders,
+    extrasShown: S.extrasShown,
+    hiddenByExtras,
+  });
 }
 
 // Whether a file is drawn in the scene: no eye hides it, and it passes every active filter.
@@ -273,7 +247,7 @@ export function inScene(path: string): boolean
 // stack by this rank, so hiding or filtering a layer away closes the gap it leaves.
 export function layerRank(layer: string): number
 {
-  return S.shownLayers.indexOf(layer);
+  return rankOf(layer, S.shownLayers);
 }
 
 // Whether a path names a code file whose line count sets its box height.
@@ -319,6 +293,46 @@ export function filePath(nodeIndex: number, fileIndex: number): string
   const n = S.NODES[nodeIndex];
   const file = n.files[fileIndex];
   return n.id ? n.id + "/" + file : file;
+}
+
+/** Where every file and folder sits, rebuilt only when the node list itself is replaced. */
+interface PathIndex
+{
+  nodes: GraphNode[];
+  files: Map<string, [number, number]>;
+  folders: Map<string, number>;
+  extras: Set<string>;
+  ordered: FileSpot[];
+}
+let pathIndexCache: PathIndex | null = null;
+
+/** The cached path index for the current node list, so a lookup never scans the whole graph. */
+export function pathIndex(): PathIndex
+{
+  if (pathIndexCache === null || pathIndexCache.nodes !== S.NODES)
+  {
+    const files = new Map<string, [number, number]>(), folders = new Map<string, number>(), extras = new Set<string>();
+    const ordered: FileSpot[] = [];
+    S.NODES.forEach((n, node) =>
+    {
+      folders.set(n.id, node);
+      if (isExtraFolder(n.id)) extras.add(n.id);
+      n.files.forEach((_name, file) =>
+      {
+        const path = filePath(node, file);
+        files.set(path, [node, file]);
+        ordered.push({ path, node, file });
+      });
+    });
+    pathIndexCache = { nodes: S.NODES, files, folders, extras, ordered };
+  }
+  return pathIndexCache;
+}
+
+/** One file's [folder, file] indices, or [-1, -1] when no folder holds that path. */
+export function fileIndex(path: string): [number, number]
+{
+  return pathIndex().files.get(path) ?? [-1, -1];
 }
 
 // ---- the scene ----

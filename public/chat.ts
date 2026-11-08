@@ -8,33 +8,7 @@ import { S } from "./state.js";
 import { escapeHtml } from "./panels.js";
 import { focusPath } from "./view.js";
 
-/** One line of the conversation, as the server sends it. */
-interface ChatLine
-{
-  role: "user" | "assistant" | "tool" | "error";
-  text: string;
-  tool?: string;
-}
-
-/** What the server says about the chat. */
-interface ChatState
-{
-  model: string;
-  problem: string;
-  busy: boolean;
-  current: string;
-  lines: ChatLine[];
-  chats: Array<{ id: string; title: string; updated: string }>;
-}
-
-/** Something that happened while a reply is under way. */
-type ChatEvent =
-  | { kind: "start" }
-  | { kind: "text"; delta: string }
-  | { kind: "tool"; name: string; detail: string }
-  | { kind: "tool-end"; name: string; error: boolean }
-  | { kind: "end"; error?: string }
-  | { kind: "changed" };
+import type { ChatEvent, IChatLine as ChatLine, IChatState as ChatState } from "./chatwire.js";
 
 function byId<T extends HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 

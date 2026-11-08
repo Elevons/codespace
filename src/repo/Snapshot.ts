@@ -9,7 +9,7 @@ const ReadLimit = 16
 const MaxScanChars = 1_000_000
 
 /** Everything the page needs to draw a repository, read in one pass. */
-export interface ISnapshot
+interface ISnapshot
 {
     /** The change stamp the rest was read at. */
     fingerprint: string

@@ -24,7 +24,7 @@ the code.
       "system": "server",
       "layer": "entry",
       "tags": ["entry", "io"],
-      "summary": "Serves the page, the repository, changes, and the fingerprint API."
+      "summary": "Serves the page, its assets, Babylon, and the API over HTTP."
     },
     "src/repo/Repo.ts": {
       "system": "server",
@@ -60,9 +60,20 @@ panel can delete this folder whole, so a repository can be described again from 
 | `summary` | One plain sentence on what the file is *for*: what it does and why it exists, not how. |
 | `folders` entry | A `summary` saying what the folder's contents are for, written once its files and folders are described. |
 
-Every field is optional. A file with no entry sits on the ground, uncoloured by role.
+Every field is optional to the reader: a file with no entry is read as one with no system, layer, or
+tags. The map shows only described files by default; the *Described only* toggle in the Outliner's
+grouping menu draws the rest, and those files then sit on the ground, uncoloured by role.
+The describe loop is stricter — it hands back any ordinary file that lacks a summary, a system, a
+layer, or tags (`Architecture.Lacks`). Generated and vendored files are the one exemption:
+`Ingest.SkippedSummary` settles each with a summary alone (for example `package-lock.json` and
+`.codespace/architecture.json` here), so they carry no system, layer, or tags. The architecture file
+also covers only readable text files: tracked root files with no extension, such as `.gitignore` and
+`.env.example`, are outside it and need no entry.
 
-## The tag vocabulary (closed — do not invent more)
+## The tag vocabulary (fixed for colour; unknown tags are kept but drawn grey)
+
+The vocabulary and its colours are defined once in `public/tags.ts`; the server imports it too, so
+the two trees cannot drift.
 
 | Tag | Means |
 | --- | --- |
@@ -78,11 +89,11 @@ Every field is optional. A file with no entry sits on the ground, uncoloured by 
 ## Rules for generated code
 
 1. When you add a file, add its entry to `.codespace/architecture.json` in the same change, or
-   run `node src/cli/Cli.ts apply`, which validates the change and redraws the map.
+   run `node --experimental-transform-types src/cli/Cli.ts apply`, which validates the change and redraws the map.
 2. When you move or rename a file, move its entry's key to the new path. An entry for a
-   path that no longer exists is ignored, and the Summary panel warns about it.
-3. Draw tags only from the vocabulary above, systems only from `systems`, and layers only from
-   `layers`. A layer may appear in more than one system.
+   path that no longer exists is ignored, and the info panel warns about it.
+3. Draw tags from the vocabulary above; a tag outside it is accepted and stored, but drawn grey.
+   Systems must come from `systems`, and layers from `layers`. A layer may appear in more than one system.
 4. Keep summaries to one sentence.
 5. A repository keeps its own entries true: `Cli.ts install` leaves a marked note in its `AGENTS.md`
    (or `CLAUDE.md`) and the full rules in `.codespace/README.md`, so whoever changes the code updates
@@ -93,7 +104,7 @@ Every field is optional. A file with no entry sits on the ground, uncoloured by 
    (a hash, size, and time, git-ignored), so `next` can hand back files that changed since their entry
    was written, and `Cli.ts sync` carries an entry along with a file that was moved (same text) and drops
    entries for files that are gone.
-6. Entries can be written by an agent in batches: `node src/cli/Cli.ts next` hands back the
+6. Entries can be written by an agent in batches: `node --experimental-transform-types src/cli/Cli.ts next` hands back the
    files and folders still missing a summary, a system, a layer, or tags, and `apply` writes
    them back. Declare the systems and layers first; a system or layer not listed is refused.
    Generated and vendored files are summarized for it, so it does not spend effort on lockfiles

@@ -4,7 +4,7 @@ import { SkippedSummary } from './Ingest.ts'
 import type { Repo } from './Repo.ts'
 
 /** What a sync changed. */
-export interface ISynced
+interface ISynced
 {
     /** Entries carried to a new path, because the file was moved and its text is the same. */
     renamed: Array<{ from: string, to: string }>

@@ -1,4 +1,5 @@
-import { S, folderOf } from "./state.js";
+import { S } from "./state.js";
+import { folderOf } from "./rules.js";
 import type { Graph, GraphNode } from "./types.js";
 
 // The layer and shelf rank for a folder: its top segment names the band, and its
@@ -95,12 +96,12 @@ async function loadGraph(since: string | null = null): Promise<Graph | null>
 
   // The architecture file decides what the map draws, and a big repository draws far faster
   // when the files nobody has described yet are left out.
-  const architecture = data.architecture || { layers: [], systems: {}, files: {}, folders: {}, warnings: [], error: "" };
+  const architecture = data.architecture;
   const described = new Set(Object.entries(architecture.files as Record<string, { system?: string, layer?: string, tags?: string[], summary?: string }>)
     .filter(([, entry]) => entry.system !== undefined || entry.layer !== undefined || (entry.tags?.length ?? 0) > 0 || entry.summary !== undefined)
     .map(([path]) => path));
 
-  const known: string[] = data.files || [];
+  const known: string[] = data.files;
   const filtering = S.ingestOnly && described.size > 0 && described.size < known.length;
   const paths = filtering ? known.filter((path) => described.has(path)) : known;
   S.undescribed = filtering ? known.length - paths.length : 0;
@@ -196,17 +197,17 @@ async function loadGraph(since: string | null = null): Promise<Graph | null>
     if (entry.layer) layers.set(path, entry.layer);
     if (entry.summary) summaries.set(path, entry.summary);
   }
-  for (const [path, summary] of Object.entries(architecture.folders ?? {}) as [string, string][])
+  for (const [path, summary] of Object.entries(architecture.folders) as [string, string][])
   {
     if (summary) summaries.set(path, summary);
   }
   const layerOrder = architecture.layers.length > 0 ? architecture.layers : null;
-  const systemOrder = Object.keys(architecture.systems ?? {});
+  const systemOrder = Object.keys(architecture.systems);
   const notes = architecture.error ? [architecture.error] : architecture.warnings;
 
   // How many lines each file has changed since HEAD, for the changes colouring. A repository that
   // is not under git, or has no git on the machine, simply has no changes.
-  const changes = new Map<string, number>(Object.entries(data.changes ?? {}));
+  const changes = new Map<string, number>(Object.entries(data.changes));
 
   const nodes = Array.from(folderNodes.values());
   nodes.forEach((node) => node.files.sort());

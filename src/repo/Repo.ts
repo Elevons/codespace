@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { readdir, readFile, realpath, stat } from 'node:fs/promises'
 import { extname, join, relative, resolve, sep } from 'node:path'
+import { IsInside } from './JsonStore.ts'
 
 /** VCS folders a code map never walks, whatever the repository says. */
 const VcsSegments = new Set(['.git', '.hg', '.svn'])
@@ -12,8 +13,8 @@ const DefaultExcluded = new Set([
     '.vscode', '.trail', '.claude', '.turbo', '.parcel-cache', '.pytest_cache', 'tmp',
 ])
 
-/** Generated paths skipped when the repository has no .gitignore of its own. */
-const DefaultExcludedPaths = new Set(['public/vectors/chunks.json'])
+/** Paths Codespace writes for this machine alone, hidden whatever the repository's rules say. */
+const MachineLocalPaths = new Set(['.codespace/ingested.json'])
 
 /** The file types the map can read and show. */
 const TextExtensions = new Set([
@@ -137,16 +138,6 @@ export class Repo
     }
 
     /**
-     * A cheap change stamp for the whole repository: a hash of its file list and each file's
-     * size and modification time. Reading this costs a stat per file, not a read, so a page
-     * that polls can tell nothing has changed and skip reading every source file again.
-     */
-    public async FingerprintAsync(): Promise<string>
-    {
-        return (await this.StampAsync()).fingerprint
-    }
-
-    /**
      * Lists the files and stamps them in one walk, so a caller that needs both does not list twice.
      * @returns the sorted file list and the change stamp over it
      */
@@ -180,7 +171,7 @@ export class Repo
 
         // Then we resolve the file's real path, so a symlink inside the tree cannot point out of it.
         const real = await realpath(join(this.Root, relativePath))
-        if (real !== this.Root && !real.startsWith(this.Root + sep)) throw new Error('Forbidden')
+        if (!IsInside(this.Root, real)) throw new Error('Forbidden')
 
         // Finally we read the file as text.
         return readFile(real, 'utf8')
@@ -195,7 +186,7 @@ export class Repo
         if (relativePath === '' || relativePath.includes('\0')) return false
 
         const resolved = resolve(this.Root, relativePath)
-        const inside = resolved === this.Root || resolved.startsWith(this.Root + sep)
+        const inside = IsInside(this.Root, resolved)
         if (!inside) return false
 
         const path = relative(this.Root, resolved).split(sep).join('/')
@@ -212,13 +203,10 @@ export class Repo
     {
         const parts = relativePath.split('/')
         if (parts.some((part) => VcsSegments.has(part))) return true
+        if (MachineLocalPaths.has(relativePath)) return true
 
         // With no .gitignore of its own, the repository falls back to the built-in list.
-        if (this.ignoreRules.length === 0)
-        {
-            if (parts.some((part) => DefaultExcluded.has(part))) return true
-            return DefaultExcludedPaths.has(relativePath)
-        }
+        if (this.ignoreRules.length === 0) return parts.some((part) => DefaultExcluded.has(part))
 
         // Otherwise the repository's own rules decide, last match winning.
         const name = parts[parts.length - 1]!

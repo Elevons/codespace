@@ -1,49 +1,40 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { request as httpRequest } from 'node:http'
-import type { AddressInfo } from 'node:net'
-import { mkdir, writeFile } from 'node:fs/promises'
-import { gunzipSync } from 'node:zlib'
+import { execFile } from 'node:child_process'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { Server } from '../src/server/Server.ts'
-import { Workspace } from '../src/server/Workspace.ts'
-import { makeTemp, removeTemp } from './support.ts'
+import { promisify } from 'node:util'
+import { gunzipSync } from 'node:zlib'
+import { makeRepo, makeTemp, raw, removeTemp, request, send, startServer, waitFor } from './support.ts'
 
-/** Sends one request, returning the status and either the parsed JSON or the raw text. */
-function send(port: number, path: string, headers: Record<string, string> = {}): Promise<{ status: number, body: any, text: string }>
+const Run = promisify(execFile)
+
+/** The environment git runs in, so a machine's own settings and hooks cannot change the result. */
+const GitEnv = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' }
+
+/** Runs one git command in a repository, without signing, user config, or hooks. */
+async function git(root: string, ...args: string[]): Promise<void>
 {
-    return new Promise((done, fail) =>
-    {
-        const req = httpRequest({ host: '127.0.0.1', port, method: 'GET', path, headers }, (res) =>
-        {
-            const chunks: Buffer[] = []
-            res.on('data', (chunk) => chunks.push(chunk as Buffer))
-            res.on('end', () =>
-            {
-                const text = Buffer.concat(chunks).toString('utf8')
-                const json = (res.headers['content-type'] ?? '').includes('application/json')
-                done({ status: res.statusCode!, body: json && text !== '' ? JSON.parse(text) : null, text })
-            })
-        })
-        req.on('error', fail)
-        req.end()
-    })
+    await Run('git', ['-c', 'commit.gpgsign=false', '-c', `core.hooksPath=${join(root, '.git', 'no-hooks')}`, '-c', 'user.email=test@example.com', '-c', 'user.name=Test', '-C', root, ...args], { env: GitEnv })
+}
+
+/** Whether git is installed, so the changes test can skip instead of failing. */
+async function hasGit(): Promise<boolean>
+{
+    try { await Run('git', ['--version'], { env: GitEnv }); return true }
+    catch { return false }
 }
 
 test('Server serves the page, files, source, and the folder picker, and refuses what leaves it', async () =>
 {
-    const repoRoot = await makeTemp('codespace-server-repo-')
+    const repoRoot = await makeRepo({ 'src/a.ts': 'export const a = 1\n' }, 'codespace-server-repo-')
     const publicRoot = await makeTemp('codespace-server-public-')
     try
     {
-        await mkdir(join(repoRoot, 'src'))
-        await writeFile(join(repoRoot, 'src', 'a.ts'), 'export const a = 1\n')
         await writeFile(join(publicRoot, 'index.html'), '<!doctype html><title>Map</title>')
 
-        const workspace = await Workspace.OpenAsync(repoRoot)
-        const { http } = await Server.CreateAsync(workspace, publicRoot)
-        await new Promise<void>((done) => http.listen(0, '127.0.0.1', done))
-        const port = (http.address() as AddressInfo).port
+        const { port, stop } = await startServer(repoRoot, publicRoot)
         try
         {
             const files = await send(port, '/api/files')
@@ -70,47 +61,27 @@ test('Server serves the page, files, source, and the folder picker, and refuses 
             // A request that climbs out of the public folder is refused.
             assert.equal((await send(port, '/..%2F..%2Fetc%2Fpasswd')).status, 403)
         }
-        finally
-        {
-            await new Promise<void>((done) => { http.closeAllConnections(); http.close(() => done()) })
-        }
+        finally { await stop() }
     }
     finally { await removeTemp(repoRoot, publicRoot) }
 })
 
-/** Sends one request and returns the status, headers, and raw body, without decoding it. */
-function raw(port: number, path: string, headers: Record<string, string> = {}): Promise<{ status: number, headers: Record<string, string | string[] | undefined>, body: Buffer }>
-{
-    return new Promise((done, fail) =>
-    {
-        const req = httpRequest({ host: '127.0.0.1', port, method: 'GET', path, headers }, (res) =>
-        {
-            const chunks: Buffer[] = []
-            res.on('data', (chunk) => chunks.push(chunk as Buffer))
-            res.on('end', () => done({ status: res.statusCode!, headers: res.headers, body: Buffer.concat(chunks) }))
-        })
-        req.on('error', fail)
-        req.end()
-    })
-}
-
 test('Server answers a whole page load from one bootstrap request, and only the stamp when nothing changed', async () =>
 {
-    const repoRoot = await makeTemp('codespace-boot-repo-')
+    const files: Record<string, string> = {
+        'src/a.ts': "import { b } from './b.ts'\nexport function a() { return b }\n",
+        'src/b.ts': 'export const b = 1\n',
+    }
+    // Enough files that the answer is worth compressing.
+    for (let i = 0; i < 40; i++) files[`src/extra-${i}.ts`] = `export const value${i} = ${i}\n`
+    const repoRoot = await makeRepo(files, 'codespace-boot-repo-')
     const publicRoot = await makeTemp('codespace-boot-public-')
     try
     {
-        await mkdir(join(repoRoot, 'src'))
-        await writeFile(join(repoRoot, 'src', 'a.ts'), "import { b } from './b.ts'\nexport function a() { return b }\n")
-        await writeFile(join(repoRoot, 'src', 'b.ts'), 'export const b = 1\n')
-        // Enough files that the answer is worth compressing.
-        for (let i = 0; i < 40; i++) await writeFile(join(repoRoot, 'src', `extra-${i}.ts`), `export const value${i} = ${i}\n`)
         await writeFile(join(publicRoot, 'index.html'), '<!doctype html><title>Map</title>'.repeat(100))
         await writeFile(join(publicRoot, 'main.js'), 'console.log(1)')
 
-        const { http } = await Server.CreateAsync(await Workspace.OpenAsync(repoRoot), publicRoot)
-        await new Promise<void>((done) => http.listen(0, '127.0.0.1', done))
-        const port = (http.address() as AddressInfo).port
+        const { port, stop } = await startServer(repoRoot, publicRoot)
         try
         {
             const boot = await send(port, '/api/bootstrap')
@@ -143,39 +114,134 @@ test('Server answers a whole page load from one bootstrap request, and only the 
             assert.equal(packed.headers['content-encoding'], 'br')
             assert.ok(packed.body.length < page.body.length)
         }
-        finally
-        {
-            await new Promise<void>((done) => { http.closeAllConnections(); http.close(() => done()) })
-        }
+        finally { await stop() }
     }
     finally { await removeTemp(repoRoot, publicRoot) }
 })
 
-test('Server hands out the installed Babylon at a versioned address the browser keeps for good', async () =>
+test('Server hands out the installed Babylon at one address, with a validator', async () =>
 {
     const repoRoot = await makeTemp('codespace-vendor-repo-')
     const publicRoot = await makeTemp('codespace-vendor-public-')
     try
     {
-        const { version } = (await import('../node_modules/babylonjs/package.json', { with: { type: 'json' } })).default
-        const { http } = await Server.CreateAsync(await Workspace.OpenAsync(repoRoot), publicRoot)
-        await new Promise<void>((done) => http.listen(0, '127.0.0.1', done))
-        const port = (http.address() as AddressInfo).port
+        const installed = await readFile(join(import.meta.dirname, '..', 'node_modules', 'babylonjs', 'babylon.js'))
+        const { port, stop } = await startServer(repoRoot, publicRoot)
         try
         {
-            const library = await raw(port, `/vendor/babylon-${version}.js`, { 'Accept-Encoding': 'gzip' })
-            assert.equal(library.status, 200)
-            assert.match(String(library.headers['cache-control']), /immutable/)
-            assert.equal(library.headers['content-encoding'], 'gzip')
-            assert.match(gunzipSync(library.body).subarray(0, 4000).toString(), /BABYLON|babylon/i)
+            const plain = await raw(port, '/vendor/babylon.js')
+            assert.equal(plain.status, 200)
+            assert.deepEqual(plain.body, installed, 'it serves the installed babylonjs package')
 
-            // Any other version is not here, rather than silently answered with this one.
+            const library = await raw(port, '/vendor/babylon.js', { 'Accept-Encoding': 'gzip' })
+            assert.equal(library.status, 200)
+            assert.match(String(library.headers['cache-control']), /no-cache/)
+            assert.ok(library.headers.etag)
+            assert.equal(library.headers['content-encoding'], 'gzip')
+            assert.deepEqual(gunzipSync(library.body), installed)
+
+            // A versioned path is not here: the page names no version.
             assert.equal((await raw(port, '/vendor/babylon-0.0.1.js')).status, 404)
         }
-        finally
-        {
-            await new Promise<void>((done) => { http.closeAllConnections(); http.close(() => done()) })
-        }
+        finally { await stop() }
     }
     finally { await removeTemp(repoRoot, publicRoot) }
+})
+
+test('The page loads Babylon from the one installed build', async () =>
+{
+    const html = await readFile(join(import.meta.dirname, '..', 'public', 'index.html'), 'utf8')
+    assert.ok(html.includes('/vendor/babylon.js'), 'index.html must load /vendor/babylon.js')
+})
+
+test('The repository endpoint lists the current repository and switches to another', async () =>
+{
+    const first = await makeRepo({ 'a.ts': 'export const a = 1\n' }, 'codespace-repo-a-')
+    const second = await makeRepo({ 'b.ts': 'export const b = 1\n' }, 'codespace-repo-b-')
+    const publicRoot = await makeTemp('codespace-repo-public-')
+    try
+    {
+        const { port, stop } = await startServer(first, publicRoot)
+        try
+        {
+            const info = await send(port, '/api/repo')
+            assert.equal(info.status, 200)
+            assert.equal(info.body.root, first)
+            assert.deepEqual(info.body.recent.map((entry: { root: string }) => entry.root), [first])
+
+            const moved = await request(port, 'POST', '/api/repo', { path: second })
+            assert.equal(moved.status, 200)
+            assert.equal(moved.body.root, second)
+            assert.equal((await send(port, '/api/files')).body.files[0], 'b.ts')
+
+            assert.equal((await request(port, 'POST', '/api/repo', {})).status, 400)
+            assert.equal((await request(port, 'POST', '/api/repo', { path: join(first, 'nowhere') })).status, 400)
+            assert.equal((await request(port, 'POST', '/api/repo', { path: first }, { Host: 'evil.example:8443' })).status, 403)
+        }
+        finally { await stop() }
+    }
+    finally { await removeTemp(first, second, publicRoot) }
+})
+
+test('Changes counts the lines a git checkout has changed, and is empty outside git', async (t) =>
+{
+    if (!(await hasGit())) { t.skip('git is not available'); return }
+    const repoRoot = await makeRepo({ 'a.ts': 'export const a = 1\n' }, 'codespace-changes-')
+    const publicRoot = await makeTemp('codespace-changes-public-')
+    try
+    {
+        await git(repoRoot, 'init', '-q')
+        await mkdir(join(repoRoot, '.git', 'no-hooks'), { recursive: true })
+        await git(repoRoot, 'add', '.')
+        await git(repoRoot, 'commit', '-q', '-m', 'initial')
+        await writeFile(join(repoRoot, 'a.ts'), 'export const a = 1\nexport const b = 2\n')
+
+        const { port, stop } = await startServer(repoRoot, publicRoot)
+        try
+        {
+            const changes = await send(port, '/api/changes')
+            assert.equal(changes.status, 200)
+            assert.equal(changes.body.files['a.ts'], 1)
+        }
+        finally { await stop() }
+    }
+    finally { await removeTemp(repoRoot, publicRoot) }
+
+    const plain = await makeRepo({ 'a.ts': 'export const a = 1\n' }, 'codespace-changes-plain-')
+    const mismatch = await makeTemp('codespace-changes-mismatch-')
+    try
+    {
+        const { port, stop } = await startServer(plain, mismatch)
+        try { assert.deepEqual((await send(port, '/api/changes')).body, { files: {} }) }
+        finally { await stop() }
+    }
+    finally { await removeTemp(plain, mismatch) }
+})
+
+test('Switching repositories takes down what was shown and tells watching pages', async () =>
+{
+    const first = await makeRepo({ 'src/a.ts': 'export const a = 1\n' }, 'codespace-show-a-')
+    const second = await makeRepo({ 'b.ts': 'export const b = 1\n' }, 'codespace-show-b-')
+    const publicRoot = await makeTemp('codespace-show-public-')
+    try
+    {
+        const { port, workspace, stop } = await startServer(first, publicRoot)
+        try
+        {
+            const messages: string[] = []
+            const stream = httpRequest({ host: '127.0.0.1', port, path: '/api/view/events' }, (res) => res.on('data', (chunk) => messages.push(String(chunk))))
+            stream.end()
+            await waitFor(() => messages.join('').includes(': connected'))
+
+            workspace.view.Show({ files: [{ path: 'src/a.ts', note: 'A.' }], trace: false, title: '', note: '' })
+            assert.notEqual(workspace.view.Shown, null)
+
+            await workspace.SwitchAsync(second)
+            assert.equal(workspace.view.Shown, null)
+            await waitFor(() => /"type":"repo"/.test(messages.join('')))
+            stream.destroy()
+        }
+        finally { await stop() }
+    }
+    finally { await removeTemp(first, second, publicRoot) }
 })

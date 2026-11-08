@@ -28,7 +28,7 @@ export function colorOf(hex: string): BABYLON.Color3
  */
 export class Batch
 {
-  readonly mesh: BABYLON.Mesh;
+  private readonly mesh: BABYLON.Mesh;
   private matrices = new Float32Array(0);
   private colors = new Float32Array(0);
   private count = 0;
@@ -88,5 +88,58 @@ export class Batch
     if (this.matricesDirty) this.mesh.thinInstanceBufferUpdated("matrix");
     if (this.colorsDirty) this.mesh.thinInstanceBufferUpdated("color");
     this.matricesDirty = this.colorsDirty = false;
+  }
+}
+
+/**
+ * Two batches of one shape, a bright one and a faded one, sharing a slot per file: a file is
+ * placed in whichever it fits and hidden in the other, so drawing the whole map costs two draws
+ * and choosing a file costs no extra one.
+ */
+export class PairedBatch
+{
+  private readonly bright: Batch;
+  private readonly faint: Batch;
+
+  constructor(bright: Batch, faint: Batch)
+  {
+    this.bright = bright;
+    this.faint = faint;
+  }
+
+  /** Makes room for exactly `count` slots in both batches. */
+  resize(count: number): void
+  {
+    this.bright.resize(count);
+    this.faint.resize(count);
+  }
+
+  /** Hides one slot in both batches. */
+  hide(slot: number): void
+  {
+    this.bright.hide(slot);
+    this.faint.hide(slot);
+  }
+
+  /** Places a slot in the bright or faded batch, and hides it in the other. */
+  place(slot: number, lit: boolean, x: number, y: number, z: number, sx: number, sy: number, sz: number): void
+  {
+    const into = lit ? this.bright : this.faint;
+    (lit ? this.faint : this.bright).hide(slot);
+    into.place(slot, x, y, z, sx, sy, sz);
+  }
+
+  /** Tints one slot in both batches, so it keeps its colour whichever one draws it. */
+  paint(slot: number, color: BABYLON.Color3): void
+  {
+    this.bright.paint(slot, color.r, color.g, color.b);
+    this.faint.paint(slot, color.r, color.g, color.b);
+  }
+
+  /** Sends what changed this frame to the GPU, once per batch. */
+  flush(): void
+  {
+    this.bright.flush();
+    this.faint.flush();
   }
 }

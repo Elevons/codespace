@@ -1,7 +1,6 @@
 import { S, isLitRecord, materialFor, fileColor } from "./state.js";
 import { placeBox, paintBox, releaseAccents, accent, retireAccents } from "./boxes.js";
 import { colorOf } from "./batch.js";
-import type { FileRecord } from "./types.js";
 
 // Paints every file for the current choice. The crowd is tinted in its batch; the few files
 // that stand out (chosen, hovered, the start of a route, the files shown) get a mesh of their own.
@@ -12,13 +11,12 @@ function applyHighlight(): void
   const start = S.trace !== null && S.trace.trace ? S.trace.paths[0] : null;
   for (const rec of S.fileRecords.values())
   {
-    const n = S.NODES[rec.node];
     const chosen = rec.node === S.selected && rec.file === S.selectedFile;
     const lit = isLitRecord(rec);
     const hovered = rec.path === S.hoveredPath;
     const shown = S.trace !== null && S.trace.set.has(rec.path);
     const emphasise = start !== null && rec.path === start;
-    const hex = fileColor(rec.path, n.layer);
+    const hex = fileColor(rec.path);
     rec.lit = lit;
     if (chosen || emphasise || shown || hovered)
     {

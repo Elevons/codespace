@@ -6,6 +6,9 @@
 /** The files read for their line count and declarations; every other type is shown, not scanned. */
 export const CODE_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|py|rb|go|rs|java|kt|kts|swift|cs|c|h|cc|cpp|hpp|php|vue|svelte|scala|dart|lua|ex|exs|erl|clj|jl|r|html?|css|scss|less|json|yaml|yml|svg|xml|md|sh|sql)$/;
 
+/** The code files whose imports are read as TypeScript or JavaScript, by relative specifier. */
+export const TS_JS_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/;
+
 /** One declaration a source file lists: its name, the line it starts on, and the source it spans. */
 export interface SymbolInfo
 {

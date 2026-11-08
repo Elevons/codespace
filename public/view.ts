@@ -1,34 +1,13 @@
-import { S, V3, camera, renderEdges, filePath } from "./state.js";
+import { S, V3, camera, renderEdges, pathIndex } from "./state.js";
 import { escapeHtml, select, selectFile } from "./panels.js";
 import { refreshGraph, setSpin } from "./controls.js";
 import { routeTargets } from "./route.js";
-import type { FileRecord, GraphNode } from "./types.js";
+import type { FileRecord } from "./types.js";
 
-/** One file a tool asks the map to show, with an optional explanation. */
-interface ShownFile { path: string; note?: string }
-/** The payload the server streams when a tool asks the map to show something. */
-interface ShownPayload { files: ShownFile[]; trace: boolean; title: string; note: string }
+import type { IShown } from "./shown.js";
 
 const panel = document.getElementById("showing")!;
 const body = document.getElementById("showing-body")!;
-
-// Where each file and folder is in the node list, by path, so a path can be selected and clicked.
-let cache: { nodes: GraphNode[] | null; files: Map<string, [number, number]>; folders: Map<string, number> } =
-  { nodes: null, files: new Map(), folders: new Map() };
-function index(): typeof cache
-{
-  if (cache.nodes !== S.NODES)
-  {
-    const files = new Map<string, [number, number]>(), folders = new Map<string, number>();
-    S.NODES.forEach((n, nodeIndex) =>
-    {
-      folders.set(n.id, nodeIndex);
-      n.files.forEach((name, fileIndex) => files.set(filePath(nodeIndex, fileIndex), [nodeIndex, fileIndex]));
-    });
-    cache = { nodes: S.NODES, files, folders };
-  }
-  return cache;
-}
 
 /* ------------------------------------------------------------ showing ---- */
 
@@ -38,7 +17,7 @@ function renderShowing(): void
   const shown = S.trace;
   panel.hidden = shown === null;
   if (shown === null) { body.innerHTML = ""; return; }
-  const known = index().files;
+  const known = pathIndex().files;
   const rows = shown.paths.map((path, step) =>
   {
     const note = shown.notes[step];
@@ -58,7 +37,7 @@ body.addEventListener("click", (event) =>
   const link = (event.target as HTMLElement).closest("a.path") as HTMLElement | null;
   if (!link) return;
   event.preventDefault();
-  const spot = index().files.get(link.dataset.path!);
+  const spot = pathIndex().files.get(link.dataset.path!);
   if (spot) selectFile(spot[0], spot[1]);
 });
 
@@ -67,16 +46,16 @@ document.getElementById("labels")!.addEventListener("click", (event) =>
 {
   const row = (event.target as HTMLElement).closest("#trace-rail li[data-path]") as HTMLElement | null;
   if (!row) return;
-  const spot = index().files.get(row.dataset.path!);
+  const spot = pathIndex().files.get(row.dataset.path!);
   if (spot) selectFile(spot[0], spot[1]);
 });
 
 // Lights up what a tool asked for, and brings the camera's aim to it.
-function show(shown: ShownPayload): void
+function show(shown: IShown): void
 {
   S.trace = {
     paths: shown.files.map((file) => file.path), set: new Set(shown.files.map((file) => file.path)),
-    notes: shown.files.map((file) => file.note ?? ""),
+    notes: shown.files.map((file) => file.note),
     trace: shown.trace, title: shown.title, note: shown.note,
   };
   renderShowing();
@@ -109,7 +88,7 @@ document.getElementById("showing-clear")!.addEventListener("click", () =>
 // Selects a file or folder and glides the camera to it.
 function focus(path: string): void
 {
-  const { files, folders } = index();
+  const { files, folders } = pathIndex();
   let target: BABYLON.Vector3 | null = null;
   if (files.has(path))
   {

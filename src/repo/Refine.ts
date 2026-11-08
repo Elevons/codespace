@@ -13,7 +13,7 @@ const MinNeighbours = 3
 const MisplacedShare = 0.6
 
 /** One file, as the report names it: its place now and a sentence on what it is for. */
-export interface IRefineFile
+interface IRefineFile
 {
     path: string
     layer: string
@@ -22,7 +22,7 @@ export interface IRefineFile
 }
 
 /** The layer breaks between one pair of layers: a lower layer using a higher one. */
-export interface IBreakGroup
+interface IBreakGroup
 {
     /** The lower layer, the one doing the importing. */
     from: string
@@ -37,7 +37,7 @@ export interface IBreakGroup
 }
 
 /** A file that would sit in fewer breaks on another layer. */
-export interface IMove
+interface IMove
 {
     file: IRefineFile
     /** The layer it would sit in fewer breaks on. */
@@ -49,7 +49,7 @@ export interface IMove
 }
 
 /** A file whose imports and importers are mostly in another system. */
-export interface IMisplaced
+interface IMisplaced
 {
     file: IRefineFile
     /** The system most of its neighbours are in. */
@@ -59,7 +59,7 @@ export interface IMisplaced
 }
 
 /** How one system sits in the layers and among the other systems. */
-export interface ISystemProfile
+interface ISystemProfile
 {
     summary: string
     files: number
@@ -70,7 +70,7 @@ export interface ISystemProfile
 }
 
 /** What `refine` answers: how well the layers and systems fit the imports, and where to look first. */
-export interface IRefineReport
+interface IRefineReport
 {
     /** The layer order, bottom first, as it stands. */
     layers: string[]
@@ -164,7 +164,7 @@ export function Refine(architecture: IArchitecture, edges: ReadonlyArray<readonl
     // Systems: where each sits in the layers, what it imports from the others, and which files look misplaced.
     const profiles: Record<string, ISystemProfile> = {}
     for (const [name, entry] of Object.entries(architecture.systems)) profiles[name] = { summary: entry.summary ?? '', files: 0, layers: {}, uses: {} }
-    for (const [path, entry] of Object.entries(files))
+    for (const entry of Object.values(files))
     {
         const profile = entry.system === undefined ? undefined : profiles[entry.system]
         if (!profile) continue

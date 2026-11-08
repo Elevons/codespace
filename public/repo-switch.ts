@@ -3,6 +3,7 @@
 // panel copies the command prompt for an agent outside, and the Chat panel (chat.ts) runs one inside.
 
 import { copyText } from "./state.js";
+import type { IIngestStatus } from "./ingest.js";
 
 /** What the server says about the repository it reads, and the recent ones. */
 interface IRepoInfo
@@ -10,24 +11,6 @@ interface IRepoInfo
   name: string;
   root: string;
   recent: Array<{ name: string; root: string }>;
-}
-
-/** How much of the codebase still has no summary. */
-interface IIngestStatus
-{
-  files: number;
-  incomplete: number;
-  folders: number;
-  remaining: number;
-  /** Described files whose text has changed since their entry was written. */
-  changed?: number;
-  /** Entries for files and folders that are gone. */
-  stale?: number;
-  /** How many files already have a description, so the button can say whether this is a first ingest or an update. */
-  described?: number;
-  /** What the second pass still finds: layer breaks and anything else worth a look. */
-  refine?: { remaining: number; breaks: number };
-  prompt: string;
 }
 
 /** One folder the picker can walk into. */
@@ -101,10 +84,9 @@ async function refreshStatus(): Promise<void>
     ingest.hidden = false;
     ingestPrompt = status.prompt;
     savedNote.textContent = "The chat saves to .codespace/architecture.json as it goes.";
-    // A server older than the page may not send the newer counts, so each one defaults to nothing.
-    const changed = status.changed ?? 0, stale = status.stale ?? 0;
-    const refine = status.refine ?? { remaining: 0, breaks: 0 };
-    const described = status.described ?? (status.remaining === 0 ? 1 : 0);
+    const changed = status.changed, stale = status.stale;
+    const refine = status.refine;
+    const described = status.described;
     const parts: string[] = [];
     if (status.files > 0) parts.push(status.files + (status.files === 1 ? " file" : " files"));
     if (changed > 0) parts.push(changed + " changed");

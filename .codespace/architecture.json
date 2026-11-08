@@ -70,13 +70,19 @@
       "system": "browser",
       "layer": "render",
       "tags": ["core"],
-      "summary": "Draws and places every file box, batching the crowd and borrowing a real mesh for the few files that stand out."
+      "summary": "Draws and places every file box, batching the crowd and answering which box sits under the pointer."
     },
     "public/chat.ts": {
       "system": "browser",
       "layer": "panels",
       "tags": ["ui"],
       "summary": "The built-in chat panel: the prompt box, the streaming conversation, and links from a reply to a file."
+    },
+    "public/chatwire.ts": {
+      "system": "browser",
+      "layer": "model",
+      "tags": ["data"],
+      "summary": "The shapes of the chat event stream and state, shared by the page and the server."
     },
     "public/city.ts": {
       "system": "browser",
@@ -113,6 +119,12 @@
       "layer": "shell",
       "tags": ["ui", "entry"],
       "summary": "The page's HTML shell: the canvas, the panel markup, and the bootstrap request for the repository."
+    },
+    "public/ingest.ts": {
+      "system": "browser",
+      "layer": "model",
+      "tags": ["data"],
+      "summary": "The shape of the ingest-status response, shared by the page and the server."
     },
     "public/labels.ts": {
       "system": "browser",
@@ -168,6 +180,18 @@
       "tags": ["core"],
       "summary": "Lifts the files of a shown route into an ordered lane in front of the city and settles them back home."
     },
+    "public/rules.ts": {
+      "system": "browser",
+      "layer": "model",
+      "tags": ["core"],
+      "summary": "The map's pure folder, colour, layer-rank, visibility, and ray-picking rules, kept testable away from the scene."
+    },
+    "public/shown.ts": {
+      "system": "browser",
+      "layer": "model",
+      "tags": ["data"],
+      "summary": "The shape of a map show request, shared by the page and the server."
+    },
     "public/state.ts": {
       "system": "browser",
       "layer": "model",
@@ -185,6 +209,12 @@
       "layer": "model",
       "tags": ["core"],
       "summary": "Reads the declarations a source file lists, with the lines they span, for search and the symbol list."
+    },
+    "public/tags.ts": {
+      "system": "browser",
+      "layer": "model",
+      "tags": ["core"],
+      "summary": "The one ordered tag vocabulary and its colours, shared by the browser and the server."
     },
     "public/types.ts": {
       "system": "browser",
@@ -222,11 +252,23 @@
       "tags": ["entry", "io"],
       "summary": "The commands an agent runs to describe a repository: what is left, the next batch, applying it, installing the upkeep rules, and the second pass."
     },
+    "src/cli/Options.ts": {
+      "system": "server",
+      "layer": "config",
+      "tags": ["config"],
+      "summary": "Reads `--name value` or `--name=value` options from a command line."
+    },
     "src/repo/Architecture.ts": {
       "system": "server",
       "layer": "repo",
       "tags": ["core", "io"],
       "summary": "Reads, validates, and writes a repository's architecture file and the batches applied to it."
+    },
+    "src/repo/DescribeGuide.ts": {
+      "system": "server",
+      "layer": "repo",
+      "tags": ["data"],
+      "summary": "The first-pass instructions for describing a repository, shared by the copied prompt and the built-in chat."
     },
     "src/repo/Graph.ts": {
       "system": "server",
@@ -245,6 +287,12 @@
       "layer": "repo",
       "tags": ["core", "io"],
       "summary": "Leaves the upkeep rules in the repository being mapped, so whoever changes it later keeps its architecture file true."
+    },
+    "src/repo/JsonStore.ts": {
+      "system": "server",
+      "layer": "repo",
+      "tags": ["core", "io"],
+      "summary": "The one guarded atomic store for the files Codespace keeps beside a repository, JSON or text, refusing any path that leaves it."
     },
     "src/repo/Ledger.ts": {
       "system": "server",
@@ -268,7 +316,13 @@
       "system": "server",
       "layer": "repo",
       "tags": ["core", "io"],
-      "summary": "Reads a folder as a repository: lists its files safely, honoring gitignore and skipping vendored code."
+      "summary": "Reads a folder as a repository: lists and stamps its files and reads source safely, honoring gitignore and skipping vendored code."
+    },
+    "src/repo/ShowLimits.ts": {
+      "system": "server",
+      "layer": "config",
+      "tags": ["config"],
+      "summary": "The limits on one show request: how many files, and how long each note, the title, and the overall note may be."
     },
     "src/repo/Snapshot.ts": {
       "system": "server",
@@ -286,7 +340,7 @@
       "system": "server",
       "layer": "api",
       "tags": ["orchestrate", "io"],
-      "summary": "The HTTP endpoints for files, graph, source, architecture, changes, the chat, and asking the map to show things."
+      "summary": "The endpoints for the architecture, the import graph, ingest status and its prompt, the view stream, and the chat."
     },
     "src/server/Guard.ts": {
       "system": "server",
@@ -298,7 +352,7 @@
       "system": "server",
       "layer": "entry",
       "tags": ["entry", "io"],
-      "summary": "Serves the page and its assets, Babylon, and the API over HTTP, with the workspace and view stream."
+      "summary": "Serves the page and its assets, the installed Babylon build, and the repository endpoints over HTTP, with the workspace and view stream."
     },
     "src/server/View.ts": {
       "system": "server",
@@ -316,7 +370,7 @@
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests the HTTP endpoints over a small temporary repository."
+      "summary": "Tests the HTTP endpoints over a small temporary repository, including the chat guard, show limits, and the view stream."
     },
     "tests/Architecture.test.ts": {
       "system": "meta",
@@ -328,7 +382,13 @@
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests the chat's transcript lines, model settings, and instructions."
+      "summary": "Tests the chat's transcript lines, model settings, instructions, and its busy, stop, and new-chat lifecycle."
+    },
+    "tests/Cli.test.ts": {
+      "system": "meta",
+      "layer": "tests",
+      "tags": ["test"],
+      "summary": "Tests the describe CLI's commands against temporary repositories, including size limits, generated files, malformed batches, the ledger, and next's move and delete housekeeping."
     },
     "tests/Filter.test.ts": {
       "system": "meta",
@@ -340,25 +400,31 @@
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests linking imports between files, including C# namespaces."
+      "summary": "Tests linking imports between files, including C# namespaces and .mts/.cts siblings named with .mjs/.cjs."
     },
     "tests/Guard.test.ts": {
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests which requests may read or write through the server."
+      "summary": "Tests which requests may read or write through the server, and how request bodies are read."
     },
     "tests/Ingest.test.ts": {
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests which files and folders the describe loop hands back, and which are settled."
+      "summary": "Tests which files and folders the describe loop hands back, which are settled, and how long files are cut."
     },
     "tests/Install.test.ts": {
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
       "summary": "Checks the upkeep rules are written once, only inside their own marked block, and never through a link that leaves the repository."
+    },
+    "tests/JsonStore.test.ts": {
+      "system": "meta",
+      "layer": "tests",
+      "tags": ["test"],
+      "summary": "Tests the one write path: whole writes with no temporary file left, and a .codespace path that is a file being refused untouched."
     },
     "tests/Refine.test.ts": {
       "system": "meta",
@@ -370,43 +436,49 @@
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests listing a repository's files and refusing paths outside it."
+      "summary": "Tests listing a repository's files, refusing paths outside it, and always hiding the machine-local ledger."
+    },
+    "tests/Rules.test.ts": {
+      "system": "meta",
+      "layer": "tests",
+      "tags": ["test"],
+      "summary": "Tests the pure folder, colour, layer-rank, visibility, and ray-and-box rules the map shares."
     },
     "tests/Server.test.ts": {
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests serving the page, its assets, and the API over HTTP."
+      "summary": "Tests serving the page, static assets, the installed Babylon, repository switching, changes, and the view stream."
     },
     "tests/Snapshot.test.ts": {
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests reading lines, declarations, and imports once and reusing them until a file changes."
+      "summary": "Tests reading a repository snapshot once and reusing it until a file changes, and narrowing import edges to a folder."
     },
     "tests/Symbols.test.ts": {
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests reading the declarations a source file lists."
+      "summary": "Tests reading the declarations a source file lists, and which files count as code."
     },
     "tests/Update.test.ts": {
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Checks an update hands back only what changed, carries entries along with moved files, and drops those for deleted ones."
+      "summary": "Checks an update hands back only what changed, catches equal-size edits, carries entries along with moved files, and drops those for deleted ones."
     },
     "tests/Workspace.test.ts": {
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests opening, switching, and listing recent repositories."
+      "summary": "Tests opening, switching, and listing recent repositories, and resolving typed paths."
     },
     "tests/support.ts": {
       "system": "meta",
       "layer": "tests",
       "tags": ["test", "config"],
-      "summary": "Shared helpers that make and remove temporary repositories for the tests."
+      "summary": "Shared helpers that make temporary repositories and start the API or server over them."
     },
     "tsconfig.json": {
       "system": "meta",

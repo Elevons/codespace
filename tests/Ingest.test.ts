@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { makeTemp, removeTemp } from './support.ts'
+import { makeRepo as makeFiles, removeTemp } from './support.ts'
 import { join } from 'node:path'
 import { Architecture } from '../src/repo/Architecture.ts'
 import { Graph } from '../src/repo/Graph.ts'
@@ -9,17 +9,15 @@ import { NextBatchAsync, SkippedSummary, StatusAsync } from '../src/repo/Ingest.
 import { Repo } from '../src/repo/Repo.ts'
 
 /** Makes a repository with a small tree, a lockfile, and a vendored folder. */
-async function makeRepo(): Promise<string>
+function makeRepo(): Promise<string>
 {
-    const root = await makeTemp('codespace-ingest-')
-    await mkdir(join(root, 'src', 'deep'), { recursive: true })
-    await mkdir(join(root, 'vendor'))
-    await writeFile(join(root, 'src', 'a.ts'), "import { b } from './b.ts'\nexport const a = b\n")
-    await writeFile(join(root, 'src', 'b.ts'), 'export const b = 1\n')
-    await writeFile(join(root, 'src', 'deep', 'c.ts'), 'export const c = 1\n')
-    await writeFile(join(root, 'vendor', 'lib.js'), 'module.exports = 1\n')
-    await writeFile(join(root, 'package-lock.json'), '{}\n')
-    return root
+    return makeFiles({
+        'src/a.ts': "import { b } from './b.ts'\nexport const a = b\n",
+        'src/b.ts': 'export const b = 1\n',
+        'src/deep/c.ts': 'export const c = 1\n',
+        'vendor/lib.js': 'module.exports = 1\n',
+        'package-lock.json': '{}\n',
+    }, 'codespace-ingest-')
 }
 
 test('SkippedSummary settles generated and vendored files, and leaves real code alone', () =>
@@ -164,6 +162,44 @@ test('A file naming a system the architecture does not declare counts as incompl
         const architecture = await Architecture.ReadAsync(repo.Root, known)
         assert.match(architecture.warnings.join(' '), /is in system "ghost", which "systems" does not list/)
         assert.equal((await StatusAsync(repo, architecture)).incomplete, 1)
+    }
+    finally { await removeTemp(root) }
+})
+
+test('A file naming a layer the architecture does not declare counts as incomplete', async () =>
+{
+    const root = await makeRepo()
+    try
+    {
+        const repo = await Repo.OpenAsync(root)
+        const known = await repo.ListFilesAsync()
+        await mkdir(join(root, '.codespace'))
+        await writeFile(join(root, '.codespace', 'architecture.json'), JSON.stringify({
+            layers: ['base'],
+            systems: { server: {} },
+            files: { 'src/a.ts': { summary: 'A.', system: 'server', layer: 'ghost', tags: ['core'] } },
+        }))
+
+        const architecture = await Architecture.ReadAsync(repo.Root, known)
+        assert.match(architecture.warnings.join(' '), /is in layer "ghost", which "layers" does not list/)
+        assert.deepEqual(Architecture.Lacks(architecture, 'src/a.ts'), ['layer'])
+        assert.equal((await StatusAsync(repo, architecture)).incomplete, 1)
+    }
+    finally { await removeTemp(root) }
+})
+
+test('A file longer than the read limit is cut short and marked truncated', async () =>
+{
+    const root = await makeFiles({ 'src/big.ts': 'x'.repeat(20_001) + '\n', 'src/small.ts': 'export const small = 1\n' }, 'codespace-ingest-big-')
+    try
+    {
+        const repo = await Repo.OpenAsync(root)
+        const known = await repo.ListFilesAsync()
+        const batch = await NextBatchAsync(repo, await Architecture.ReadAsync(repo.Root, known), await Graph.BuildAsync(repo), 12)
+        const big = batch.files.find((file) => file.path === 'src/big.ts')!
+        assert.equal(big.truncated, true)
+        assert.equal(big.source.length, 20_000)
+        assert.equal(batch.files.find((file) => file.path === 'src/small.ts')!.truncated, false)
     }
     finally { await removeTemp(root) }
 })

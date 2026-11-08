@@ -1,6 +1,7 @@
 import { S, scene, camera, glow } from "./state.js";
-import { Batch, batchOf } from "./batch.js";
+import { Batch, PairedBatch, batchOf } from "./batch.js";
 import type { FileRecord } from "./types.js";
+import { rayBox } from "./rules.js";
 
 /**
  * Every file box on the map. The crowd is drawn as two batches, one bright and one faded, so
@@ -8,8 +9,7 @@ import type { FileRecord } from "./types.js";
  * their own (chosen, hovered, on a shown route) borrow a real mesh from a small pool, which
  * carries their glow and outline.
  */
-let solid: Batch | null = null;
-let faint: Batch | null = null;
+let pair: PairedBatch | null = null;
 const pool: BABYLON.Mesh[] = [];
 let poolUsed = 0;
 
@@ -23,45 +23,37 @@ function makeBatch(name: string, alpha: number): Batch
   return batchOf(mesh, 0.28, alpha);
 }
 
-function batches(): [Batch, Batch]
+function pairOf(): PairedBatch
 {
-  if (!solid) solid = makeBatch("files", 1);
-  if (!faint) faint = makeBatch("files-faint", 0.12);
-  return [solid, faint];
+  if (!pair) pair = new PairedBatch(makeBatch("files", 1), makeBatch("files-faint", 0.12));
+  return pair;
 }
 
 // Gives the batches one slot per file on the map.
 export function resizeBoxes(count: number): void
 {
-  const [a, b] = batches();
-  a.resize(count);
-  b.resize(count);
+  pairOf().resize(count);
 }
 
 // Draws one file where its shape is now: in its batch, or as its own mesh when it has one.
 export function placeBox(rec: FileRecord): void
 {
-  const [a, b] = batches();
-  const { position: p, scaling: s } = rec.shape;
+  const p = pairOf();
+  const { position: at, scaling: s } = rec.shape;
   if (rec.accent)
   {
-    rec.accent.position.copyFrom(p);
+    rec.accent.position.copyFrom(at);
     rec.accent.scaling.copyFrom(s);
-    a.hide(rec.slot);
-    b.hide(rec.slot);
+    p.hide(rec.slot);
     return;
   }
-  const into = rec.lit ? a : b, out = rec.lit ? b : a;
-  into.place(rec.slot, p.x, p.y, p.z, s.x, s.y, s.z);
-  out.hide(rec.slot);
+  p.place(rec.slot, rec.lit, at.x, at.y, at.z, s.x, s.y, s.z);
 }
 
 // Tints one file's slot in both batches, so it keeps its colour whichever one draws it.
 export function paintBox(rec: FileRecord, color: BABYLON.Color3): void
 {
-  const [a, b] = batches();
-  a.paint(rec.slot, color.r, color.g, color.b);
-  b.paint(rec.slot, color.r, color.g, color.b);
+  pairOf().paint(rec.slot, color);
 }
 
 // Hands every file its own mesh back to the pool, before the highlight picks who needs one.
@@ -101,8 +93,7 @@ export function retireAccents(): void
 
 export function flushBoxes(): void
 {
-  if (solid) solid.flush();
-  if (faint) faint.flush();
+  if (pair) pair.flush();
 }
 
 // The file box under a screen point, nearest the camera, or null. Boxes are batched, so they
@@ -119,20 +110,4 @@ export function pickFile(x: number, y: number): FileRecord | null
     if (t !== null && t < bestT) { bestT = t; best = rec; }
   }
   return best;
-}
-
-// Where a ray enters an axis-aligned box, or null if it misses. The slab method, three slabs.
-export function rayBox(o: BABYLON.Vector3, d: BABYLON.Vector3, minX: number, maxX: number, minY: number, maxY: number, minZ: number, maxZ: number): number | null
-{
-  let near = -Infinity, far = Infinity;
-  const slab = (origin: number, dir: number, lo: number, hi: number): boolean =>
-  {
-    if (Math.abs(dir) < 1e-9) return origin >= lo && origin <= hi;
-    let t1 = (lo - origin) / dir, t2 = (hi - origin) / dir;
-    if (t1 > t2) { const swap = t1; t1 = t2; t2 = swap; }
-    near = Math.max(near, t1); far = Math.min(far, t2);
-    return far >= near;
-  };
-  if (!slab(o.x, d.x, minX, maxX) || !slab(o.y, d.y, minY, maxY) || !slab(o.z, d.z, minZ, maxZ)) return null;
-  return far < 0 ? null : near;
 }

@@ -1,24 +1,20 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises'
-import { makeTemp, removeTemp } from './support.ts'
+import { makeRepo as makeFiles, makeTemp, removeTemp } from './support.ts'
 import { join } from 'node:path'
 import { Architecture } from '../src/repo/Architecture.ts'
 import { Repo } from '../src/repo/Repo.ts'
+import { TAG_COLORS, TAG_VOCABULARY } from '../public/tags.ts'
 
 /** Makes a repository holding the given architecture text, or none. */
-async function makeRepo(architecture: string | null): Promise<string>
+function makeRepo(architecture: string | null): Promise<string>
 {
-    const root = await makeTemp('codespace-arch-')
-    await mkdir(join(root, 'src'))
-    await writeFile(join(root, 'src', 'a.ts'), 'export const a = 1\n')
-    await writeFile(join(root, 'src', 'b.ts'), 'export const b = 1\n')
-    if (architecture !== null)
-    {
-        await mkdir(join(root, '.codespace'))
-        await writeFile(join(root, '.codespace', 'architecture.json'), architecture)
-    }
-    return root
+    return makeFiles({
+        'src/a.ts': 'export const a = 1\n',
+        'src/b.ts': 'export const b = 1\n',
+        ...(architecture === null ? {} : { '.codespace/architecture.json': architecture }),
+    }, 'codespace-arch-')
 }
 
 test('Architecture reads layers, tags, and summaries, and trims what it keeps', async () =>
@@ -95,6 +91,23 @@ test('Architecture refuses a file that is a link out of the repository', async (
         const result = await Architecture.ReadAsync(repo.Root, ['src/a.ts'])
         assert.deepEqual(result.layers, [])
         assert.match(result.error, /outside the repository/)
+    }
+    finally
+    {
+        await removeTemp(root)
+        await removeTemp(outside)
+    }
+})
+
+test('Architecture refuses to write through a symlinked .codespace folder', async () =>
+{
+    const root = await makeRepo(null)
+    const outside = await makeTemp('codespace-out-')
+    try
+    {
+        await symlink(outside, join(root, '.codespace'))
+        await assert.rejects(Architecture.UpdateAsync(root, ['src/a.ts'], { layers: ['base'] }), /link/)
+        await assert.rejects(readFile(join(outside, 'architecture.json'), 'utf8'), /ENOENT/)
     }
     finally
     {
@@ -181,6 +194,22 @@ test('UpdateAsync is all or nothing, and reports every problem', async () =>
         await writeFile(join(root, '.codespace', 'architecture.json'), '{ broken')
         await assert.rejects(Architecture.UpdateAsync(root, known, { layers: ['x'] }), /cannot be changed until it is fixed/)
         assert.equal(await readFile(join(root, '.codespace', 'architecture.json'), 'utf8'), '{ broken')
+    }
+    finally { await removeTemp(root) }
+})
+
+test('UpdateAsync refuses a change whose fields have the wrong type, and writes nothing', async () =>
+{
+    const root = await makeRepo(JSON.stringify({ layers: ['base'], systems: {}, files: { 'src/a.ts': { layer: 'base' } } }))
+    const known = ['src/a.ts', 'src/b.ts']
+    const before = await readFile(join(root, '.codespace', 'architecture.json'), 'utf8')
+    try
+    {
+        await assert.rejects(Architecture.UpdateAsync(root, known, { files: { 'src/a.ts': { summary: 5 } } } as never), /summary must be text/)
+        await assert.rejects(Architecture.UpdateAsync(root, known, { systems: { bogus: 'not-an-object' } } as never), /"bogus" must be an object/)
+        await assert.rejects(Architecture.UpdateAsync(root, known, { layers: 'base' } as never), /"layers" must be a list/)
+        await assert.rejects(Architecture.UpdateAsync(root, known, { files: { 'src/a.ts': { tags: [5] } } } as never), /tags must be a list/)
+        assert.equal(await readFile(join(root, '.codespace', 'architecture.json'), 'utf8'), before, 'nothing was written')
     }
     finally { await removeTemp(root) }
 })
@@ -323,4 +352,10 @@ test('Architecture warns about malformed systems and keeps the good ones', async
         assert.match(text, /The system "tools" should have a text summary/)
     }
     finally { await removeTemp(root) }
+})
+
+test('The server vocabulary and the browser colours are one ordered set', () =>
+{
+    assert.deepEqual(Object.keys(TAG_COLORS), [...TAG_VOCABULARY])
+    assert.ok(TAG_VOCABULARY.length > 0)
 })

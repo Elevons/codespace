@@ -23,6 +23,7 @@ import { Ledger } from '../repo/Ledger.ts'
 import { DefaultRefineSize, Refine } from '../repo/Refine.ts'
 import { SyncAsync } from '../repo/Sync.ts'
 import { Repo } from '../repo/Repo.ts'
+import { MaxBatchSize, ReadOption, ReadSize } from './Options.ts'
 
 /** The usage, printed by --help and by a command that is missing. */
 const Usage = `Usage: node src/cli/Cli.ts <command> [--repo <folder>]
@@ -39,7 +40,7 @@ const Usage = `Usage: node src/cli/Cli.ts <command> [--repo <folder>]
 
 Options:
   --repo <folder>            the repository (default CODESPACE_REPO, else the current folder)
-  --size <n>                 how many files, folders, or report items next and refine hand back, at most 40
+  --size <n>                 how many files, folders, or report items next and refine hand back, at most ${MaxBatchSize}
   --file <path>              the JSON change for apply`
 
 /**
@@ -50,13 +51,6 @@ export async function RunAsync(args: readonly string[]): Promise<number>
 {
     const [command, ...rest] = args
 
-    /** The value after an option, or undefined. */
-    const option = (name: string): string | undefined =>
-    {
-        const index = rest.indexOf(name)
-        return index >= 0 ? rest[index + 1] : undefined
-    }
-
     if (command === undefined || command === '--help' || command === '-h')
     {
         console.log(Usage)
@@ -65,7 +59,7 @@ export async function RunAsync(args: readonly string[]): Promise<number>
 
     try
     {
-        const repo = await Repo.OpenAsync(option('--repo') ?? process.env.CODESPACE_REPO ?? process.cwd())
+        const repo = await Repo.OpenAsync(ReadOption(rest, '--repo') ?? process.env.CODESPACE_REPO ?? process.cwd())
 
         if (command === 'repo')
         {
@@ -90,7 +84,7 @@ export async function RunAsync(args: readonly string[]): Promise<number>
         {
             // Entries follow moved files and leave deleted ones first, so neither is described again from nothing.
             await SyncAsync(repo)
-            const size = Math.max(1, Math.min(40, Number(option('--size')) || DefaultBatch))
+            const size = ReadSize(rest, DefaultBatch)
             const known = await repo.ListFilesAsync()
             const architecture = await Architecture.ReadAsync(repo.Root, known)
             const batch = await NextBatchAsync(repo, architecture, await Graph.BuildAsync(repo), size)
@@ -113,7 +107,7 @@ export async function RunAsync(args: readonly string[]): Promise<number>
 
         if (command === 'refine')
         {
-            const size = Math.max(1, Math.min(40, Number(option('--size')) || DefaultRefineSize))
+            const size = ReadSize(rest, DefaultRefineSize)
             const architecture = await Architecture.ReadAsync(repo.Root, await repo.ListFilesAsync())
             const graph = await Graph.BuildAsync(repo)
             console.log(JSON.stringify({ name: repo.Name, root: repo.Root, ...Refine(architecture, graph.Edges(), size) }))
@@ -122,7 +116,7 @@ export async function RunAsync(args: readonly string[]): Promise<number>
 
         if (command === 'apply')
         {
-            const source = option('--file')
+            const source = ReadOption(rest, '--file')
             if (source === undefined) throw new Error('apply needs --file <json>, or --file - to read stdin.')
             const text = source === '-' ? await ReadStdinAsync() : await readFile(resolve(source), 'utf8')
             const change: unknown = JSON.parse(text)
