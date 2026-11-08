@@ -109,12 +109,14 @@ without refreshing.
 - `src/server/Server.ts` — the page (compressed, with validators), the installed Babylon at one unversioned address, `/api/bootstrap`, the source API, the changed-line counts, and switching repositories.
 - `src/server/Workspace.ts` — the repository being read, and the recent ones the page can switch back to.
 - `src/repo/Architecture.ts` — reads, checks, and safely changes a repository's `.codespace/architecture.json`.
-- `src/server/Api.ts` — the endpoints the page uses: the architecture, the import graph, the ingest status, what the map shows, and the chat.
+- `src/server/Api.ts` — the endpoints the page and agents use: the architecture, the import graph, the ingest status, next and refine, the tool list, what the map shows, and the chat.
+- `src/server/Tools.ts` — the one list of what an agent can do with the map, served at `/api/tools` for a host to register as its own tools, and the source of the chat's endpoint list.
 - `src/server/View.ts` — what the map is asked to show, streamed to every open page.
 - `src/repo/Snapshot.ts` — one cached read of a repository's files, imports, line counts, and declared names, rebuilt only when a file changes.
 - `src/repo/Graph.ts` — the imports between code files, relative for TypeScript and
   JavaScript and by namespace for C#, for the tools.
 - `src/repo/Ingest.ts` — what an agent reads next to describe a codebase: files whose entry is incomplete, then folders.
+- `src/repo/Next.ts` — the one `next`, shared by the CLI and the API: sync first, then the batch, with generated files settled.
 - `src/repo/Refine.ts`, `src/repo/RefineGuide.ts` — the second pass: layer breaks, better-fitting layers and systems, and the instructions for acting on them.
 - `src/repo/DescribeGuide.ts` — the first-pass instructions for describing a repository, shared by the copied prompt and the built-in chat.
 - `src/repo/JsonStore.ts` — reads and writes the JSON files Codespace keeps in a repository, refusing any path that leaves it.
@@ -123,7 +125,7 @@ without refreshing.
 - `src/repo/Install.ts` — leaves the upkeep rules in the repository being mapped, so its architecture file is kept true.
 - `src/server/Guard.ts` — who may change anything or use the chat: this machine only.
 - `src/agent/Chat.ts` — the chat built into the map: a pi agent in the repository, its saved chats, and its reply streamed to the page.
-- `src/agent/Instructions.ts` — what the chat's agent is told: drawing on the map and describing the repository.
+- `src/agent/Instructions.ts` — what the chat's agent is told: the map's endpoints (from the tool list) and describing the repository.
 - `src/agent/ModelSettings.ts` — which OpenAI-compatible endpoint, model, and key the chat uses.
 - `src/cli/Cli.ts` — the commands an agent runs to describe a repository, with no server or MCP.
 - `src/cli/Options.ts` — reads `--name value` or `--name=value` options from a command line.

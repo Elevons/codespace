@@ -148,8 +148,23 @@ Reading, for finding the right files and steps before you show them:
 | `GET /api/graph?folder=src` | the import edges, optionally only those under a folder |
 | `GET /api/source?path=src/a.ts` | one file's text |
 | `GET /api/changes` | each file changed since `HEAD`, with how many lines changed |
+| `GET /api/ingest/status` | how much is left to describe and to refine |
+| `POST /api/ingest/next` | `{"size": n}`: the CLI's `next` over HTTP (it can settle generated files, so it is a write) |
+| `GET /api/ingest/refine?size=n` | the CLI's `refine` over HTTP |
+| `GET /api/tools` | every endpoint above as a tool: name, description, method, path, fixed body fields, and a JSON Schema for its arguments |
 
-Writes (`POST /api/view`, `POST /api/repo`, `POST`/`DELETE /api/architecture`) are accepted from
+`POST /api/architecture` is the CLI's `apply` over HTTP: same validation, same ledger stamp.
+
+### The tool list
+
+`src/server/Tools.ts` (`MapTools`) is the one list of what an agent can do with the map. `GET /api/tools`
+serves it as `{"version": 1, "tools": [...]}` so a host such as Bartleby can register each as a tool of its
+own that forwards the call (a GET sends the arguments as query values, a POST sends them as the JSON body with
+`fixed` merged in), and the built-in chat's endpoint list is generated from it. **When you add or change an
+endpoint an agent should use, add or change its entry in `MapTools` in the same change**; `tests/Tools.test.ts`
+calls every listed tool through the real server.
+
+Writes (`POST /api/view`, `POST /api/repo`, `POST /api/ingest/next`, `POST`/`DELETE /api/architecture`) are accepted from
 this machine through `localhost` only, unless the server was started with `--allow-writes`; a
 refused write answers 403 with the reason.
 
@@ -160,8 +175,8 @@ in the repository being mapped, with pi's basic tools, against any OpenAI-compat
 comes from `.env` beside `package.json` (git-ignored; see `.env.example`): `CODESPACE_MODEL_BASE_URL`,
 `CODESPACE_MODEL`, and a key, given as `CODESPACE_MODEL_API_KEY` or read by name from another env file with
 `CODESPACE_MODEL_KEY_FILE` and `CODESPACE_MODEL_KEY_NAME`. What the agent is told lives in
-`src/agent/Instructions.ts`; **when the map API or the CLI changes, change it there too**, as well as in the
-sections above. `/api/chat` takes `GET` for the chat and `POST` with `{"action": "send", "text"}`, `"stop"`,
+`src/agent/Instructions.ts`; its endpoint list is made from `MapTools`, so a new tool reaches it on its own.
+**When the CLI or how the chat should use the map changes, change it there too**, as well as in the sections above. `/api/chat` takes `GET` for the chat and `POST` with `{"action": "send", "text"}`, `"stop"`,
 `"new"`, `"describe"` (Ingest Codebase), `"refine"` (Refine layers), or `{"action": "open", "id"}`; its progress reaches pages on this
 machine as `chat` events on the view stream. Chats and pi's settings live in `~/.codespace/agent`.
 
@@ -169,10 +184,10 @@ machine as `chat` events on the view stream. Chats and pi's settings live in `~/
 
 - `src/cli/` — the commands an agent runs to describe a repository, and `Options.ts` for reading their flags.
 - `src/repo/` — reading a repository, its architecture file, the import graph, and
-  what to ingest next. No HTTP in here. `DescribeGuide.ts`, `JsonStore.ts`, and `ShowLimits.ts`
+  what to ingest next (`Next.ts` is the one `next`, shared by the CLI and the API). No HTTP in here. `DescribeGuide.ts`, `JsonStore.ts`, and `ShowLimits.ts`
   hold the first-pass instructions, the repository-scoped JSON access, and the show limits.
-- `src/server/` — the HTTP server, the endpoints, the view stream, the write guard,
-  and the switchable workspace.
+- `src/server/` — the HTTP server, the endpoints, the tool list (`Tools.ts`), the view stream,
+  the write guard, and the switchable workspace.
 - `src/agent/` — the built-in chat: its pi agent, what that agent is told, and which model it uses.
 - `public/` — the browser side: the 3D city, the Outliner with its system/layer filters,
   the panels and controls, the chat, and the phone sheet. `public/filter.ts`, `public/rules.ts`, and

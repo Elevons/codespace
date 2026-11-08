@@ -8,6 +8,20 @@ import type { IIngestStatus } from '../../public/ingest.ts'
 /** The most items one batch holds unless asked for more. */
 export const DefaultBatch = 12
 
+/** The most files, folders, or report items one batch or report hands back. */
+export const MaxBatchSize = 40
+
+/**
+ * Reads a requested batch size, kept between 1 and MaxBatchSize.
+ * @param requested the size as given, such as a flag or a query value
+ * @param fallback the size when none is given
+ */
+export function ClampSize(requested: unknown, fallback: number): number
+{
+    const size = Math.floor(Number(requested)) || fallback
+    return Math.max(1, Math.min(MaxBatchSize, size))
+}
+
 /** The largest file read for a batch, in characters. */
 const MaxBatchFileChars = 20_000
 
@@ -63,7 +77,7 @@ interface IIngestFolder
 type IIngestCounts = Pick<IIngestStatus, 'files' | 'incomplete' | 'changed' | 'stale' | 'folders' | 'remaining'>
 
 /** What `next` answers. */
-interface IIngestBatch
+export interface IIngestBatch
 {
     /** Files that still need a summary, for the agent to read. */
     files: IIngestFile[]

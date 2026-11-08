@@ -17,13 +17,14 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { Architecture, type IArchitecturePatch } from '../repo/Architecture.ts'
 import { Graph } from '../repo/Graph.ts'
-import { DefaultBatch, NextBatchAsync, StatusAsync } from '../repo/Ingest.ts'
+import { ClampSize, DefaultBatch, MaxBatchSize, StatusAsync } from '../repo/Ingest.ts'
 import { InstallAsync } from '../repo/Install.ts'
 import { Ledger } from '../repo/Ledger.ts'
+import { TakeNextAsync } from '../repo/Next.ts'
 import { DefaultRefineSize, Refine } from '../repo/Refine.ts'
 import { SyncAsync } from '../repo/Sync.ts'
 import { Repo } from '../repo/Repo.ts'
-import { MaxBatchSize, ReadOption, ReadSize } from './Options.ts'
+import { ReadOption } from './Options.ts'
 
 /** The usage, printed by --help and by a command that is missing. */
 const Usage = `Usage: node src/cli/Cli.ts <command> [--repo <folder>]
@@ -82,19 +83,7 @@ export async function RunAsync(args: readonly string[]): Promise<number>
 
         if (command === 'next')
         {
-            // Entries follow moved files and leave deleted ones first, so neither is described again from nothing.
-            await SyncAsync(repo)
-            const size = ReadSize(rest, DefaultBatch)
-            const known = await repo.ListFilesAsync()
-            const architecture = await Architecture.ReadAsync(repo.Root, known)
-            const batch = await NextBatchAsync(repo, architecture, await Graph.BuildAsync(repo), size)
-
-            // Generated files are settled here, so the agent never spends a read on them.
-            if (batch.skipped.length > 0)
-            {
-                const files = Object.fromEntries(batch.skipped.map((item) => [item.path, { summary: item.summary }]))
-                await Architecture.UpdateAsync(repo.Root, known, { files })
-            }
+            const batch = await TakeNextAsync(repo, ClampSize(ReadOption(rest, '--size'), DefaultBatch))
             console.log(JSON.stringify({ name: repo.Name, root: repo.Root, ...batch }))
             return 0
         }
@@ -107,7 +96,7 @@ export async function RunAsync(args: readonly string[]): Promise<number>
 
         if (command === 'refine')
         {
-            const size = ReadSize(rest, DefaultRefineSize)
+            const size = ClampSize(ReadOption(rest, '--size'), DefaultRefineSize)
             const architecture = await Architecture.ReadAsync(repo.Root, await repo.ListFilesAsync())
             const graph = await Graph.BuildAsync(repo)
             console.log(JSON.stringify({ name: repo.Name, root: repo.Root, ...Refine(architecture, graph.Edges(), size) }))

@@ -1,6 +1,6 @@
 import { DescribeGuide } from '../repo/DescribeGuide.ts'
 import { RefineGuide } from '../repo/RefineGuide.ts'
-import { MaxFileNote, MaxNote, MaxShown, MaxTitle } from '../repo/ShowLimits.ts'
+import { MapTools } from '../server/Tools.ts'
 
 /** Where the chat's agent finds the map and its tools. */
 export interface IInstructionPlaces
@@ -39,15 +39,10 @@ Send JSON to the map with bash. Every open page updates at once.
                {"path": "src/b.ts", "note": "Step two: ..."}]}
     JSON
 
-- "show" with "trace": true draws the files as numbered steps in that order, joined by a route, with each note
-  beside its step. A file may appear in more than one step. Each step is a file, so name the function or method
-  in its note. Without "trace" the files are only highlighted. Paths are relative to ${root}.
-  Limits: ${MaxShown} files, ${MaxFileNote} characters per step note, ${MaxTitle} for the title, ${MaxNote} for the note.
-- The reply lists any path it did not know in "unknown"; fix those and send again.
-- {"action": "focus", "path": "src/folder"} moves the camera to a file or folder.
-- {"action": "clear"} takes down what is shown. A new "show" replaces the last one.
-- GET ${mapUrl}/api/architecture returns each file's summary, system, layer, and tags; GET ${mapUrl}/api/graph
-  returns the imports between files.
+Every endpoint, and what it takes (a GET takes its arguments as query values, a POST as the JSON body with
+the fixed fields shown). Paths are relative to ${root}.
+
+${ToolReference(mapUrl)}
 
 ## Describing the repository
 
@@ -56,4 +51,23 @@ ${DescribeGuide(cli, root)}
 ## Refining the description
 
 ${RefineGuide(cli, root)}`
+}
+
+
+/**
+ * Lists every map tool as the endpoint the chat's agent calls with curl, its arguments, and what it is for,
+ * so the chat learns of a new tool the moment it is added to MapTools.
+ * @param mapUrl the map server's address
+ */
+export function ToolReference(mapUrl: string): string
+{
+    return MapTools.map((tool) =>
+    {
+        const fixed = tool.fixed === undefined ? '' : ` ${JSON.stringify(tool.fixed)}`
+        const required = new Set(tool.parameters.required ?? [])
+        const names = Object.keys(tool.parameters.properties).map((name) => required.has(name) ? name : `${name}?`)
+        const takes = names.length === 0 ? '' : ` takes ${names.join(', ')}.`
+        const description = tool.description.replace(/\s*\n\s*/g, ' ')
+        return `- ${tool.method} ${mapUrl}${tool.path}${fixed} (${tool.name})${takes} ${description}`
+    }).join('\n')
 }

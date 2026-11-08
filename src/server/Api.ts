@@ -3,13 +3,15 @@ import type { Chat } from '../agent/Chat.ts'
 import { Architecture, type IArchitecturePatch } from '../repo/Architecture.ts'
 import { DescribeGuide } from '../repo/DescribeGuide.ts'
 import { Graph } from '../repo/Graph.ts'
-import { StatusAsync } from '../repo/Ingest.ts'
+import { ClampSize, DefaultBatch, StatusAsync } from '../repo/Ingest.ts'
 import { Ledger } from '../repo/Ledger.ts'
-import { Refine } from '../repo/Refine.ts'
+import { TakeNextAsync } from '../repo/Next.ts'
+import { DefaultRefineSize, Refine } from '../repo/Refine.ts'
 import { RefineGuide } from '../repo/RefineGuide.ts'
 import { MaxFileNote, MaxNote, MaxShown, MaxTitle } from '../repo/ShowLimits.ts'
 import { Snapshot } from '../repo/Snapshot.ts'
 import { ReadJsonAsync, RefuseOutside, RefuseWrite, SendJson } from './Guard.ts'
+import { MapTools, type IToolList } from './Tools.ts'
 import type { IShownFile, View } from './View.ts'
 import type { Workspace } from './Workspace.ts'
 import type { IIngestStatus } from '../../public/ingest.ts'
@@ -60,7 +62,12 @@ export class Api
         const path = url.pathname
         const reading = request.method === 'GET' || request.method === 'HEAD'
 
-        if (path === '/api/architecture' && reading)
+        if (path === '/api/tools' && reading)
+        {
+            const body: IToolList = { version: 1, tools: [...MapTools] }
+            SendJson(response, 200, body, request)
+        }
+        else if (path === '/api/architecture' && reading)
         {
             const repo = this.workspace.repo
             SendJson(response, 200, await Architecture.ReadAsync(repo.Root, await repo.ListFilesAsync()), request)
@@ -85,6 +92,13 @@ export class Api
             }
             SendJson(response, 200, body)
         }
+        else if (path === '/api/ingest/refine' && reading)
+        {
+            const repo = this.workspace.repo
+            const architecture = await Architecture.ReadAsync(repo.Root, await repo.ListFilesAsync())
+            const size = ClampSize(url.searchParams.get('size'), DefaultRefineSize)
+            SendJson(response, 200, { name: repo.Name, root: repo.Root, ...Refine(architecture, (await Snapshot.ReadAsync(repo)).edges, size) })
+        }
         else if (path === '/api/view' && reading) SendJson(response, 200, { shown: this.view.Shown })
         else if (path === '/api/view/events' && reading) this.view.Subscribe(response, RefuseOutside(request, this.allowWrites) === null)
         else if (path === '/api/chat' && this.chat !== null)
@@ -97,7 +111,7 @@ export class Api
             try { await this.ChangeChatAsync(this.chat, await ReadJsonAsync(request)); SendJson(response, 200, { ok: true }) }
             catch (error) { SendJson(response, 400, { error: (error as Error).message }) }
         }
-        else if ((path === '/api/architecture' || path === '/api/view') && request.method === 'POST')
+        else if ((path === '/api/architecture' || path === '/api/view' || path === '/api/ingest/next') && request.method === 'POST')
         {
             const refusal = RefuseWrite(request, this.allowWrites)
             if (refusal !== null) { SendJson(response, 403, { error: refusal }); return true }
@@ -107,6 +121,7 @@ export class Api
             try
             {
                 if (path === '/api/architecture') await this.UpdateArchitectureAsync(response, body)
+                else if (path === '/api/ingest/next') await this.SendNextAsync(response, body)
                 else await this.ChangeViewAsync(response, body)
             }
             catch (error) { SendJson(response, 400, { error: (error as Error).message }) }
@@ -140,6 +155,20 @@ export class Api
         await Ledger.RecordAsync(repo, Object.keys((body as IArchitecturePatch).files ?? {}))
         this.view.ArchitectureChanged()
         SendJson(response, 200, updated)
+    }
+
+    /**
+     * Hands out the next files or folders to describe, as the CLI's next does. It is a POST because it
+     * can write: moved entries follow their files and generated files are settled.
+     * @param response the response to write
+     * @param body the request, as sent, with an optional size
+     */
+    private async SendNextAsync(response: ServerResponse, body: Record<string, unknown>): Promise<void>
+    {
+        const repo = this.workspace.repo
+        const batch = await TakeNextAsync(repo, ClampSize(body.size, DefaultBatch))
+        this.view.ArchitectureChanged()
+        SendJson(response, 200, { name: repo.Name, root: repo.Root, ...batch })
     }
 
     /**

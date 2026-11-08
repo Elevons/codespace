@@ -238,7 +238,7 @@
       "system": "server",
       "layer": "api",
       "tags": ["config"],
-      "summary": "The system prompt that tells the chat's agent about Codespace, its map, and how to describe a repository."
+      "summary": "The system prompt that tells the chat's agent about Codespace, the map's endpoints, and how to describe a repository."
     },
     "src/agent/ModelSettings.ts": {
       "system": "server",
@@ -280,7 +280,7 @@
       "system": "server",
       "layer": "repo",
       "tags": ["core", "io"],
-      "summary": "Chooses what an agent reads next to describe or update the codebase: new files, changed files, files whose entry is incomplete, then folders."
+      "summary": "Chooses what an agent reads next to describe or update the codebase, and how large one batch may be."
     },
     "src/repo/Install.ts": {
       "system": "server",
@@ -299,6 +299,12 @@
       "layer": "repo",
       "tags": ["core", "io"],
       "summary": "Remembers what each file looked like when its description was written, so a later update can tell which descriptions have gone stale."
+    },
+    "src/repo/Next.ts": {
+      "system": "server",
+      "layer": "repo",
+      "tags": ["orchestrate"],
+      "summary": "The one way to hand out the next files or folders to describe, shared by the CLI and the map API."
     },
     "src/repo/Refine.ts": {
       "system": "server",
@@ -340,7 +346,7 @@
       "system": "server",
       "layer": "api",
       "tags": ["orchestrate", "io"],
-      "summary": "The endpoints for the architecture, the import graph, ingest status and its prompt, the view stream, and the chat."
+      "summary": "The endpoints for the architecture, the import graph, ingest status, next and refine, the tool list, the view stream, and the chat."
     },
     "src/server/Guard.ts": {
       "system": "server",
@@ -353,6 +359,12 @@
       "layer": "entry",
       "tags": ["entry", "io"],
       "summary": "Serves the page and its assets, the installed Babylon build, and the repository endpoints over HTTP, with the workspace and view stream."
+    },
+    "src/server/Tools.ts": {
+      "system": "server",
+      "layer": "api",
+      "tags": ["data"],
+      "summary": "The one list of what an agent can do with the map, each as an HTTP call with its arguments' schema, for hosts and the built-in chat."
     },
     "src/server/View.ts": {
       "system": "server",
@@ -461,6 +473,12 @@
       "layer": "tests",
       "tags": ["test"],
       "summary": "Tests reading the declarations a source file lists, and which files count as code."
+    },
+    "tests/Tools.test.ts": {
+      "system": "meta",
+      "layer": "tests",
+      "tags": ["test"],
+      "summary": "Tests that the tool list is well formed, is served, reaches the chat, and that every listed tool answers through the real server."
     },
     "tests/Update.test.ts": {
       "system": "meta",
