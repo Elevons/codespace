@@ -63,6 +63,7 @@ export const S = {
   fingerprint: "",                             // the repository's change stamp from the last full read
   repoName: "Codespace",                       // the repository being shown, as the server names it
   repoRoot: "",                                // its folder on the machine running Codespace
+  build: "",                                   // the page build stamp the map was loaded with
   ingestOnly: true,                            // show only files that the architecture file already describes
   undescribed: 0,                              // how many files that leaves out of the map
 };

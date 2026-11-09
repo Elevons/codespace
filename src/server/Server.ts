@@ -149,7 +149,7 @@ export class Server
 
         if (url.pathname === '/api/repo')
         {
-            if (request.method === 'GET' || request.method === 'HEAD') SendJson(response, 200, this.InfoOf(workspace))
+            if (request.method === 'GET' || request.method === 'HEAD') SendJson(response, 200, { ...this.InfoOf(workspace), build: await Server.BuildStampAsync(this.publicRoot) })
             else if (request.method === 'POST') await this.SwitchRepoAsync(request, response, workspace)
             else SendJson(response, 405, { error: 'The repository endpoint takes GET or POST.' })
             return
@@ -289,6 +289,31 @@ export class Server
         {
             SendJson(response, 400, { error: `${target} cannot be listed: ${(error as Error).message}` })
         }
+    }
+
+    /**
+     * The change stamp of the page's own files: the newest write under the public folder. A page keeps
+     * the stamp it loaded with, so pressing Refresh can tell the code changed under it and reload,
+     * instead of re-reading the repository into a page that is still running the old code.
+     * @param publicRoot the folder holding the page and its compiled scripts
+     */
+    private static async BuildStampAsync(publicRoot: string): Promise<string>
+    {
+        const names = await readdir(publicRoot)
+        let newest = 0
+        for (const name of names)
+        {
+            try
+            {
+                const info = await stat(join(publicRoot, name))
+                if (info.isFile()) newest = Math.max(newest, Math.trunc(info.mtimeMs))
+            }
+            catch
+            {
+                // A file removed while the folder is being read does not change the stamp.
+            }
+        }
+        return newest.toString(36)
     }
 
     /**

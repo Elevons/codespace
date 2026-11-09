@@ -240,6 +240,7 @@ async function loadRepo(): Promise<void>
     const name = repo.name || "Codespace";
     S.repoName = name;
     S.repoRoot = repo.root ?? "";
+    S.build = typeof repo.build === "string" ? repo.build : "";
     document.title = name + " — 3D code map";
   }
   catch
@@ -248,4 +249,21 @@ async function loadRepo(): Promise<void>
   }
 }
 
-export { displayName, labelOf, plateLabel, loadGraph, loadRepo, readSource };
+// Whether the page's own files were rebuilt since it loaded. A page holds the stamp it loaded with,
+// so a changed stamp means the running code is old. False when either side has no stamp.
+async function buildChanged(): Promise<boolean>
+{
+  try
+  {
+    const response = await fetch(api("repo"), { cache: "no-cache" });
+    if (!response.ok) return false;
+    const repo = await response.json();
+    return typeof repo.build === "string" && S.build !== "" && repo.build !== S.build;
+  }
+  catch
+  {
+    return false;
+  }
+}
+
+export { displayName, labelOf, plateLabel, loadGraph, loadRepo, readSource, buildChanged };

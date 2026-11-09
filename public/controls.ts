@@ -2,7 +2,7 @@ import { S, camera, DEFAULT_ALPHA, filePath, frameFile, frameFolder, glow, hasFi
 import { build } from "./city.js";
 import { centerView, recenterTarget, pulseFile } from "./meshes.js";
 import { collapseAllOutliner, folderNode, select, selectFile, setOutlinerFocus, openSymbol, openFile, renderOutliner, sliceSet, toggleFold } from "./panels.js";
-import { loadGraph } from "./repo.js";
+import { buildChanged, loadGraph } from "./repo.js";
 import type { ColorBy, GroupAxis } from "./types.js";
 
 function setToggleText(button: HTMLButtonElement, label: string, state: string): void
@@ -91,7 +91,16 @@ async function refreshGraph(force = false): Promise<void>
 // One refresh at a time; a poll that lands while a read is underway is dropped, not stacked.
 let refreshing = false;
 
-document.getElementById("refresh")!.addEventListener("click", () => { S.graphSignature = ""; refreshGraph(true); });
+// Re-reads the repository, unless the page's own files were rebuilt since it loaded: then the page
+// reloads, since new code and not only new files is what Refresh is being asked for.
+async function refreshNow(): Promise<void>
+{
+  if (await buildChanged()) { location.reload(); return; }
+  S.graphSignature = "";
+  await refreshGraph(true);
+}
+
+document.getElementById("refresh")!.addEventListener("click", () => { void refreshNow(); });
 const liveButton = document.getElementById("live") as HTMLButtonElement;
 liveButton.addEventListener("click", () =>
 {
@@ -413,22 +422,26 @@ function isolateSlice(axis: GroupAxis, value: string): void
   redrawScene();
 }
 
-// A chip's click waits a moment for a second one, so a double click (or double tap) isolates the
-// value without hiding it first. The strip redraws its chips on every render, so the pair is timed
-// here rather than left to the browser's dblclick.
+// A press shows or hides its value at once. A second press of the same value within a moment is a
+// double click (or double tap), which puts back what the first press changed and isolates instead:
+// the strip redraws its chips on every render, so the pair is timed here rather than left to dblclick.
 const DOUBLE_CLICK_MS = 320;
-let pendingSlice: { key: string; timer: number } | null = null;
+let lastSliceClick: { key: string; at: number; systems: Set<string>; layers: Set<string> } | null = null;
 function clickSlice(axis: GroupAxis, value: string): void
 {
   const key = axis + ":" + value;
-  if (pendingSlice !== null)
+  const now = performance.now();
+  const last = lastSliceClick;
+  if (last !== null && last.key === key && now - last.at < DOUBLE_CLICK_MS)
   {
-    clearTimeout(pendingSlice.timer);
-    const again = pendingSlice.key === key;
-    pendingSlice = null;
-    if (again) { isolateSlice(axis, value); return; }
+    lastSliceClick = null;
+    S.outliner.systems.clear(); for (const value of last.systems) S.outliner.systems.add(value);
+    S.outliner.layers.clear(); for (const value of last.layers) S.outliner.layers.add(value);
+    isolateSlice(axis, value);
+    return;
   }
-  pendingSlice = { key, timer: window.setTimeout(() => { pendingSlice = null; toggleSlice(axis, value); }, DOUBLE_CLICK_MS) };
+  lastSliceClick = { key, at: now, systems: new Set(S.outliner.systems), layers: new Set(S.outliner.layers) };
+  toggleSlice(axis, value);
 }
 
 // Whether a selection names every value that has files, which is the same as naming none.
