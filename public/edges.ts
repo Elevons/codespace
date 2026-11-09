@@ -232,7 +232,7 @@ function collectEdges(): Edge[]
 }
 
 /** One file import that points up the layers, from the user's tether foot to the used file's. */
-interface Break { user: BABYLON.Vector3; used: BABYLON.Vector3; lit: boolean }
+interface Break { user: BABYLON.Vector3; used: BABYLON.Vector3; lit: boolean; from: number; to: number }
 
 // Where a file's tether meets its folder's plate: the spot under its box, on the floor.
 function footOf(rec: FileRecord): BABYLON.Vector3 | null
@@ -260,9 +260,23 @@ function collectBreaks(): Break[]
     if (!a || !b) continue;
     const lit = (matchesFilters(from) || matchesFilters(to)) && S.trace === null &&
       (S.focusSet === null || S.focusSet.has(user.node) || S.focusSet.has(used.node));
-    result.push({ user: a, used: b, lit });
+    result.push({ user: a, used: b, lit, from: user.node, to: used.node });
   }
   return result;
+}
+
+// The colour of each point along a break's trace, fading in from the imported side to the file that
+// uses it, so direction reads without an arrowhead per line.
+function breakTraceColors(points: BABYLON.Vector3[], start: number, end: number): BABYLON.Color4[]
+{
+  const reach: number[] = [0];
+  for (let i = 1; i < points.length; i++) reach.push(reach[i - 1] + V3.Distance(points[i - 1], points[i]));
+  const total = reach[reach.length - 1];
+  return points.map((_point, i) =>
+  {
+    const f = total > 0 ? reach[i] / total : 1;
+    return new BABYLON.Color4(0.97, 0.32, 0.29, start + (end - start) * f);
+  });
 }
 
 // A straight strand from a file down to its folder's floor. A file on a route has been drawn out
@@ -322,13 +336,19 @@ function rebuildEdges(): void
     flowEdges.push({ edge, bow, hex });
   }
   // Layer breaks: a thin red line from tether foot to tether foot, brightening toward the file
-  // that uses the import, so direction reads without an arrowhead per line.
-  for (const { user, used, lit } of collectBreaks())
+  // that uses the import, so direction reads without an arrowhead per line. Each follows the same
+  // circuit routing as a chosen folder's traces, so a break bends with the rest of the wiring
+  // instead of cutting straight across the plates.
+  const breaks = collectBreaks();
+  const breakEdges: Edge[] = breaks.map(({ user, used }) => ({ user, used, broken: true, state: "break" }));
+  routeTraces(breakEdges, breaks.map(({ from, to }) => `break:${Math.min(from, to)}>${Math.max(from, to)}`));
+  breaks.forEach(({ user, used, lit }, i) =>
   {
     const base = lit ? 0.85 : 0.08;
-    lines.push([used, user]);
-    colors.push([new BABYLON.Color4(0.97, 0.32, 0.29, base * 0.35), new BABYLON.Color4(0.97, 0.32, 0.29, base)]);
-  }
+    const trace = breakEdges[i].trace ?? [used, user];
+    lines.push(trace);
+    colors.push(breakTraceColors(trace, base * 0.35, base));
+  });
   if (lines.length > 0)
   {
     edgeLines = BABYLON.MeshBuilder.CreateLineSystem("edges", { lines, colors, useVertexAlpha: true }, scene);
