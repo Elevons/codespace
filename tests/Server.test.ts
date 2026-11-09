@@ -104,10 +104,11 @@ test('Server answers a whole page load from one bootstrap request, and only the 
             assert.equal(zipped.headers['content-encoding'], 'gzip')
             assert.equal(JSON.parse(gunzipSync(zipped.body).toString()).files.length, 42)
 
-            // Static files carry a validator, so an unchanged one is a 304, and they compress.
+            // The page's files are never stored, since a proxy may stretch `no-cache` into hours, but they
+            // still carry a validator, so an unchanged one is a 304, and they compress.
             const page = await raw(port, '/')
             assert.equal(page.status, 200)
-            assert.equal(page.headers['cache-control'], 'no-cache')
+            assert.equal(page.headers['cache-control'], 'no-store')
             const etag = String(page.headers.etag)
             assert.equal((await raw(port, '/', { 'If-None-Match': etag })).status, 304)
             const packed = await raw(port, '/', { 'Accept-Encoding': 'br, gzip' })

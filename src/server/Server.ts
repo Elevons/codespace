@@ -368,7 +368,10 @@ export class Server
             return
         }
 
-        await this.SendFileAsync(request, response, filePath, 'no-cache')
+        // The page's own files are small and change with every build, so they are never stored: a proxy
+        // in front, such as Cloudflare, may turn `no-cache` into hours of browser caching, and a phone
+        // would then run old scripts against a new page. `no-store` is passed through unchanged.
+        await this.SendFileAsync(request, response, filePath, 'no-store')
     }
 
     /**
