@@ -364,7 +364,7 @@ function groupKeys(axis: GroupAxis, present: string[]): string[]
 }
 
 /** The set a filter chip switches: the systems or layers the strip has selected. */
-function sliceSet(axis: GroupAxis): Set<string>
+export function sliceSet(axis: GroupAxis): Set<string>
 {
   return axis === "system" ? S.outliner.systems : S.outliner.layers;
 }
@@ -498,11 +498,11 @@ function groupRow(axis: GroupAxis, value: string, count: number, depth: number, 
     "</div>";
 }
 
-// One coloured dot on a file row: its system or layer, clickable to switch that value in the strip.
+// One coloured dot on a file row: its system or layer, clickable to show only that value.
 function sliceDot(axis: GroupAxis, value: string): string
 {
   return '<button type="button" tabindex="-1" class="odot oswitch" data-slice="' + axis + '" data-value="' + escapeHtml(value) + '" title="' +
-    escapeHtml(axis + ": " + groupLabel(axis, value)) + '" aria-label="Filter to this ' + axis + '" style="background:' +
+    escapeHtml("Show only " + axis + ": " + groupLabel(axis, value)) + '" aria-label="Filter to this ' + axis + '" style="background:' +
     groupColor(axis, value) + '"></button>';
 }
 
@@ -666,9 +666,8 @@ function renderFilterStrip(): void
         : "it holds no files";
       const title = unavailable ? label + ": nothing to show — " + why
         : crossing ? "Also show " + axis + ": " + label + " — also switches on its " + other + "s"
-        : all ? "Show only " + axis + ": " + label + " (Alt-click: hide it)"
-        : on ? "Stop showing " + axis + ": " + label + (count === 0 ? " — " + why : "") + " (Alt-click: show only this)"
-        : "Also show " + axis + ": " + label + " (Alt-click: show only this)";
+        : on ? "Hide " + axis + ": " + label + (count === 0 ? " — " + why : "") + " (double-click: show only this)"
+        : "Also show " + axis + ": " + label + " (double-click: show only this)";
       return '<button type="button" class="fchip' + (on && !unavailable && !crossing ? " on" : "") + (unavailable ? " empty" : "") + (crossing ? " cross" : "") + (on && !unavailable && count === 0 ? " zero" : "") +
         '" data-slice="' + axis + '" data-value="' + escapeHtml(value) + '" aria-pressed="' + String(on && !unavailable && !crossing) + '"' +
         (unavailable ? ' aria-disabled="true"' : "") + ' style="--c:' +

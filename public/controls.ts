@@ -1,7 +1,7 @@
 import { S, camera, DEFAULT_ALPHA, filePath, frameFile, frameFolder, glow, hasFilters, isFileVisible, matchesTagFilter, render, renderEdges, fileIndex, pathIndex, sliceValue } from "./state.js";
 import { build } from "./city.js";
 import { centerView, recenterTarget, pulseFile } from "./meshes.js";
-import { collapseAllOutliner, folderNode, select, selectFile, setOutlinerFocus, openSymbol, openFile, renderOutliner, toggleFold } from "./panels.js";
+import { collapseAllOutliner, folderNode, select, selectFile, setOutlinerFocus, openSymbol, openFile, renderOutliner, sliceSet, toggleFold } from "./panels.js";
 import { loadGraph } from "./repo.js";
 import type { ColorBy, GroupAxis } from "./types.js";
 
@@ -370,43 +370,71 @@ document.getElementById("outliner-show-all-files")!.addEventListener("click", ()
   renderEdges();
 });
 
-// Switches one system or layer in the filter strip. With nothing selected every value is on, so
-// the first click narrows the strip to that value; switching the last one off brings them all back.
-// With Alt held, a value is soloed instead: only it stays on, or, when nothing was selected and it is
-// clicked from the all-on strip, everything but it; Alt-clicking the lone value brings them all back.
-function toggleSlice(axis: GroupAxis, value: string, solo = false): void
+// Shows or hides one system or layer in the filter strip. With nothing selected every value is on,
+// so hiding one keeps every other value that has files; showing one adds it to those already on,
+// and a selection that comes to name every value reads as "all" again. Hiding the last value on
+// brings them all back rather than emptying the scene.
+function toggleSlice(axis: GroupAxis, value: string): void
 {
-  const set = axis === "system" ? S.outliner.systems : S.outliner.layers;
-  if (solo)
+  const set = sliceSet(axis);
+  const chip = document.querySelector<HTMLElement>('#outliner-filters [data-slice="' + axis + '"][data-value="' + CSS.escape(value) + '"]');
+  if (chip?.classList.contains("on"))
   {
-    const chips = [...document.querySelectorAll<HTMLElement>('#outliner-filters [data-slice="' + axis + '"]')];
     if (set.size === 0)
     {
-      // From the all-on strip, Alt hides just this value: every other value that has files stays on.
-      for (const chip of chips) if (chip.dataset.value !== value && !chip.classList.contains("empty")) set.add(chip.dataset.value!);
-      if (set.size === 0 || set.size === chips.length) set.clear();
+      for (const other of document.querySelectorAll<HTMLElement>('#outliner-filters [data-slice="' + axis + '"]'))
+        if (!other.classList.contains("empty")) set.add(other.dataset.value!);
     }
-    else
-    {
-      const alone = set.size === 1 && set.has(value);
-      set.clear();
-      if (!alone && chips.length > 1) set.add(value);
-    }
+    set.delete(value);
   }
-  else if (set.has(value)) set.delete(value);
   else
   {
     // From the all-on strip, a value hidden only by the other strip joins the ones already showing,
     // rather than narrowing the strip down to itself.
-    const chip = document.querySelector<HTMLElement>('#outliner-filters [data-slice="' + axis + '"][data-value="' + CSS.escape(value) + '"]');
     if (set.size === 0 && chip?.classList.contains("cross"))
     {
       for (const shown of document.querySelectorAll<HTMLElement>('#outliner-filters .fchip.on[data-slice="' + axis + '"]')) set.add(shown.dataset.value!);
     }
     set.add(value);
   }
+  if (coversEvery(axis, set)) set.clear();
   reachSlices(axis);
   redrawScene();
+}
+
+// Shows only one system or layer; isolating the value already shown alone brings them all back.
+function isolateSlice(axis: GroupAxis, value: string): void
+{
+  const set = sliceSet(axis);
+  const alone = set.size === 1 && set.has(value);
+  set.clear();
+  if (!alone && !coversEvery(axis, new Set([value]))) set.add(value);
+  reachSlices(axis);
+  redrawScene();
+}
+
+// A chip's click waits a moment for a second one, so a double click (or double tap) isolates the
+// value without hiding it first. The strip redraws its chips on every render, so the pair is timed
+// here rather than left to the browser's dblclick.
+const DOUBLE_CLICK_MS = 320;
+let pendingSlice: { key: string; timer: number } | null = null;
+function clickSlice(axis: GroupAxis, value: string): void
+{
+  const key = axis + ":" + value;
+  if (pendingSlice !== null)
+  {
+    clearTimeout(pendingSlice.timer);
+    const again = pendingSlice.key === key;
+    pendingSlice = null;
+    if (again) { isolateSlice(axis, value); return; }
+  }
+  pendingSlice = { key, timer: window.setTimeout(() => { pendingSlice = null; toggleSlice(axis, value); }, DOUBLE_CLICK_MS) };
+}
+
+// Whether a selection names every value that has files, which is the same as naming none.
+function coversEvery(axis: GroupAxis, set: ReadonlySet<string>): boolean
+{
+  return allFilePaths().every((path) => set.has(sliceValue(path, axis)));
 }
 
 // A system switched on must be able to show its files: when the layers selected leave it with none,
@@ -478,9 +506,9 @@ outlinerTree.addEventListener("click", (event) =>
   const clicked = target.closest(".orow") as HTMLElement | null;
   if (clicked) setOutlinerFocus(clicked.dataset.key ?? null);
 
-  // A file's system or layer dot switches that value in the strip.
+  // A file's system or layer dot shows only that value, or, clicked again, every value.
   const slice = target.closest("[data-slice]") as HTMLElement | null;
-  if (slice && !slice.classList.contains("empty")) { toggleSlice(slice.dataset.slice as GroupAxis, slice.dataset.value!, event.altKey); return; }
+  if (slice && !slice.classList.contains("empty")) { isolateSlice(slice.dataset.slice as GroupAxis, slice.dataset.value!); return; }
 
   // A tag badge sets the tag filter.
   const tag = target.closest("[data-tag]") as HTMLElement | null;
@@ -535,12 +563,13 @@ outlinerTree.addEventListener("click", (event) =>
   }
 });
 
-// The filter strip redraws its chips on every render, so one delegated handler covers them all.
+// The filter strip redraws its chips on every render, so one delegated handler covers them all:
+// a click hides or shows a value, a double click isolates it.
 document.getElementById("outliner-filters")!.addEventListener("click", (event) =>
 {
   const chip = (event.target as HTMLElement).closest("[data-slice]") as HTMLElement | null;
   if (chip && chip.classList.contains("empty")) { showOutlinerNote(chip.title); return; }
-  if (chip) { toggleSlice(chip.dataset.slice as GroupAxis, chip.dataset.value!, event.altKey); return; }
+  if (chip) { clickSlice(chip.dataset.slice as GroupAxis, chip.dataset.value!); return; }
 });
 
 // The tag chip's cross sits above the tree, so it gets its own handler.

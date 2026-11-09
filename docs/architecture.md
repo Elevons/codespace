@@ -118,7 +118,8 @@ the two trees cannot drift.
   vertical line ties each lifted file to its folder. Because layers are shared, one plane can
   hold files from several systems.
 - The Outliner is a filter strip over one tree. The strip lists every system and layer with a
-  live count; clicking a chip switches that value on (Alt-click solos it), and the selected systems
+  live count; clicking a chip hides or shows that value (double-click or double-tap shows only it,
+  and again brings every value back), and the selected systems
   and layers together decide which files the scene draws. Switching a system on also switches on
   the layers its files need when the selected layers would leave it empty, and the same for a layer
   and its systems, so one strip never locks the other out; such a chip is dotted until clicked. A
