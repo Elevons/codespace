@@ -1,5 +1,5 @@
 /** The most files one show request may name. */
-export const MaxShown = 60
+export const MaxShown = 1000
 
 /** The longest note on a file, a title, and an overall note, in characters. */
 export const MaxFileNote = 600

@@ -681,11 +681,14 @@ function renderFilterStrip(): void
   if (strip) strip.hidden = !anyShown.some(Boolean);
 }
 
-// The row for a tag filter, since tags live on file rows rather than in the strip.
+// The rows for filters that live outside the strip: an ad-hoc isolation, and the tag filter.
 function renderChips(): void
 {
-  const chips = S.tagFilter === null ? [] :
-    ['<span class="ochip"><b>tag</b><span>' + escapeHtml(S.tagFilter) + '</span><button type="button" data-chip="tag" title="Remove this filter" aria-label="Remove this filter">✕</button></span>'];
+  const chips: string[] = [];
+  if (S.isolatedFiles !== null)
+    chips.push('<span class="ochip"><b>isolate</b><span>' + S.isolatedFiles.size + (S.isolatedFiles.size === 1 ? " file" : " files") + '</span><button type="button" data-chip="isolate" title="Remove this filter" aria-label="Remove this filter">✕</button></span>');
+  if (S.tagFilter !== null)
+    chips.push('<span class="ochip"><b>tag</b><span>' + escapeHtml(S.tagFilter) + '</span><button type="button" data-chip="tag" title="Remove this filter" aria-label="Remove this filter">✕</button></span>');
   const box = document.getElementById("outliner-chips")!;
   box.innerHTML = chips.join("");
   box.hidden = chips.length === 0;

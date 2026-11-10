@@ -39,6 +39,9 @@ Send JSON to the map with bash. Every open page updates at once.
                {"path": "src/b.ts", "note": "Step two: ..."}]}
     JSON
 
+To leave only the files you highlighted on the map, send the same paths again with
+{"action": "isolate", "files": [...]}. An empty files list shows every file again.
+
 Every endpoint, and what it takes (a GET takes its arguments as query values, a POST as the JSON body with
 the fixed fields shown). Paths are relative to ${root}.
 

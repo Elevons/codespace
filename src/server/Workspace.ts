@@ -79,6 +79,7 @@ export class Workspace
         const repo = await Repo.OpenAsync(Workspace.ResolvePath(path))
         this.repo = repo
         this.view.Clear()
+        this.view.Isolate(null)
         this.Remember(repo)
         this.view.RepoChanged()
         return this.Info

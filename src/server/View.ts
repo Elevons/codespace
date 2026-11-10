@@ -10,6 +10,7 @@ const KeepAliveInterval = 25_000
 /** One thing sent to every page that is watching. */
 type ViewEvent =
     | { type: 'show', shown: IShown }
+    | { type: 'isolate', files: string[] | null }
     | { type: 'clear' }
     | { type: 'focus', path: string }
     | { type: 'architecture' }
@@ -22,6 +23,9 @@ export class View
     /** What is shown now, or null. A page that connects later is told it first. */
     private shown: IShown | null = null
 
+    /** The files an ad-hoc filter isolates, or null when the map draws every file. */
+    private isolated: string[] | null = null
+
     /** The pages watching, each with whether it is on this machine and so may follow the chat. */
     private readonly clients = new Map<ServerResponse, boolean>()
 
@@ -29,6 +33,12 @@ export class View
     public get Shown(): IShown | null
     {
         return this.shown
+    }
+
+    /** The files the map isolates now, or null when it draws every file. */
+    public get Isolated(): string[] | null
+    {
+        return this.isolated
     }
 
     /**
@@ -46,6 +56,16 @@ export class View
     {
         this.shown = null
         this.Broadcast({ type: 'clear' })
+    }
+
+    /**
+     * Asks the map to draw only these files, or every file again.
+     * @param files the repository-relative paths to isolate, or null to remove the isolation
+     */
+    public Isolate(files: string[] | null): void
+    {
+        this.isolated = files === null || files.length === 0 ? null : [...files]
+        this.Broadcast({ type: 'isolate', files: this.isolated })
     }
 
     /**
@@ -90,7 +110,8 @@ export class View
         const timer = setInterval(() => response.write(': keepalive\n\n'), KeepAliveInterval)
         response.on('close', () => { clearInterval(timer); this.clients.delete(response) })
         if (this.shown !== null) response.write(`data: ${JSON.stringify({ type: 'show', shown: this.shown } satisfies ViewEvent)}\n\n`)
-        else response.write(': connected\n\n')
+        if (this.isolated !== null) response.write(`data: ${JSON.stringify({ type: 'isolate', files: this.isolated } satisfies ViewEvent)}\n\n`)
+        if (this.shown === null && this.isolated === null) response.write(': connected\n\n')
     }
 
     /**

@@ -1,7 +1,9 @@
 import { api } from "./endpoint.js";
 import { S, V3, camera, renderEdges, pathIndex } from "./state.js";
-import { escapeHtml, select, selectFile } from "./panels.js";
+import { escapeHtml, select, selectFile, renderOutliner } from "./panels.js";
 import { refreshGraph, setSpin } from "./controls.js";
+import { build } from "./city.js";
+import { recenterTarget } from "./meshes.js";
 import { routeTargets } from "./route.js";
 import type { FileRecord } from "./types.js";
 
@@ -78,6 +80,17 @@ function clear(): void
   renderEdges();
 }
 
+// Narrows the scene to an ad-hoc set of files, or clears that narrowing with null. Isolation is a
+// filter, so the city, the Outliner, and the strands all rebuild as they do for a tag or a chip.
+function isolate(paths: string[] | null): void
+{
+  S.isolatedFiles = paths === null || paths.length === 0 ? null : new Set(paths);
+  build();
+  recenterTarget();
+  renderOutliner();
+  renderEdges();
+}
+
 document.getElementById("showing-clear")!.addEventListener("click", () =>
 {
   clear();
@@ -119,6 +132,7 @@ events.onmessage = (message) =>
 {
   const event = JSON.parse(message.data);
   if (event.type === "show") show(event.shown);
+  else if (event.type === "isolate") isolate(event.files ?? null);
   else if (event.type === "clear") clear();
   else if (event.type === "focus") focus(event.path);
   else if (event.type === "architecture") { S.graphSignature = ""; refreshGraph().then(renderShowing); window.dispatchEvent(new Event("codespace:architecture")); }

@@ -84,6 +84,9 @@ with `--allow-writes`.
   hidden. Until a repository declares systems, the System chips and grouping stay hidden.
 - **Tag filters.** A file's tag badge filters by role. Layers are shared, so one layer can hold
   files from several systems.
+- **Isolate a set of files.** An agent can narrow the map to an arbitrary set of files, hiding
+  every other file and the folders left empty; the Outliner names the isolation in a chip, and
+  its cross shows every file again.
 - **Colour by** tags, systems, layers, folders, size, or recent changes. *Changes* colours
   each file by the lines it has changed since HEAD, and the changes endpoint needs the map to
   be reading a git checkout with `git` on the machine.
@@ -115,7 +118,7 @@ without refreshing.
 - `src/repo/Architecture.ts` — reads, checks, and safely changes a repository's `.codespace/architecture.json`.
 - `src/server/Api.ts` — the endpoints the page and agents use: the architecture, the import graph, the ingest status, next and refine, the tool list, what the map shows, and the chat.
 - `src/server/Tools.ts` — the one list of what an agent can do with the map, served at `/api/tools` for a host to register as its own tools, and the source of the chat's endpoint list.
-- `src/server/View.ts` — what the map is asked to show, streamed to every open page.
+- `src/server/View.ts` — what the map is asked to show or isolate, streamed to every open page.
 - `src/repo/Snapshot.ts` — one cached read of a repository's files, imports, line counts, and declared names, rebuilt only when a file changes.
 - `src/repo/Graph.ts` — the imports between code files, relative for TypeScript and
   JavaScript and by namespace for C#, for the tools.
@@ -148,7 +151,7 @@ without refreshing.
 - `public/boxes.ts` — draws and places every file box, batching the crowd and borrowing a real mesh for the few files that stand out.
 - `public/batch.ts` — draws many copies of one shape in a single Babylon batch, tinted per slot for the file boxes and layer pads.
 - `public/highlight.ts`, `public/edges.ts`, `public/labels.ts`, `public/route.ts`, `public/pads.ts` — the selection glow, the import strands, the names, the route lane, and the layer rings.
-- `public/view.ts` — the Showing panel, and what tools ask the map to light up or focus.
+- `public/view.ts` — the Showing panel, and what tools ask the map to light up, isolate, or focus.
 - `public/repo-switch.ts` — the Repo picker: open another folder, list recent ones, show how much is left to describe, and hand that to the chat.
 - `public/chat.ts` — the Chat panel: the prompt box, the conversation, and what the agent is doing now.
 - `public/panels.ts` — the info panel, the Outliner tree, its search and filters, the breadcrumbs, and the highlighted code view.

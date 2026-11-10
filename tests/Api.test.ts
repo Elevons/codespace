@@ -112,6 +112,31 @@ test('The view shows files, replays to a late page, and rejects unknown paths', 
     finally { await stop(); await removeTemp(root) }
 })
 
+test('The view isolates an ad-hoc set of files, replays it, and clears it', async () =>
+{
+    const root = await repo()
+    const { port, stop } = await startApi(root)
+    try
+    {
+        assert.equal((await request(port, 'POST', '/api/view', { action: 'isolate', files: ['nowhere.ts'] })).status, 400)
+        const isolated = await request(port, 'POST', '/api/view', { action: 'isolate', files: ['src/a.ts', 'src/ghost.ts', 'src/a.ts'] })
+        assert.deepEqual(isolated.body, { ok: true, isolated: 1, unknown: ['src/ghost.ts'] })
+        assert.deepEqual((await send(port, '/api/view')).body.isolated, ['src/a.ts'])
+
+        // A page that connects now is told what is isolated.
+        const messages: string[] = []
+        const stream = httpRequest({ host: '127.0.0.1', port, path: '/api/view/events' }, (res) => res.on('data', (chunk) => messages.push(String(chunk))))
+        stream.end()
+        await waitFor(() => /"type":"isolate","files":\["src\/a.ts"\]/.test(messages.join('')))
+        stream.destroy()
+
+        // An empty list removes the isolation.
+        assert.deepEqual((await request(port, 'POST', '/api/view', { action: 'isolate', files: [] })).body, { ok: true, isolated: 0, unknown: [] })
+        assert.equal((await send(port, '/api/view')).body.isolated, null)
+    }
+    finally { await stop(); await removeTemp(root) }
+})
+
 test('A show request is capped, and its title, note, and file notes are cut to their limits', async () =>
 {
     const files: Record<string, string> = {}
@@ -123,10 +148,10 @@ test('A show request is capped, and its title, note, and file notes are cut to t
         const paths = Object.keys(files)
         const listed = paths.map((path, index) => index === 0 ? { path, note: 'x'.repeat(MaxFileNote + 100) } : path)
         const shown = await request(port, 'POST', '/api/view', { action: 'show', files: listed, title: 't'.repeat(MaxTitle + 50), note: 'n'.repeat(MaxNote + 100) })
-        assert.deepEqual(shown.body, { ok: true, shown: 60, unknown: [] })
+        assert.deepEqual(shown.body, { ok: true, shown: MaxShown, unknown: [] })
 
         const view = (await send(port, '/api/view')).body.shown
-        assert.equal(view.files.length, 60)
+        assert.equal(view.files.length, MaxShown)
         assert.equal(view.files[0].note.length, 600)
         assert.equal(view.title.length, 120)
         assert.equal(view.note.length, 1500)

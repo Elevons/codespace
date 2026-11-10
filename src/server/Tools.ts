@@ -112,7 +112,7 @@ export const MapTools: readonly IMapTool[] = [
     },
     {
         name: 'shown', method: 'GET', path: '/api/view', writes: false, parameters: NoArguments,
-        description: 'Returns the files that the map shows now. If the map shows nothing, the answer is null.',
+        description: 'Returns the files that the map shows now and the files that it isolates. If the map shows no files, shown is null. If it isolates no files, isolated is null.',
     },
     {
         name: 'show', method: 'POST', path: '/api/view', fixed: { action: 'show' }, writes: true,
@@ -137,6 +137,25 @@ Limits: ${MaxShown} files, ${MaxFileNote} characters for each file note, ${MaxTi
                         },
                         required: ['path'], additionalProperties: false,
                     },
+                },
+            },
+            required: ['files'], additionalProperties: false,
+        },
+    },
+    {
+        name: 'isolate', method: 'POST', path: '/api/view', fixed: { action: 'isolate' }, writes: true,
+        description: `Shows only the given files. The map hides every other file, so the given files stand alone on the map.
+This is an ad-hoc filter, not a highlight: the files that stay are drawn as usual, and the Outliner lists only them.
+A new call replaces the last isolation. Give an empty files list to remove the isolation and show every file again.
+The answer lists each unknown path. Correct those paths and send again.
+Limits: ${MaxShown} files.`,
+        parameters: {
+            type: 'object',
+            properties: {
+                files: {
+                    type: 'array', minItems: 0, maxItems: MaxShown,
+                    items: PathArgument('The file path, relative to the repository root.'),
+                    description: 'The files to keep, or an empty list to remove the isolation.',
                 },
             },
             required: ['files'], additionalProperties: false,

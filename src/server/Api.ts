@@ -98,7 +98,7 @@ export class Api
             const size = ClampSize(url.searchParams.get('size'), DefaultRefineSize)
             SendJson(response, 200, { name: repo.Name, root: repo.Root, ...Refine(architecture, (await Snapshot.ReadAsync(repo)).edges, size) })
         }
-        else if (path === '/api/view' && reading) SendJson(response, 200, { shown: view.Shown })
+        else if (path === '/api/view' && reading) SendJson(response, 200, { shown: view.Shown, isolated: view.Isolated })
         else if (path === '/api/view/events' && reading) view.Subscribe(response, RefuseOutside(request, this.allowWrites) === null)
         else if (path === '/api/chat' && (this.chat === null || workspace.pinned)) SendJson(response, 404, { error: this.chat === null ? 'This server was started without the chat.' : "The chat reads only the server's own repository, not one opened with ?repo=." })
         else if (path === '/api/chat')
@@ -192,7 +192,7 @@ export class Api
     }
 
     /**
-     * Shows files, focuses one, or clears what is shown.
+     * Shows files, isolates files, focuses one, or clears what is shown.
      * @param response the response to write
      * @param body the request, as sent
      * @param workspace the repository whose map it changes
@@ -206,6 +206,23 @@ export class Api
         {
             view.Clear()
             SendJson(response, 200, { ok: true })
+        }
+        else if (body.action === 'isolate')
+        {
+            const listed = Array.isArray(body.files) ? body.files.slice(0, MaxShown) : []
+            const requested = listed.map((item) => typeof item === 'string' ? item : (item as { path?: unknown })?.path).filter((path): path is string => typeof path === 'string')
+            if (requested.length === 0)
+            {
+                view.Isolate(null)
+                SendJson(response, 200, { ok: true, isolated: 0, unknown: [] })
+                return
+            }
+            const files: string[] = []
+            const unknown: string[] = []
+            for (const path of requested) if (known.has(path)) { if (!files.includes(path)) files.push(path) } else unknown.push(path)
+            if (files.length === 0) throw new Error('None of those paths are files in the repository.')
+            view.Isolate(files)
+            SendJson(response, 200, { ok: true, isolated: files.length, unknown })
         }
         else if (body.action === 'focus')
         {
@@ -235,6 +252,6 @@ export class Api
             })
             SendJson(response, 200, { ok: true, shown: files.length, unknown })
         }
-        else throw new Error('action must be "show", "focus", or "clear".')
+        else throw new Error('action must be "show", "isolate", "focus", or "clear".')
     }
 }

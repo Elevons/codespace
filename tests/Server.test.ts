@@ -243,10 +243,12 @@ test('Switching repositories takes down what was shown and tells watching pages'
             await waitFor(() => messages.join('').includes(': connected'))
 
             workspace.view.Show({ files: [{ path: 'src/a.ts', note: 'A.' }], trace: false, title: '', note: '' })
+            workspace.view.Isolate(['src/a.ts'])
             assert.notEqual(workspace.view.Shown, null)
 
             await workspace.SwitchAsync(second)
             assert.equal(workspace.view.Shown, null)
+            assert.equal(workspace.view.Isolated, null)
             await waitFor(() => /"type":"repo"/.test(messages.join('')))
             stream.destroy()
         }

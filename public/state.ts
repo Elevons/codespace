@@ -60,6 +60,7 @@ export const S = {
   extrasShown: false,                          // whether the extras (tests, docs, library code) are shown
   colorBy: "tag" as ColorBy,                   // what the boxes are coloured by
   tagFilter: null as string | null,            // the tag the tag filter is set to, or null for none
+  isolatedFiles: null as Set<string> | null,   // an ad-hoc filter: only these files are drawn, or null for none
   fingerprint: "",                             // the repository's change stamp from the last full read
   repoName: "Codespace",                       // the repository being shown, as the server names it
   repoRoot: "",                                // its folder on the machine running Codespace
@@ -179,9 +180,11 @@ export function passesSlice(path: string, skip: GroupAxis | null = null): boolea
   return passesSliceValues(sliceValue(path, "system"), sliceValue(path, "layer"), S.outliner.systems, S.outliner.layers, skip);
 }
 
-// Whether a file passes both the tag filter and the filter strip, so the scene can draw only the rest.
+// Whether a file passes the ad-hoc isolation, the tag filter, and the filter strip, so the scene
+// can draw only the rest.
 export function matchesFilters(path: string): boolean
 {
+  if (S.isolatedFiles !== null && !S.isolatedFiles.has(path)) return false;
   return matchesTagFilter(path) && passesSlice(path);
 }
 
@@ -216,7 +219,13 @@ export function frameFolder(n: GraphNode, currentRadius: number): void
 /** Whether any filter is active, from the tag filter or the filter strip. */
 export function hasFilters(): boolean
 {
-  return S.tagFilter !== null || S.outliner.systems.size > 0 || S.outliner.layers.size > 0;
+  return S.isolatedFiles !== null || S.tagFilter !== null || S.outliner.systems.size > 0 || S.outliner.layers.size > 0;
+}
+
+// Whether isolation hides this file, whichever eyes and filters it passes.
+export function isIsolated(path: string): boolean
+{
+  return S.isolatedFiles !== null && !S.isolatedFiles.has(path);
 }
 
 // Whether a folder holds a file that passes both filters.

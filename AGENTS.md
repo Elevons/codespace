@@ -113,7 +113,7 @@ repository the server is reading first (`GET /api/repo`); switch it if it is the
 curl -s -X POST localhost:5190/api/view -H 'Content-Type: application/json' -d @board.json
 ```
 
-`POST /api/view` takes one of three actions:
+`POST /api/view` takes one of four actions:
 
 - **`show`** — light up files, with a note on each, and optionally draw them as a route:
   ```json
@@ -128,14 +128,21 @@ curl -s -X POST localhost:5190/api/view -H 'Content-Type: application/json' -d @
   step, each with its own note, when a process comes back to it. Without `trace` the files are
   simply highlighted as a set. A plain path string works in place of `{"path", "note"}`. Each
   step is one file, so name the function or method in its note (`Table.UpdateNeeds drains ...`).
-  Limits: 60 files, 600 characters per file note, 120 for the title, 1500 for the overall note.
+  Limits: 1000 files, 600 characters per file note, 120 for the title, 1500 for the overall note.
   The reply is `{"ok": true, "shown": n, "unknown": [...]}`; any path in `unknown` was not drawn,
   so fix it and send again.
 - **`focus`** — `{"action": "focus", "path": "src/repo"}` selects a file or folder and moves the
   camera to it; an empty path is the repository root.
+- **`isolate`** — `{"action": "isolate", "files": ["src/a.ts", "src/b.ts"]}` draws only those
+  files and hides every other file and the folders left empty, as an ad-hoc filter; the Outliner
+  lists only them. It is how "highlight only the changed files" becomes "isolate them": call
+  `show` with the same paths first if they should also be lit. An empty `files` list removes the
+  isolation. A new `isolate` replaces the last one. The reply is
+  `{"ok": true, "isolated": n, "unknown": [...]}`; fix any path in `unknown` and send again.
 - **`clear`** — `{"action": "clear"}` takes down whatever is shown.
 
-A new `show` replaces the last one. `GET /api/view` returns `{"shown": <what is shown>}`, or `{"shown": null}`.
+A new `show` replaces the last one, and a new `isolate` replaces the last isolation; `clear` does
+not remove an isolation. `GET /api/view` returns `{"shown": <what is shown>, "isolated": <paths or null>}`.
 
 Reading, for finding the right files and steps before you show them:
 

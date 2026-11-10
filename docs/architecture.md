@@ -146,7 +146,9 @@ the two trees cannot drift.
 - An import that points up the layers (a lower layer using a higher one) is a thin red line
   on the folder plates, from the importing file's tether foot to the imported file's.
 - A tool can ask the map to show files with an explanation of each, which appears in the
-  Showing panel; see the README's section on ingesting a codebase from an agent.
+  Showing panel, and can isolate an ad-hoc set of files so only they and their folders are
+  drawn; the Outliner names the isolation in a chip whose cross removes it. See the README's
+  section on ingesting a codebase from an agent.
 - The info panel shows the chosen file's summary, or each file's when a folder is chosen, and
   lists problems found in the architecture file: invalid JSON, entries for files that are gone,
   and systems or layers a file names that the file does not declare.

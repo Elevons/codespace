@@ -1,4 +1,5 @@
 import { S, camera, DEFAULT_ALPHA, filePath, frameFile, frameFolder, glow, hasFilters, isFileVisible, matchesTagFilter, render, renderEdges, fileIndex, pathIndex, sliceValue } from "./state.js";
+import { api } from "./endpoint.js";
 import { build } from "./city.js";
 import { centerView, recenterTarget, pulseFile } from "./meshes.js";
 import { collapseAllOutliner, folderNode, select, selectFile, setOutlinerFocus, openSymbol, openFile, renderOutliner, sliceSet, toggleFold } from "./panels.js";
@@ -161,10 +162,20 @@ function stepMatch(direction: number): void
   if (path !== S.hoveredPath) { S.hoveredPath = path; render(); }
 }
 
-// Clears the search, every chip, and the tag filter in one go; the Clear button also opens every fold.
+// Removes the ad-hoc isolation and tells the server, so a page opened later does not narrow the map
+// again. A page that is not on the machine running it may be refused; this page clears either way.
+function dropIsolation(): void
+{
+  if (S.isolatedFiles === null) return;
+  S.isolatedFiles = null;
+  fetch(api("view"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "isolate", files: [] }) }).catch(() => {});
+}
+
+// Clears the search, every chip, the tag filter, and any isolation in one go; the Clear button also opens every fold.
 function clearOutliner(folds = true): void
 {
   const filtered = hasFilters();
+  dropIsolation();
   S.outliner.query = "";
   S.outliner.systems.clear();
   S.outliner.layers.clear();
@@ -364,6 +375,7 @@ document.getElementById("outliner-hide-all")!.addEventListener("click", () =>
 // Shows every file box at once: no hidden groups or files, and Extras on so nothing stays behind.
 document.getElementById("outliner-show-all-files")!.addEventListener("click", () =>
 {
+  dropIsolation();
   S.outliner.systems.clear();
   S.outliner.layers.clear();
   S.outliner.hiddenFiles.clear();
@@ -585,11 +597,12 @@ document.getElementById("outliner-filters")!.addEventListener("click", (event) =
   if (chip) { clickSlice(chip.dataset.slice as GroupAxis, chip.dataset.value!); return; }
 });
 
-// The tag chip's cross sits above the tree, so it gets its own handler.
+// The chips above the tree name filters that live outside the strip; their cross removes one.
 document.getElementById("outliner-chips")!.addEventListener("click", (event) =>
 {
   const chip = (event.target as HTMLElement).closest("[data-chip]") as HTMLElement | null;
   if (!chip) return;
+  if (chip.dataset.chip === "isolate") { dropIsolation(); redrawScene(); return; }
   S.tagFilter = null;
   redrawScene();
 });
