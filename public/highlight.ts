@@ -11,17 +11,20 @@ function applyHighlight(): void
   const start = S.trace !== null && S.trace.trace ? S.trace.paths[0] : null;
   for (const rec of S.fileRecords.values())
   {
-    const chosen = rec.node === S.selected && rec.file === S.selectedFile;
+    const chosen = (rec.node === S.selected && rec.file === S.selectedFile) || S.extraFiles.has(rec.path);
     const lit = isLitRecord(rec);
     const hovered = rec.path === S.hoveredPath;
     const shown = S.trace !== null && S.trace.set.has(rec.path);
     const emphasise = start !== null && rec.path === start;
+    // A file edited on disk flashes at full brightness, then fades back to how it sat.
+    const flash = S.flashes.get(rec.path) ?? 0;
     const hex = fileColor(rec.path);
     rec.lit = lit;
-    if (chosen || emphasise || shown || hovered)
+    if (chosen || emphasise || shown || hovered || flash > 0)
     {
-      const glow = chosen ? 0.85 : emphasise ? 1 : 0.55;
-      accent(rec, materialFor(hex, lit ? 1 : 0.12, glow), chosen || emphasise);
+      const glow = chosen ? 0.85 : emphasise ? 1 : flash > 0 ? 0.4 + 0.6 * flash : 0.55;
+      const alpha = flash > 0 && !chosen && !emphasise ? 1 : lit ? 1 : 0.12;
+      accent(rec, materialFor(hex, alpha, glow), chosen || emphasise || flash > 0.6);
     }
     else paintBox(rec, colorOf(hex));
     placeBox(rec);

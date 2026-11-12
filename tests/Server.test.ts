@@ -90,6 +90,7 @@ test('Server answers a whole page load from one bootstrap request, and only the 
             assert.deepEqual(boot.body.edges, [['src/a.ts', 'src/b.ts']])
             assert.equal(boot.body.lines['src/a.ts'], 3)
             assert.deepEqual(boot.body.symbols['src/a.ts'], ['a'])
+            assert.equal(typeof boot.body.stamps['src/a.ts'], 'string')
             assert.equal(typeof boot.body.repo.name, 'string')
             assert.ok(boot.body.architecture)
             assert.deepEqual(boot.body.changes, {})

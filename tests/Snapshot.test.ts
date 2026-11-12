@@ -24,6 +24,7 @@ test('Snapshot reads lines, declarations, and imports once, and reuses them unti
         assert.equal(first.lines['src/a.ts'], 3)
         assert.deepEqual(first.symbols['src/a.ts'], ['a'])
         assert.deepEqual(first.symbols['src/b.ts'], ['b'])
+        assert.equal(typeof first.stamps['src/a.ts'], 'string')
         // A file that declares nothing is left out of the symbols, but still has a line count.
         assert.equal(first.symbols['notes.md'], undefined)
         assert.equal(first.lines['notes.md'], 2)
@@ -37,6 +38,9 @@ test('Snapshot reads lines, declarations, and imports once, and reuses them unti
         const second = await Snapshot.ReadAsync(repo)
         assert.notEqual(second.fingerprint, first.fingerprint)
         assert.deepEqual(second.symbols['src/b.ts'], ['b', 'c'])
+        // The edited file's own stamp moves, so the page can flash the box that changed.
+        assert.notEqual(second.stamps['src/b.ts'], first.stamps['src/b.ts'])
+        assert.equal(second.stamps['src/a.ts'], first.stamps['src/a.ts'])
     }
     finally { await removeTemp(root) }
 })

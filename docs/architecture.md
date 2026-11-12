@@ -136,7 +136,9 @@ the two trees cannot drift.
   takes several words, each of which must match a file's path or one of its symbols. Every file row
   carries a tag badge and a system dot and layer dot in the strip's colours. The tree can be driven
   from the keyboard: arrows move and fold, Enter chooses, Shift+Enter opens the source, Space flips
-  the eye. Until a repository declares systems, the System chips and grouping stay hidden.
+  the eye. The chevron at the right of the header puts the whole outliner away, leaving a narrow tab
+  at the screen edge to bring it back; the choice is remembered, and `/` brings it back to focus the
+  search. Until a repository declares systems, the System chips and grouping stay hidden.
 - On a phone (a screen 720px wide or less) the map fills the screen and a tab bar along the bottom
   opens one sheet at a time: Files (the search and the tree, where tapping a folder folds it),
   Filters (every system and layer as a large tile, the tag filter, and the view options), Details
@@ -144,24 +146,33 @@ the two trees cannot drift.
   panels into the sheet rather than copying them, and puts them back on a wider screen. Choosing a
   file closes the sheet so the map can glide to it, and a strip above the tabs names the choice;
   dragging the sheet's handle down closes it.
+- Shift-clicking a file, in the Outliner or on the map, adds it to the selection; shift-clicking it
+  again takes it out. The first file chosen stays open as its block stack, the others are listed
+  under it, and the map draws the import traces of every selected file. A tool can choose a set the
+  same way with `{"action": "select", "files": [...]}`.
 - An import that points up the layers (a lower layer using a higher one) is a thin red line
   on the folder plates, from the importing file's tether foot to the imported file's.
 - A tool can ask the map to show files with an explanation of each, which appears in the
   Showing panel, and can isolate an ad-hoc set of files so only they and their folders are
   drawn; the Outliner names the isolation in a chip whose cross removes it. See the README's
   section on ingesting a codebase from an agent.
+- Live notices a file edited on disk and flashes its box at full brightness, fading over about a
+  second and a half, so a save is visible without hunting for the file. The flash uses each file's
+  own size and modified time, sent with the graph, so it works outside git too.
 - The info panel shows the chosen file's summary, or each file's when a folder is chosen, and
   lists problems found in the architecture file: invalid JSON, entries for files that are gone,
   and systems or layers a file names that the file does not declare.
-- Choosing a file opens its building into floors, read from the file itself when it is opened:
-  one slab per block, in the block's kind colour, in reading order, with strands between the blocks
-  that use each other. A block is an import run, a run of constants or types, a function or class,
-  or a section of a long function cut at the comments that lead its steps. The block rail in the
-  info panel lists the same blocks with their line ranges and a summary: the block's own comment
-  first; a block with none starts with a plain description of its shape, and the model writes a
-  sentence for it as the file opens (kept in memory for the session, and skipped when no model is
-  configured). Nothing about blocks is stored in the architecture file, and no pass reads a whole
-  repository for them. The chosen file's import wires
-  end on the block that carries them rather than on the middle of its box.
+- Choosing a file opens its **file box** into a **block stack**, read from the file itself when it
+  is opened: one **floor** per block, in the block's kind colour, in reading order, standing on the
+  box's own footprint and reaching 1.5× its height. The cube shrinks to the lowest block and becomes
+  it, then the rest of the blocks grow upward from its top. A block is
+  an import run, a run of constants or types, a function or class, or a **section** of a long
+  function cut at the comments that lead its steps. The block rail in the info panel lists the same
+  blocks with their line ranges and a summary: the block's own comment first; a block with none
+  starts with a plain description of its shape, and the model writes a sentence for it as the file
+  opens (kept in memory for the session, and skipped when no model is configured). Choosing a rail
+  row or a floor opens that block's lines. Nothing about blocks is stored in the architecture file,
+  and no pass reads a whole repository for them. The open file's import wires end on the block that
+  carries them rather than on the middle of its box. The words are defined in `docs/GLOSSARY.md`.
 - `.codespace/` is part of the repository, so it is on the map like anything else, as an
   extra: hidden until you turn Extras on, along with `docs` and `tests`.

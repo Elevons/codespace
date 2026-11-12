@@ -167,6 +167,25 @@ Limits: ${MaxShown} files.`,
         },
     },
     {
+        name: 'select', method: 'POST', path: '/api/view', fixed: { action: 'select' }, writes: true,
+        description: `Selects one or more files at the same time, as if they were shift-clicked, and draws the import traces of every selected file.
+The first file opens its block stack; the rest are added to the selection and listed beside it.
+It clears any route the map was showing first, so the traces are visible. A new call replaces the selection.
+The answer lists each unknown path. Correct those paths and send again.
+Limits: ${MaxShown} files.`,
+        parameters: {
+            type: 'object',
+            properties: {
+                files: {
+                    type: 'array', minItems: 1, maxItems: MaxShown,
+                    items: PathArgument('The file path, relative to the repository root.'),
+                    description: 'The files to select, in the order they should be chosen.',
+                },
+            },
+            required: ['files'], additionalProperties: false,
+        },
+    },
+    {
         name: 'focus', method: 'POST', path: '/api/view', fixed: { action: 'focus' }, writes: true,
         description: 'Selects one file or folder and moves the camera to it.',
         parameters: { type: 'object', properties: { path: PathArgument('A file or folder path, relative to the repository root. An empty path is the root.') }, required: ['path'], additionalProperties: false },

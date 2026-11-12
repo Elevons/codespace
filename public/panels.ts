@@ -82,6 +82,85 @@ function renderCode(code: string, name: string, first = 1): string
   return '<div class="code-wrap"><pre class="code-gutter">' + gutter.join("\n") + '</pre><div class="code-body">' + body.join("") + "</div></div>";
 }
 
+/** The path of the chosen file, whose blocks are open, or null when a folder or nothing is chosen. */
+function chosenFilePath(): string | null
+{
+  return S.selected >= 0 && S.selectedFile >= 0 ? filePath(S.selected, S.selectedFile) : null;
+}
+
+/** Every chosen file, the one whose blocks are open first. */
+export function selectionPaths(): string[]
+{
+  const primary = chosenFilePath();
+  return primary === null ? [] : [primary, ...S.extraFiles];
+}
+
+// Adds a file to the selection with a shift-click, or takes it out again. The file chosen first
+// stays the one whose blocks are open, so its rail and floors do not move under the pointer.
+export function toggleFileSelection(nodeIndex: number, fileIndex: number): void
+{
+  const path = filePath(nodeIndex, fileIndex);
+  const primary = chosenFilePath();
+  if (primary === null) { selectFile(nodeIndex, fileIndex); return; }
+  if (primary === path) return;
+  if (S.extraFiles.has(path)) S.extraFiles.delete(path);
+  else S.extraFiles.add(path);
+  renderSelection();
+  renderOutliner();
+  renderEdges();
+  render();
+}
+
+// Takes one extra file out of the selection, keeping the one whose blocks are open.
+export function removeExtraFile(path: string): void
+{
+  if (!S.extraFiles.delete(path)) return;
+  renderSelection();
+  renderOutliner();
+  renderEdges();
+  render();
+}
+
+/** Chooses a set of files, as a tool asks: the first one opens, and the rest are added to it. */
+export function setSelection(paths: readonly string[]): void
+{
+  const found: Array<[number, number]> = [];
+  for (const path of paths)
+  {
+    const spot = pathIndex().files.get(path);
+    if (spot !== undefined && found.some(([node, at]) => node === spot[0] && at === spot[1]) === false) found.push(spot);
+  }
+  if (found.length === 0) { select(-1); return; }
+  selectFile(found[0][0], found[0][1]);
+  for (const [node, at] of found.slice(1)) S.extraFiles.add(filePath(node, at));
+  renderSelection();
+  renderOutliner();
+  renderEdges();
+  render();
+}
+
+// The chosen file's panel lists the other files in the selection, each one a click away or
+// removed by its cross.
+function selectionHtml(): string
+{
+  if (S.extraFiles.size === 0) return "";
+  const rows = [...S.extraFiles].map((path) =>
+  {
+    const summary = S.FILE_SUMMARIES.get(path);
+    return '<li class="selrow"><button type="button" class="selopen" data-extra="' + escapeHtml(path) + '">' +
+      escapeHtml(path.split("/").pop()!) + "</button>" +
+      '<button type="button" class="seldrop" data-extradrop="' + escapeHtml(path) + '" title="Remove from the selection" aria-label="Remove from the selection">✕</button>' +
+      (summary ? '<span class="selsum">' + escapeHtml(summary) + "</span>" : "") + "</li>";
+  }).join("");
+  return '<div class="selhead">Also selected <span>' + S.extraFiles.size + '</span></div><ul class="sellist">' + rows + "</ul>";
+}
+
+export function renderSelection(): void
+{
+  const box = document.getElementById("selection");
+  if (box) box.innerHTML = selectionHtml();
+}
+
 // Chooses one file box: the folder stays chosen, and the panel shows what the file declares —
 // its functions and variables — read from its source.
 function selectFile(nodeIndex: number, fileIndex: number): void
@@ -110,6 +189,7 @@ function selectFile(nodeIndex: number, fileIndex: number): void
       (tags ? '<div class="chosen-tags">' + escapeHtml(tags.join(" · ")) + "</div>" : "") +
       (summary ? '<div class="chosen-sum">' + escapeHtml(summary) + "</div>" : "") +
     "</div>" +
+    '<div id="selection">' + selectionHtml() + "</div>" +
     '<div id="symbols"><p class="hint">reading…</p></div>';
   showBlocks(path);
   renderOutliner();
@@ -163,7 +243,7 @@ async function showBlocks(path: string): Promise<void>
   const requested = pendingBlock;
   pendingBlock = null;
   const found = report.blocks.findIndex((block) => block.name === requested || block.members?.includes(requested));
-  if (found >= 0) openBlock(found);
+  if (found >= 0) openBlockAt(found);
 }
 
 // The block rail: a strip of the whole file, one mark per block, beside a row of summaries.
@@ -180,7 +260,8 @@ function railHtml(report: IBlocksReport): string
       '" title="' + escapeHtml(block.name) + '"></i>';
   }).join("");
   const rows = report.blocks.map((block, index) => railRow(block, index)).join("");
-  return '<div class="rail"><div class="rail-strip">' + strip + '</div><div class="rail-list">' + rows + "</div></div>";
+  return '<h4 class="rail-title">Blocks <span>' + report.blocks.length + "</span></h4>" +
+    '<div class="rail"><div class="rail-strip">' + strip + '</div><div class="rail-list">' + rows + "</div></div>";
 }
 
 // Fills in a written sentence for each block the source left without a comment. Only the text
@@ -220,18 +301,31 @@ function railRow(block: BlockInfo, index: number): string
 }
 
 // Opens one block of the shown file: its lines in the code panel, and its floor on the map.
-function openBlock(index: number): void
+// A click on a floor calls this too, so both views pick the same block.
+export function openBlockAt(index: number): void
 {
   const report = S.BLOCKS.get(shownPath);
   const block = report?.blocks[index];
   if (!block) return;
+  // Choosing the block that is already open closes it again, and the source with it.
+  const panel = document.getElementById("codeblock")!;
+  if (S.selectedBlock === index && panel.hidden === false)
+  {
+    S.selectedBlock = -1;
+    render();
+    hideCode();
+    document.querySelectorAll<HTMLElement>("#symbols [data-block]").forEach((element) => element.classList.remove("sel"));
+    return;
+  }
   S.selectedBlock = index;
   render();
   const code = blockLines.slice(block.line - 1, block.endLine).join("\n");
   showCode(block.name, code, shownPath, block.line);
   document.querySelectorAll<HTMLElement>("#symbols [data-block]").forEach((element) =>
   {
-    element.classList.toggle("sel", Number(element.getAttribute("data-block")) === index);
+    const chosen = Number(element.getAttribute("data-block")) === index;
+    element.classList.toggle("sel", chosen);
+    if (chosen) element.scrollIntoView({ block: "nearest" });
   });
 }
 
@@ -278,10 +372,19 @@ document.getElementById("info")!.addEventListener("click", (event) =>
     toggle.setAttribute("aria-expanded", String(!statsCollapsed));
     return;
   }
+  const extra = target.closest("[data-extra]") as HTMLElement | null;
+  if (extra)
+  {
+    const spot = pathIndex().files.get(extra.dataset.extra!);
+    if (spot) selectFile(spot[0], spot[1]);
+    return;
+  }
+  const drop = target.closest("[data-extradrop]") as HTMLElement | null;
+  if (drop) { removeExtraFile(drop.dataset.extradrop!); return; }
   const block = target.closest("[data-block]") as HTMLElement | null;
   if (block)
   {
-    openBlock(Number(block.dataset.block));
+    openBlockAt(Number(block.dataset.block));
     return;
   }
   const crumb = target.closest("[data-selectfolder]") as HTMLElement | null;
@@ -351,6 +454,10 @@ function select(i: number, outline = true): void
 {
   S.selected = i;
   S.selectedFile = -1;
+  // Choosing a folder, or nothing, ends the file's block and the rest of the selection too.
+  S.extraFiles.clear();
+  S.selectedBlock = -1;
+  hideCode();
   S.focusSet = i >= 0 ? neighboursOf(i) : null;
   const info = document.getElementById("info")!;
   info.classList.toggle("empty", i < 0);
@@ -597,7 +704,7 @@ function fileDots(path: string): string
 function fileRow(item: FileSpot, depth: number, terms: string[]): string
 {
   const hidden = !isFileVisible(item.path);
-  const chosen = S.selected === item.node && S.selectedFile === item.file;
+  const chosen = (S.selected === item.node && S.selectedFile === item.file) || S.extraFiles.has(item.path);
   const tag = S.FILE_TAGS.get(item.path)?.[0];
   const tagBadge = tag
     ? '<span class="otag" data-tag="' + escapeHtml(tag) + '" title="' + (S.tagFilter === tag ? "Stop filtering to this tag" : "Filter to this tag") + '">' + escapeHtml(tag) + "</span>"
@@ -949,5 +1056,33 @@ function renderOutliner(): void
   renderChips();
   renderCounts(files.length);
 }
+
+/* ------------------------------------------------------ outliner panel ---- */
+
+// The outliner can be put away, leaving a narrow tab at the right edge that brings it back.
+// The choice is remembered per browser, so a reload leaves the panel where it was left.
+const OutlinerHiddenKey = "codespace.outliner.hidden";
+
+function setOutlinerHidden(hidden: boolean): void
+{
+  document.body.classList.toggle("outliner-hidden", hidden);
+  const tab = document.getElementById("outliner-show");
+  const close = document.getElementById("outliner-hide");
+  if (tab) tab.hidden = !hidden;
+  if (close) close.setAttribute("aria-expanded", String(!hidden));
+  try { localStorage.setItem(OutlinerHiddenKey, hidden ? "1" : "0"); }
+  catch { /* storage can be off, and the panel still collapses for this visit */ }
+}
+
+/** Brings the outliner back, for a shortcut that needs its search box. */
+export function revealOutliner(): void
+{
+  if (document.body.classList.contains("outliner-hidden")) setOutlinerHidden(false);
+}
+
+document.getElementById("outliner-hide")?.addEventListener("click", () => setOutlinerHidden(true));
+document.getElementById("outliner-show")?.addEventListener("click", () => setOutlinerHidden(false));
+try { if (localStorage.getItem(OutlinerHiddenKey) === "1") setOutlinerHidden(true); }
+catch { /* storage can be off; the panel starts open */ }
 
 export { collapseAllOutliner, escapeHtml, folderNode, select, selectFile, setOutlinerFocus, openSymbol, openFile, renderOutliner, toggleFold };

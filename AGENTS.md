@@ -113,7 +113,7 @@ repository the server is reading first (`GET /api/repo`); switch it if it is the
 curl -s -X POST localhost:5190/api/view -H 'Content-Type: application/json' -d @board.json
 ```
 
-`POST /api/view` takes one of four actions:
+`POST /api/view` takes one of five actions:
 
 - **`show`** — light up files, with a note on each, and optionally draw them as a route:
   ```json
@@ -139,10 +139,20 @@ curl -s -X POST localhost:5190/api/view -H 'Content-Type: application/json' -d @
   `show` with the same paths first if they should also be lit. An empty `files` list removes the
   isolation. A new `isolate` replaces the last one. The reply is
   `{"ok": true, "isolated": n, "unknown": [...]}`; fix any path in `unknown` and send again.
+- **`select`** — `{"action": "select", "files": ["src/a.ts", "src/b.ts"]}` chooses several files at
+  once, as shift-clicking them does: the first opens its block stack, the rest join the selection,
+  and the map draws the import traces of every selected file. It clears whatever was shown first,
+  so the traces are visible. A new `select` replaces the selection. The reply is
+  `{"ok": true, "selected": n, "unknown": [...]}`; fix any path in `unknown` and send again.
 - **`clear`** — `{"action": "clear"}` takes down whatever is shown.
 
-A new `show` replaces the last one, and a new `isolate` replaces the last isolation; `clear` does
-not remove an isolation. `GET /api/view` returns `{"shown": <what is shown>, "isolated": <paths or null>}`.
+A new `show` replaces the last one, a new `isolate` replaces the last isolation, and a new `select`
+replaces the selection; `clear` does not remove an isolation or a selection. `GET /api/view` returns
+`{"shown": <what is shown>, "isolated": <paths or null>, "selected": <paths or null>}`.
+
+On the page, shift-click a file row in the Outliner, or a file box on the map, to add it to the
+selection or take it out. The file chosen first stays the one whose block stack is open; the rest
+are listed under it, with a cross to remove each one.
 
 Reading, for finding the right files and steps before you show them:
 
@@ -161,14 +171,16 @@ Reading, for finding the right files and steps before you show them:
 | `GET /api/ingest/refine?size=n` | the CLI's `refine` over HTTP |
 | `GET /api/tools` | every endpoint above as a tool: name, description, method, path, fixed body fields, and a JSON Schema for its arguments |
 
-Read one file as its blocks when you need to explain how the file itself is put together. Selecting a
-file on the map opens its building into floors, one slab per block, and the rail in the info panel lists
-the same blocks with their summaries and line ranges. The blocks are read on demand, when the file is
-opened, and never stored: a summary comes from the block's own comment. A block with no comment shows a
-plain description of its shape first, then `POST /api/blocks/summaries` (a page call, not a tool) asks the
-configured model for one sentence, kept in memory for the session; a server with no model leaves the plain
-description. The file's own comments are never replaced. A function longer than about 40 lines is cut at the comments that
-lead its steps, so its parts can be named and walked one at a time. See `src/repo/Blocks.ts`.
+Read one file as its blocks when you need to explain how the file itself is put together. Choosing a file
+opens its **file box** into its **block stack**: one **floor** per block, on the box's own footprint and
+1.5× its height, and the **block rail** in the info panel lists the same blocks with their summaries and line
+ranges. Choosing a rail row or a floor opens that block's lines. The blocks are read on demand, when the
+file is opened, and never stored: a summary comes from the block's own comment. A block with no comment
+shows a plain description of its shape first, then `POST /api/blocks/summaries` (a page call, not a tool)
+asks the configured model for one sentence, kept in memory for the session; a server with no model leaves
+the plain description. The file's own comments are never replaced. A function longer than about 40 lines
+is cut at the comments that lead its steps, so its **sections** can be named and walked one at a time. See
+`src/repo/Blocks.ts`, and `docs/GLOSSARY.md` for these words.
 
 `POST /api/architecture` is the CLI's `apply` over HTTP: same validation, same ledger stamp.
 

@@ -19,7 +19,7 @@
       "system": "meta",
       "layer": "docs",
       "tags": ["config"],
-      "summary": "Instructions for an agent working in this repository: its commands, the architecture-file rule, and how the pieces fit."
+      "summary": "Instructions for an agent working in this repository: its commands, the architecture-file rule, and how the pieces fit, including the map's select action."
     },
     "README.md": {
       "system": "meta",
@@ -33,11 +33,17 @@
       "tags": ["config"],
       "summary": "Deferred design ideas, each written with the constraints needed to pick it up later."
     },
+    "docs/GLOSSARY.md": {
+      "system": "meta",
+      "layer": "docs",
+      "tags": ["config"],
+      "summary": "The words the map uses for a file and its parts, the selection, the block rail, and the block summaries."
+    },
     "docs/architecture.md": {
       "system": "meta",
       "layer": "docs",
       "tags": ["config"],
-      "summary": "The full explanation of the architecture file: its fields, the tag vocabulary, and what the map does with it."
+      "summary": "The full explanation of the architecture file: its fields, the tag vocabulary, and what the map does with it, including multi-selection."
     },
     "docs/review-rubric.md": {
       "system": "meta",
@@ -100,13 +106,13 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "core"],
-      "summary": "The map's controls and options: camera, colouring, grouping, filters, and refreshing the graph."
+      "summary": "The map's controls and options: camera, colouring, grouping, filters, shift-click selection, collapsing the outliner, and refreshing the graph."
     },
     "public/edges.ts": {
       "system": "browser",
       "layer": "render",
       "tags": ["core"],
-      "summary": "Draws the import edges, tethers, and route strands between the files' boxes and, once a file is open, its floors."
+      "summary": "Draws the import edges, tethers, and route strands between the files' boxes for every selected file, landing on its floors when a file is open."
     },
     "public/endpoint.ts": {
       "system": "browser",
@@ -124,19 +130,19 @@
       "system": "browser",
       "layer": "render",
       "tags": ["core", "ui"],
-      "summary": "Opens a chosen file into a stack of floors, one slab per block, with strands between the blocks that use each other, the picked block lit, and the import wires landing on the block that carries them."
+      "summary": "Opens a chosen file box into its block stack: the cube shrinks to the lowest block and becomes it, the rest grow upward to 1.5 times the box's height, and a tap on the stack picks the block at that height."
     },
     "public/highlight.ts": {
       "system": "browser",
       "layer": "render",
       "tags": ["core"],
-      "summary": "Paints each file for the current choice, tinting the batched crowd and giving the few standout files their own mesh."
+      "summary": "Paints each file for the current choice, tinting the batched crowd, lighting every selected file, and fading a file that was just edited."
     },
     "public/index.html": {
       "system": "browser",
       "layer": "shell",
       "tags": ["ui", "entry"],
-      "summary": "The page's HTML shell: the canvas, the panel markup, and the bootstrap request for the repository."
+      "summary": "The page's HTML shell: the canvas, the panel markup, the outliner's collapse controls, and the bootstrap request for the repository."
     },
     "public/ingest.ts": {
       "system": "browser",
@@ -154,7 +160,7 @@
       "system": "browser",
       "layer": "entry",
       "tags": ["entry"],
-      "summary": "Boots the page: pointer interaction, the render loop, and the first load of the repository."
+      "summary": "Boots the page: pointer interaction that picks files, folders, and floors, shift-click selection, the render loop with the edit flash, and the first load."
     },
     "public/meshes.ts": {
       "system": "browser",
@@ -178,7 +184,7 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "core"],
-      "summary": "The outliner, the info panel with its block rail, and everything a person can click, select, fold, or search in the tree."
+      "summary": "The outliner, the info panel with its block rail and its list of other selected files, and everything a person can click, select, fold, or search."
     },
     "public/repo-switch.ts": {
       "system": "browser",
@@ -190,7 +196,7 @@
       "system": "browser",
       "layer": "model",
       "tags": ["io", "core"],
-      "summary": "Loads the repository's graph, source, and blocks from the server, fills in block summaries, and folds the folder tree into map nodes."
+      "summary": "Loads the repository's graph, source, and blocks from the server, fills in block summaries, flashes files edited since the last read, and folds the folder tree into map nodes."
     },
     "public/route.ts": {
       "system": "browser",
@@ -214,13 +220,13 @@
       "system": "browser",
       "layer": "model",
       "tags": ["core"],
-      "summary": "The page's mutable world and constants: the live graph, the chosen file and block, the filters, and the scene handles."
+      "summary": "The page's mutable world and constants: the live graph, the chosen file and block, the rest of the selection, the filters, the edit flashes, the scene handles, and the camera framing that always shows a chosen file."
     },
     "public/style.css": {
       "system": "browser",
       "layer": "shell",
       "tags": ["ui"],
-      "summary": "The styles for the page, its panels, the outliner, the block rail, and the phone sheets."
+      "summary": "The styles for the page, its panels, the outliner and its edge tab, the block rail, the selected-files list, and the phone sheets."
     },
     "public/symbols.ts": {
       "system": "browser",
@@ -244,7 +250,7 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "io"],
-      "summary": "The Showing panel: receives what a tool asks the map to show and lists the steps, files, and notes."
+      "summary": "The Showing panel and the tool events: shows a route or a selection, isolates files, focuses a file or folder, and keeps the camera far enough back to see what it frames."
     },
     "src/agent/BlockSummaries.ts": {
       "system": "server",
@@ -352,7 +358,7 @@
       "system": "server",
       "layer": "repo",
       "tags": ["core", "io"],
-      "summary": "Reads a folder as a repository: lists and stamps its files and reads source safely, honoring gitignore and skipping vendored code."
+      "summary": "Reads a folder as a repository: lists and stamps its files, giving each its own stamp so an edited file can be told, and reads source safely, honoring gitignore and skipping vendored code."
     },
     "src/repo/ShowLimits.ts": {
       "system": "server",
@@ -364,7 +370,7 @@
       "system": "server",
       "layer": "repo",
       "tags": ["core", "io"],
-      "summary": "Reads everything the page needs to draw a repository in one pass, and reuses it until a file changes."
+      "summary": "Reads everything the page needs to draw a repository in one pass, with each file's own stamp, and reuses it until a file changes."
     },
     "src/repo/Sync.ts": {
       "system": "server",
@@ -376,7 +382,7 @@
       "system": "server",
       "layer": "api",
       "tags": ["orchestrate", "io"],
-      "summary": "The endpoints for the architecture, the import graph, ingest status, next and refine, the tool list, the view stream, and the chat."
+      "summary": "The endpoints for the architecture, the import graph, ingest status, next and refine, the tool list, the view stream, the selection, and the chat."
     },
     "src/server/Guard.ts": {
       "system": "server",
@@ -388,19 +394,19 @@
       "system": "server",
       "layer": "entry",
       "tags": ["entry", "io"],
-      "summary": "Serves the page and its assets, the installed Babylon build, and the repository endpoints over HTTP, with the workspace and view stream."
+      "summary": "Serves the page and its assets, the installed Babylon build, and the repository endpoints over HTTP, with each file's stamp, the workspace, and the view stream."
     },
     "src/server/Tools.ts": {
       "system": "server",
       "layer": "api",
       "tags": ["data"],
-      "summary": "The one list of what an agent can do with the map, each as an HTTP call with its arguments' schema, for hosts and the built-in chat."
+      "summary": "The one list of what an agent can do with the map, including selecting several files at once, each as an HTTP call for hosts and the built-in chat."
     },
     "src/server/View.ts": {
       "system": "server",
       "layer": "api",
       "tags": ["core", "io"],
-      "summary": "Holds what the map is being asked to show and streams view and chat events to every open page."
+      "summary": "Holds what the map is being asked to show, isolate, and select, and streams view and chat events to every open page."
     },
     "src/server/Workspace.ts": {
       "system": "server",
@@ -508,13 +514,13 @@
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests serving the page, static assets, the installed Babylon, repository switching, changes, and the view stream."
+      "summary": "Tests serving the page, static assets, the installed Babylon, the bootstrap with each file's stamp, repository switching, changes, and the view stream."
     },
     "tests/Snapshot.test.ts": {
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests reading a repository snapshot once and reusing it until a file changes, and narrowing import edges to a folder."
+      "summary": "Tests reading a repository snapshot once and reusing it until a file changes, each file's own stamp, and narrowing import edges to a folder."
     },
     "tests/Symbols.test.ts": {
       "system": "meta",
@@ -526,7 +532,7 @@
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests that the tool list is well formed, is served, reaches the chat, and that every listed tool answers through the real server."
+      "summary": "Tests that the tool list is well formed, is served, reaches the chat, and that every listed tool, including select, answers through the real server."
     },
     "tests/Update.test.ts": {
       "system": "meta",
@@ -564,7 +570,7 @@
       "summary": "The map's own description of this repository: the architecture file it reads."
     },
     "docs": {
-      "summary": "Documentation for the map: the architecture-file guide, the review rubric, and deferred ideas."
+      "summary": "Documentation for the map: the architecture-file guide, the glossary, the review rubric, and deferred ideas."
     },
     "public": {
       "summary": "The browser side: the Babylon city, the panels and chat around it, and the state they share."

@@ -1,5 +1,5 @@
 import { api } from "./endpoint.js";
-import { S } from "./state.js";
+import { S, flashFiles } from "./state.js";
 import { folderOf } from "./rules.js";
 import type { Graph, GraphNode } from "./types.js";
 import type { IBlocksReport } from "./blocks.js";
@@ -66,6 +66,7 @@ interface Bootstrap
   edges: [string, string][];
   lines: Record<string, number>;
   symbols: Record<string, string[]>;
+  stamps: Record<string, string>;
   changes: Record<string, number>;
 }
 
@@ -195,6 +196,20 @@ async function loadGraph(since: string | null = null): Promise<Graph | null>
     const names = data.symbols[path];
     if (names !== undefined) symbols.set(path, names);
   }
+
+  // A file whose own stamp moved since the last read was edited on disk: flash its box, so a
+  // save is visible on the map without hunting for it. The first read has nothing to compare.
+  if (S.FILE_STAMPS.size > 0)
+  {
+    const edited = paths.filter((path) =>
+    {
+      const was = S.FILE_STAMPS.get(path);
+      const now = data.stamps?.[path];
+      return was !== undefined && now !== undefined && was !== now;
+    });
+    if (edited.length > 0) flashFiles(edited);
+  }
+  S.FILE_STAMPS = new Map(Object.entries(data.stamps ?? {}));
   for (const [from, to] of data.edges)
   {
     if (from === to || !knownSet.has(from) || !knownSet.has(to)) continue;

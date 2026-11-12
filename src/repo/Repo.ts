@@ -141,23 +141,27 @@ export class Repo
      * Lists the files and stamps them in one walk, so a caller that needs both does not list twice.
      * @returns the sorted file list and the change stamp over it
      */
-    public async StampAsync(): Promise<{ files: string[], fingerprint: string }>
+    public async StampAsync(): Promise<{ files: string[], fingerprint: string, stamps: Record<string, string> }>
     {
         const files = await this.ListFilesAsync()
-        const stamps = await Promise.all(files.map(async (file) =>
+        // Each file's own stamp is kept as well as the combined one, so a page can tell which
+        // files moved when the repository changes and flash the boxes that were edited.
+        const stamps: Record<string, string> = {}
+        const lines = await Promise.all(files.map(async (file) =>
         {
             try
             {
                 const info = await stat(join(this.Root, file))
-                return `${file}:${info.size}:${info.mtimeMs}`
+                stamps[file] = `${info.size}:${info.mtimeMs}`
             }
             catch
             {
                 // A file that vanished mid-walk changes the list on the next poll.
-                return `${file}:gone`
+                stamps[file] = 'gone'
             }
+            return `${file}:${stamps[file]}`
         }))
-        return { files, fingerprint: createHash('sha1').update(stamps.join('\n')).digest('hex') }
+        return { files, stamps, fingerprint: createHash('sha1').update(lines.join('\n')).digest('hex') }
     }
 
     /**

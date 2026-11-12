@@ -160,16 +160,19 @@ function pointsUp(userPath: string, usedPath: string): boolean
 // The import wires, drawn only for what is chosen so the map stays readable. A chosen folder's
 // imports in and out are one strand per file import, from the imported file's tether pad to the pad
 // of the file that uses it; between folders the strand follows the folder tree, so a folder's imports
-// from one region travel together and fan out to their files. A chosen file's own imports arch
-// straight from block to block instead, with nothing drawn on the pads.
-// Nothing chosen, or a route shown, draws no wires; the layer breaks (collectBreaks) still show.
-// A file chosen shows only its own imports, not its folder's as well. Without declared layers, an
-// import into a folder nested deeper is drawn as a break; with them, it is a file using a higher layer.
+// from one region travel together and fan out to their files. Chosen files' own imports arch
+// straight from box to box instead, with nothing drawn on the pads; with several chosen, every one
+// of their imports is drawn. Nothing chosen, or a route shown, draws no wires; the layer breaks
+// (collectBreaks) still show. A chosen file shows only its own imports, not its folder's as well.
+// Without declared layers, an import into a folder nested deeper is drawn as a break; with them,
+// it is a file using a higher layer.
 function collectEdges(): Edge[]
 {
   const result: Edge[] = [];
   const folderChosen = S.selected >= 0 && S.selectedFile < 0 && S.trace === null;
-  const chosen = S.selected >= 0 && S.selectedFile >= 0 && S.trace === null ? filePath(S.selected, S.selectedFile) : null;
+  const chosen = S.selected >= 0 && S.selectedFile >= 0 && S.trace === null
+    ? new Set([filePath(S.selected, S.selectedFile), ...S.extraFiles])
+    : null;
   // The bus each chosen folder's wire joins: its direction and the folder at its other end.
   const busOf: string[] = [];
   if (folderChosen || chosen !== null)
@@ -182,8 +185,8 @@ function collectEdges(): Edge[]
       let state: string;
       if (chosen !== null)
       {
-        if (from !== chosen && to !== chosen) continue;
-        state = from === chosen ? "out" : "in";
+        if (chosen.has(from) === false && chosen.has(to) === false) continue;
+        state = chosen.has(from) ? "out" : "in";
       }
       else
       {
@@ -258,11 +261,13 @@ function collectBreaks(): Break[]
 {
   const result: Break[] = [];
   if (S.LAYERS.length === 0) return result;
-  const chosen = S.selected >= 0 && S.selectedFile >= 0 && S.trace === null ? filePath(S.selected, S.selectedFile) : null;
+  const chosen = S.selected >= 0 && S.selectedFile >= 0 && S.trace === null
+    ? new Set([filePath(S.selected, S.selectedFile), ...S.extraFiles])
+    : null;
   const folderChosen = S.selected >= 0 && S.selectedFile < 0 && S.trace === null;
   for (const [from, to] of S.FILE_EDGES)
   {
-    if (from === chosen || to === chosen || !pointsUp(from, to)) continue;
+    if (!pointsUp(from, to) || (chosen !== null && (chosen.has(from) || chosen.has(to)))) continue;
     const user = S.fileRecords.get(from), used = S.fileRecords.get(to);
     if (!user || !used) continue;
     if (folderChosen && user.node !== used.node && (user.node === S.selected || used.node === S.selected)) continue;

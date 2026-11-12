@@ -28,6 +28,7 @@ function argumentsFor(tool: IMapTool, other: string): Record<string, unknown>
         case 'graph': return { folder: 'src' }
         case 'show': return { trace: true, title: 'A route', files: [{ path: 'src/a.ts', note: 'First.' }, { path: 'src/b.ts', note: 'Second.' }] }
         case 'isolate': return { files: ['src/a.ts'] }
+        case 'select': return { files: ['src/a.ts', 'src/b.ts'] }
         case 'focus': return { path: 'src' }
         case 'next': case 'refine': return { size: 2 }
         case 'apply': return { files: { 'src/b.ts': { summary: 'The value.', system: 'core', layer: 'base', tags: ['core'] } } }

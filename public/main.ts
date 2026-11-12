@@ -3,10 +3,10 @@ import { settleCamera, updatePulses } from "./meshes.js";
 import { pickFile, placeBox, flushBoxes } from "./boxes.js";
 import { rayBox } from "./rules.js";
 import { applyHighlight } from "./highlight.js";
-import { syncFloors } from "./floors.js";
+import { pickFloor, syncFloors } from "./floors.js";
 import { rebuildEdges, updateFlow } from "./edges.js";
 import { updateLabels } from "./labels.js";
-import { select, selectFile } from "./panels.js";
+import { openBlockAt, select, selectFile, toggleFileSelection } from "./panels.js";
 import { setSpin, refreshGraph } from "./controls.js";
 import { loadRepo } from "./repo.js";
 import { routeTargets } from "./route.js";
@@ -61,9 +61,18 @@ scene.onPointerObservable.add((info) =>
   }
   if (info.type !== BABYLON.PointerEventTypes.POINTERTAP || event.button === 2) return;
 
+  // An open file's floors win over its cube, so a tap lands on the block it looks like it does.
+  const blockHit = pickFloor(scene.pointerX, scene.pointerY);
+  if (blockHit !== null) { openBlockAt(blockHit); return; }
   // A file always wins over the tile under it, so a tap lands on what it looks like it does.
+  // Shift (or Cmd/Ctrl) on a file adds it to the selection, or takes it out again.
   const fileHit = pickFile(scene.pointerX, scene.pointerY);
-  if (fileHit) { selectFile(fileHit.node, fileHit.file); return; }
+  if (fileHit)
+  {
+    if (event.shiftKey || event.metaKey || event.ctrlKey) toggleFileSelection(fileHit.node, fileHit.file);
+    else selectFile(fileHit.node, fileHit.file);
+    return;
+  }
   select(pickFolder(scene.pointerX, scene.pointerY));
 });
 
@@ -126,8 +135,19 @@ engine.runRenderLoop(() =>
     }
   }
 
+  // An edited file's flash decays over a second and a half, and the highlight redraws as it does.
+  if (S.flashes.size > 0)
+  {
+    for (const [path, left] of S.flashes)
+    {
+      const next = left - seconds / 1.6;
+      if (next <= 0) S.flashes.delete(path);
+      else S.flashes.set(path, next);
+    }
+    S.dirty = true;
+  }
   if (S.dirty) applyHighlight();
-  syncFloors();
+  syncFloors(seconds);
   flushBoxes();
   if (S.edgesDirty) { rebuildEdges(); syncPads(); edgeClock = 0; }
   else if (moving)

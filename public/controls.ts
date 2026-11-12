@@ -2,7 +2,7 @@ import { S, camera, DEFAULT_ALPHA, filePath, frameFile, frameFolder, glow, hasFi
 import { api } from "./endpoint.js";
 import { build } from "./city.js";
 import { centerView, recenterTarget, pulseFile } from "./meshes.js";
-import { collapseAllOutliner, folderNode, select, selectFile, setOutlinerFocus, openSymbol, openFile, renderOutliner, sliceSet, toggleFold } from "./panels.js";
+import { collapseAllOutliner, folderNode, select, selectFile, setOutlinerFocus, openSymbol, openFile, renderOutliner, renderSelection, revealOutliner, sliceSet, toggleFileSelection, toggleFold } from "./panels.js";
 import { buildChanged, loadGraph } from "./repo.js";
 import type { ColorBy, GroupAxis } from "./types.js";
 
@@ -43,9 +43,10 @@ async function refreshGraph(force = false): Promise<void>
     if (signature === S.graphSignature) return;
     S.graphSignature = signature;
 
-    // What is chosen now, so the choice survives the redraw if it is still there.
+    // What is chosen now, so the choice and the whole selection survive the redraw if they are still there.
     const keptFolder = S.selected >= 0 ? S.NODES[S.selected].id : null;
     const keptFile = S.selected >= 0 && S.selectedFile >= 0 ? filePath(S.selected, S.selectedFile) : null;
+    const keptExtras = [...S.extraFiles];
     // What each file held before, so a file that changed while Live is on can be marked.
     const previousLines = S.FILE_LINES;
     S.NODES = graph.nodes;
@@ -81,6 +82,13 @@ async function refreshGraph(force = false): Promise<void>
     const file = folder >= 0 && keptFile !== null ? S.NODES[folder].files.findIndex((_name, i) => filePath(folder, i) === keptFile) : -1;
     if (file >= 0) selectFile(folder, file);
     else select(folder);
+    // The other chosen files come back with it, unless they are gone from the repository.
+    if (file >= 0 && keptExtras.length > 0)
+    {
+      for (const path of keptExtras) if (pathIndex().files.has(path)) S.extraFiles.add(path);
+      renderSelection();
+      renderEdges();
+    }
     renderOutliner();
     window.dispatchEvent(new Event("codespace:built"));
   }
@@ -137,6 +145,7 @@ const searchInput = document.getElementById("search") as HTMLInputElement;
 // The outliner filters in place as you type; `/` or Ctrl+K jumps here.
 function openSearch(): void
 {
+  revealOutliner();
   searchInput.focus();
   searchInput.select();
 }
@@ -597,6 +606,15 @@ outlinerTree.addEventListener("click", (event) =>
   if (row)
   {
     const path = row.dataset.path!;
+    // Shift on a file adds it to the selection, or takes it out again, without moving the map.
+    if (event.shiftKey || event.metaKey || event.ctrlKey)
+    {
+      const [nodeIndex, at] = fileIndex(path);
+      if (nodeIndex >= 0) toggleFileSelection(nodeIndex, at);
+      lastRowClick.path = null;
+      settleOutliner();
+      return;
+    }
     const now = performance.now();
     if (lastRowClick.path === path && now - lastRowClick.at < 450) { lastRowClick.path = null; void openFile(path); settleOutliner(); return; }
     lastRowClick.path = path;

@@ -11,6 +11,7 @@ const KeepAliveInterval = 25_000
 type ViewEvent =
     | { type: 'show', shown: IShown }
     | { type: 'isolate', files: string[] | null }
+    | { type: 'select', files: string[] | null }
     | { type: 'clear' }
     | { type: 'focus', path: string }
     | { type: 'architecture' }
@@ -26,6 +27,9 @@ export class View
     /** The files an ad-hoc filter isolates, or null when the map draws every file. */
     private isolated: string[] | null = null
 
+    /** The files a tool selected together, or null when the map selects one file itself. */
+    private selected: string[] | null = null
+
     /** The pages watching, each with whether it is on this machine and so may follow the chat. */
     private readonly clients = new Map<ServerResponse, boolean>()
 
@@ -39,6 +43,12 @@ export class View
     public get Isolated(): string[] | null
     {
         return this.isolated
+    }
+
+    /** The files a tool selected, or null when the page chooses its own. */
+    public get Selected(): string[] | null
+    {
+        return this.selected
     }
 
     /**
@@ -66,6 +76,16 @@ export class View
     {
         this.isolated = files === null || files.length === 0 ? null : [...files]
         this.Broadcast({ type: 'isolate', files: this.isolated })
+    }
+
+    /**
+     * Asks the map to select several files at once, as shift-clicking them would.
+     * @param files the repository-relative paths, the first one opening; null clears the selection
+     */
+    public Select(files: string[] | null): void
+    {
+        this.selected = files === null || files.length === 0 ? null : [...files]
+        this.Broadcast({ type: 'select', files: this.selected })
     }
 
     /**
@@ -111,7 +131,8 @@ export class View
         response.on('close', () => { clearInterval(timer); this.clients.delete(response) })
         if (this.shown !== null) response.write(`data: ${JSON.stringify({ type: 'show', shown: this.shown } satisfies ViewEvent)}\n\n`)
         if (this.isolated !== null) response.write(`data: ${JSON.stringify({ type: 'isolate', files: this.isolated } satisfies ViewEvent)}\n\n`)
-        if (this.shown === null && this.isolated === null) response.write(': connected\n\n')
+        if (this.selected !== null) response.write(`data: ${JSON.stringify({ type: 'select', files: this.selected } satisfies ViewEvent)}\n\n`)
+        if (this.shown === null && this.isolated === null && this.selected === null) response.write(': connected\n\n')
     }
 
     /**

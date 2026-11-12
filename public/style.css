@@ -44,6 +44,18 @@
     pointer-events: none; }
   #dock-left { left: 14px; width: clamp(260px, 25vw, 360px); }
   #dock-right { right: 14px; width: clamp(210px, 19vw, 280px); }
+  /* The outliner puts itself away to the right edge, leaving this tab to bring it back. */
+  #outliner-show { position: fixed; right: 0; top: 50%; z-index: 5; transform: translateY(-50%);
+    display: flex; align-items: center; gap: 6px; padding: 12px 5px;
+    writing-mode: vertical-rl; text-orientation: mixed;
+    background: rgba(22,27,34,.9); color: #c9d1d9; border: 1px solid #30363d; border-right: 0;
+    border-radius: 10px 0 0 10px; font: 600 10px ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: .12em; text-transform: uppercase; cursor: pointer;
+    backdrop-filter: blur(8px); box-shadow: -6px 0 18px rgba(0,0,0,.35); }
+  #outliner-show:hover { background: #21262d; color: #e6edf3; }
+  #outliner-show[hidden] { display: none; }
+  body.outliner-hidden #dock-right { display: none; }
+  body.phone #outliner-show, body.phone #outliner-hide { display: none; }
   #dock-bottom { position: fixed; left: 14px; right: 14px; bottom: 14px; display: flex;
     justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 10px; pointer-events: none; }
 
@@ -306,8 +318,26 @@
   .keys { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; color: #8b91ad; font-size: 11px; }
   #info li.sym span.n { color: #484f58; }
 
+  /* The other files in a shift-click selection, listed under the chosen one. */
+  #selection:empty { display: none; }
+  #selection { margin: -4px 0 12px; }
+  .selhead { font: 600 10px ui-sans-serif, system-ui, sans-serif; letter-spacing: .6px; text-transform: uppercase; color: #6e7681; }
+  .selhead span { margin-left: 4px; color: #484f58; }
+  .sellist { list-style: none; margin: 5px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+  .selrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 6px;
+    background: #0d1117; border: 1px solid #21262d; border-radius: 6px; }
+  .selopen { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left;
+    background: none; border: 0; padding: 0; color: #79c0ff; font: 600 11px ui-monospace, Menlo, monospace; cursor: pointer; }
+  .selopen:hover { text-decoration: underline; }
+  .seldrop { flex: none; background: none; border: 0; padding: 0 2px; color: #6e7681; cursor: pointer; font-size: 11px; }
+  .seldrop:hover { color: #e6edf3; }
+  .selsum { flex: 1 0 100%; color: #8b949e; font-size: 11px; line-height: 1.35; }
+
   /* The block rail: a line-accurate strip of the file beside a row per block, in the manner
      of SeeSoft, so where each block sits in the file reads at a glance. */
+  .rail-title { margin: 0 0 6px; font: 600 10px ui-sans-serif, system-ui, sans-serif; letter-spacing: .6px;
+    text-transform: uppercase; color: #6e7681; }
+  .rail-title span { margin-left: 4px; color: #484f58; }
   .rail { display: grid; grid-template-columns: 12px 1fr; gap: 8px; align-items: stretch; }
   .rail-strip { position: relative; border-radius: 3px; background: #161b22; overflow: hidden; min-height: 140px; }
   .rail-mark { position: absolute; left: 0; right: 0; border-radius: 1px; opacity: .8; cursor: pointer; }

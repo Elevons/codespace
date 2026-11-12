@@ -1,34 +1,50 @@
-import { S, V3, scene, filePath, materialFor } from "./state.js";
+import { S, V3, camera, scene, filePath, materialFor } from "./state.js";
+import { rayBox } from "./rules.js";
 import { blockColor, stackLayout, type BlockInfo, type IBlocksReport, type IFloor } from "./blocks.js";
 
 /**
- * A chosen file opened into floors: one slab per block, stacked above its box in reading
- * order, so the file's own structure shows in the same city language as the map. Strands
- * join a block to the blocks it uses, and the file's import wires end on the floors rather
- * than on the box, once the block that carries them is known.
+ * A chosen file opened into floors. The file's cube shrinks to the height of its lowest block
+ * and becomes it, then the rest of the blocks grow upward from the cube's top, one per block,
+ * to a stack taller than the cube so small blocks stay readable. A click on a slab picks its block.
  */
 
 /** One block's slab on screen. */
 interface Slab
 {
+  /** The block's place in the report's reading order. */
+  index: number;
   block: BlockInfo;
   mesh: BABYLON.Mesh;
 }
 
 let slabs: Slab[] = [];
 
-/** The strands between blocks, and the points last drawn, so an unmoved stack is not rebuilt. */
-let strands: BABYLON.Mesh | null = null;
-let strandPoints = "";
-
 /** The stack currently built, by the file and the blocks it holds, so a re-choice rebuilds it. */
 let openKey = "";
+
+/** The path whose cube is hidden behind the stack, so its accent can come back when it closes. */
+let hiddenPath = "";
+
+/** Seconds since the cube started opening, which drives the two stages below. */
+let opened = 0;
+
+/** How much taller the block stack is than the file cube, so small blocks still read. */
+const StackScale = 1.5;
+
+/** How long the cube takes to shrink into its lowest block, in seconds. */
+const ShrinkTime = 0.18;
+
+/** How long the rest of the blocks then take to grow from the cube's top, in seconds. */
+const GrowTime = 0.32;
+
+/** The share of a floor's slot filled by the slab; the rest is the gap between blocks. */
+const SlabFill = 0.88;
 
 /** The floors of the last frame, by block, so a block can be found by the one it draws. */
 let floorsByBlock = new Map<BlockInfo, IFloor>();
 
-/** The chosen file's blocks as floors, rebuilt when the choice changes and moved with its box. */
-export function syncFloors(): void
+/** The chosen file's blocks as floors, rebuilt when the choice changes and opened in two stages. */
+export function syncFloors(seconds = 1 / 60): void
 {
   const path = S.selected >= 0 && S.selectedFile >= 0 ? filePath(S.selected, S.selectedFile) : "";
   const rec = path === "" ? undefined : S.fileRecords.get(path);
@@ -36,29 +52,73 @@ export function syncFloors(): void
   if (rec === undefined || report === undefined || report.blocks.length === 0) { closeFloors(); return; }
 
   const key = path + "|" + report.blocks.map((block) => block.name + ":" + block.line + "-" + block.endLine).join("|");
-  if (key !== openKey) { build(report); openKey = key; }
+  if (key !== openKey) { build(report); openKey = key; opened = 0; }
+
+  if (hiddenPath !== "" && hiddenPath !== path) RestoreCube(hiddenPath);
+  hiddenPath = path;
+  opened = Math.min(ShrinkTime + GrowTime, opened + seconds);
 
   const position = rec.shape.position, scaling = rec.shape.scaling;
-  const width = Math.max(0.95, scaling.x * 1.6);
-  const height = Math.max(2.4, Math.min(6, 1 + report.lines * 0.022));
-  const base = position.y + scaling.y / 2 + 0.04;
-  const floors = stackLayout(report.blocks, height);
+  const width = scaling.x, depth = scaling.z, height = scaling.y;
+  const base = position.y - height / 2;
+  const totalHeight = height * StackScale;
+  const floors = stackLayout(report.blocks, totalHeight);
   floorsByBlock = new Map(floors.map((floor) => [floor.block, floor]));
+  const order = new Map(floors.map((floor, at) => [floor.block, at]));
+  const bottom = floors[0];
+  const bottomFill = Math.max(0.004, bottom.thickness * SlabFill);
 
+  // Stage one: the file's own cube shrinks to the lowest block's height, still at the bottom.
+  const shrink = rec.accent === null ? 1 : Ease(Math.min(1, opened / ShrinkTime));
+  if (rec.accent !== null)
+  {
+    rec.accent.setEnabled(shrink < 1);
+    if (shrink < 1)
+    {
+      const size = height + (bottomFill - height) * shrink;
+      rec.accent.scaling.y = size;
+      rec.accent.position.y = base + size / 2;
+    }
+  }
+
+  // Stage two: from the cube's new top, each block above it grows in turn, so the stack rises.
+  const grown = Math.max(0, opened - ShrinkTime);
+  const last = Math.max(1, floors.length - 1);
   for (const slab of slabs)
   {
     const floor = floorsByBlock.get(slab.block);
     if (floor === undefined) continue;
+    const at = order.get(slab.block) ?? 0;
     const chosen = report.blocks[S.selectedBlock] === slab.block;
-    slab.mesh.position.set(position.x, base + floor.center, position.z);
-    slab.mesh.scaling.set(width, Math.max(0.04, floor.thickness * 0.9), width);
+    if (at === 0)
+    {
+      slab.mesh.setEnabled(shrink >= 1);
+      slab.mesh.position.set(position.x, base + floor.center, position.z);
+      slab.mesh.scaling.set(width * 0.98, bottomFill, depth * 0.98);
+    }
+    else
+    {
+      const delay = ((at - 1) / last) * GrowTime * 0.6;
+      const grow = Ease(Math.max(0, Math.min(1, (grown - delay) / (GrowTime * 0.4))));
+      const fill = Math.max(0.004, floor.thickness * SlabFill);
+      const size = Math.max(0.0001, fill * grow);
+      const foot = base + floor.center - fill / 2;
+      slab.mesh.setEnabled(shrink >= 1 && grow > 0);
+      slab.mesh.position.set(position.x, foot + size / 2, position.z);
+      slab.mesh.scaling.set(width * 0.98, size, depth * 0.98);
+    }
     // The block the rail picked glows brighter and wears an outline, so the two views point at one part.
     slab.mesh.material = materialFor(blockColor(slab.block.kind), 1, chosen ? 0.95 : 0.5);
     slab.mesh.renderOutline = chosen;
   }
 
   S.floorAnchors = { path, user: AnchorOf(floors, "user", position, width, base), used: AnchorOf(floors, "used", position, width, base) };
-  updateStrands(report, base, width, position);
+}
+
+/** The share of an open animation's time that has passed, eased out so a block settles gently. */
+function Ease(t: number): number
+{
+  return 1 - Math.pow(1 - t, 3);
 }
 
 /** The point on the stack a wire joins: the top block for what the file imports, the
@@ -73,11 +133,41 @@ function AnchorOf(floors: IFloor[], role: "user" | "used", position: BABYLON.Vec
   return new V3(position.x + (role === "user" ? width * 0.25 : -width * 0.25), y, position.z);
 }
 
+/** Which block's slab sits under a screen point, or null. Only once the cube has opened.
+ * The whole cube answers, not each slab on its own, so a tap in the hairline gap between two
+ * floors still picks one; the point where the ray enters the cube sets which. */
+export function pickFloor(x: number, y: number): number | null
+{
+  if (slabs.length === 0 || opened < ShrinkTime + GrowTime || hiddenPath === "") return null;
+  const rec = S.fileRecords.get(hiddenPath);
+  if (rec === undefined) return null;
+  const position = rec.shape.position, scaling = rec.shape.scaling;
+  const base = position.y - scaling.y / 2;
+  const top = base + scaling.y * StackScale;
+  const ray = scene.createPickingRay(x, y, BABYLON.Matrix.IdentityReadOnly, camera);
+  const t = rayBox(ray.origin, ray.direction,
+    position.x - scaling.x / 2, position.x + scaling.x / 2,
+    base, top,
+    position.z - scaling.z / 2, position.z + scaling.z / 2);
+  if (t === null) return null;
+
+  // The height of the point where the ray meets the cube chooses the floor it belongs to.
+  const at = ray.origin.y + ray.direction.y * t;
+  let best: Slab | null = null, bestGap = Infinity;
+  for (const slab of slabs)
+  {
+    const centre = slab.mesh.position.y, half = slab.mesh.scaling.y / 2;
+    const gap = at > centre + half ? at - centre - half : at < centre - half ? centre - half - at : 0;
+    if (gap < bestGap) { bestGap = gap; best = slab; }
+  }
+  return best === null ? null : best.index;
+}
+
 /** Builds one slab per block, in the block's kind colour, and gives the chosen one an outline. */
 function build(report: IBlocksReport): void
 {
   closeFloors();
-  for (const block of report.blocks)
+  report.blocks.forEach((block, index) =>
   {
     const mesh = BABYLON.MeshBuilder.CreateBox("floor", { size: 1 }, scene);
     mesh.isPickable = false;
@@ -87,62 +177,32 @@ function build(report: IBlocksReport): void
     mesh.edgesWidth = 0.5;
     mesh.outlineColor = BABYLON.Color3.White();
     mesh.outlineWidth = 0.03;
-    slabs.push({ block, mesh });
-  }
+    slabs.push({ index, block, mesh });
+  });
 }
 
-/** Rebuilds the strands between a block and the blocks it uses, unless the stack has not moved. */
-function updateStrands(report: IBlocksReport, base: number, width: number, position: BABYLON.Vector3): void
+/** Puts a file's cube back to its full size, after the open animation left it short. */
+function RestoreCube(path: string): void
 {
-  const lines: BABYLON.Vector3[][] = [];
-  const colors: BABYLON.Color4[][] = [];
-  for (const block of report.blocks)
-  {
-    const from = floorsByBlock.get(block);
-    if (from === undefined) continue;
-    for (const ref of block.refs)
-    {
-      const to = report.blocks.find((other) => other.name === ref);
-      const toFloor = to === undefined ? undefined : floorsByBlock.get(to);
-      if (toFloor === undefined) continue;
-      const y1 = base + from.center, y2 = base + toFloor.center;
-      const side = position.x - width / 2;
-      lines.push([
-        new V3(side, y1, position.z),
-        new V3(side - width * 0.55, (y1 + y2) / 2, position.z),
-        new V3(side, y2, position.z),
-      ]);
-      const color = BABYLON.Color3.FromHexString(blockColor(toFloor.block.kind));
-      const fade = new BABYLON.Color4(color.r, color.g, color.b, 0.55);
-      colors.push([fade, fade, fade]);
-    }
-  }
-
-  // The same strands in the same places need no new mesh; a moved box moves them.
-  const points = lines.flatMap((line) => line.map((point) => point.x.toFixed(2) + "," + point.y.toFixed(2) + "," + point.z.toFixed(2))).join(";");
-  if (points === strandPoints && strands !== null) return;
-  strandPoints = points;
-  strands?.dispose();
-  strands = null;
-  if (lines.length === 0) return;
-  strands = BABYLON.MeshBuilder.CreateLineSystem("block-strands", { lines, colors, useVertexAlpha: true }, scene);
-  strands.isPickable = false;
+  const rec = S.fileRecords.get(path);
+  if (rec === undefined || rec.accent === null) return;
+  rec.accent.scaling.copyFrom(rec.shape.scaling);
+  rec.accent.position.copyFrom(rec.shape.position);
+  rec.accent.setEnabled(true);
 }
 
-/** Takes the floors down, when no file is open or its blocks are gone. */
+/** Takes the floors down and gives the file its cube back. */
 function closeFloors(): void
 {
-  if (slabs.length === 0 && strands === null && openKey === "") return;
   for (const slab of slabs) slab.mesh.dispose();
+  const restore = hiddenPath;
   slabs = [];
-  strands?.dispose();
-  strands = null;
-  strandPoints = "";
   floorsByBlock = new Map();
-  if (openKey !== "")
-  {
-    openKey = "";
-    S.floorAnchors = null;
-    S.selectedBlock = -1;
-  }
+  if (openKey === "" && restore === "") return;
+  openKey = "";
+  hiddenPath = "";
+  opened = 0;
+  S.floorAnchors = null;
+  S.selectedBlock = -1;
+  if (restore !== "") RestoreCube(restore);
 }

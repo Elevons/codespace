@@ -24,6 +24,8 @@ export const S = {
   FILE_TAGS: new Map<string, string[]>(),      // path -> the tags the architecture file gives it
   FILE_SUMMARIES: new Map<string, string>(),   // path -> what the architecture file says the file is for
   FILE_SYMBOLS: new Map<string, string[]>(),   // path -> the names it declares, for search
+  FILE_STAMPS: new Map<string, string>(),      // path -> its size and modified time, to tell an edited file
+  flashes: new Map<string, number>(),          // path -> how much of its edit flash is left, from 1 to 0
   BLOCKS: new Map<string, IBlocksReport>(),    // path -> the blocks its text is made of, read when the file is opened
   selectedBlock: -1,                           // which block of the opened file the rail picked, or -1
   floorAnchors: null as { path: string, user: BABYLON.Vector3, used: BABYLON.Vector3 } | null, // where the opened file's wires join its floors
@@ -52,6 +54,7 @@ export const S = {
   fileRecords: new Map<string, FileRecord>(),  // path -> { shape, slot, node, file, path, target, targetSize }
   selected: -1,
   selectedFile: -1,                            // which file inside the chosen folder is highlighted, or -1
+  extraFiles: new Set<string>(),               // the other chosen files, when a selection holds several
   autoSpin: true,
   focusSet: null as Set<number> | null,        // node indices kept bright while one folder is chosen
   dirty: true,                                 // the highlight and edges need redrawing on the next frame
@@ -207,7 +210,7 @@ export function frameFile(rec: FileRecord, currentRadius: number): void
 {
   S.autoSpin = false;
   window.dispatchEvent(new Event("codespace:spin"));
-  S.camGoal = { target: rec.target.clone(), radius: Math.min(currentRadius, 24) };
+  S.camGoal = { target: rec.target.clone(), radius: Math.max(9, Math.min(currentRadius, 24)) };
 }
 
 // Glides the camera to one folder, close enough that its files read.
@@ -275,6 +278,13 @@ export function render(): void { S.dirty = true; }
 
 // A change that moves the strands' endpoints or their colours: a choice, filter, trace, or layout.
 export function renderEdges(): void { S.dirty = true; S.edgesDirty = true; }
+
+/** Lights up files that were just edited, the way a chosen file is lit, and lets them fade. */
+export function flashFiles(paths: readonly string[]): void
+{
+  for (const path of paths) S.flashes.set(path, 1);
+  render();
+}
 
 // Copies text, falling back to a hidden box when the page is not secure enough for the Clipboard API.
 export async function copyText(text: string): Promise<boolean>

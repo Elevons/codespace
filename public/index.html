@@ -45,6 +45,7 @@
       <button id="outliner-clear" type="button" title="Clear the search, filters, and folds" hidden>Clear</button>
       <button id="outliner-collapse" class="hicon" type="button" title="Fold every group" aria-label="Fold every group"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7l4-4 4 4M4 13l4-4 4 4"/></svg></button>
       <button id="outliner-filter" class="hicon" type="button" aria-expanded="false" aria-controls="outliner-options" title="Choose how the tree groups files" aria-label="Grouping options"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1.6"/><circle cx="11" cy="8" r="1.6"/><circle cx="7" cy="12" r="1.6"/></svg></button>
+      <button id="outliner-hide" class="hicon" type="button" aria-expanded="true" aria-controls="outliner" title="Collapse the outliner" aria-label="Collapse the outliner"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg></button>
     </div>
     <div id="outliner-options" hidden>
       <div class="ooptrow">
@@ -84,6 +85,8 @@
     </div>
   </section>
 </div>
+
+<button id="outliner-show" type="button" hidden title="Show the outliner" aria-label="Show the outliner">Outliner</button>
 
 <div id="dock-bottom">
   <div class="panel bar" id="tools">

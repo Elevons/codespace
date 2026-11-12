@@ -14,6 +14,9 @@ interface ISnapshot
     /** The change stamp the rest was read at. */
     fingerprint: string
 
+    /** Each file's size and modified time, so the page can tell which files were edited. */
+    stamps: Record<string, string>
+
     /** Every file the map can show, sorted. */
     files: string[]
 
@@ -40,11 +43,11 @@ export class Snapshot
      */
     public static async ReadAsync(repo: Repo): Promise<ISnapshot>
     {
-        const { files, fingerprint } = await repo.StampAsync()
+        const { files, fingerprint, stamps } = await repo.StampAsync()
         const cached = Cache.get(repo)
         if (cached !== undefined && cached.fingerprint === fingerprint) return cached.snapshot
 
-        const snapshot = Snapshot.BuildAsync(repo, files, fingerprint)
+        const snapshot = Snapshot.BuildAsync(repo, files, stamps, fingerprint)
         Cache.set(repo, { fingerprint, snapshot })
         // A failed read must not be remembered, or every later request would fail the same way.
         snapshot.catch(() => { if (Cache.get(repo)?.snapshot === snapshot) Cache.delete(repo) })
@@ -56,9 +59,10 @@ export class Snapshot
      * declarations, and the import graph.
      * @param repo the repository to read
      * @param files the repository's files
+     * @param stamps each file's own change stamp
      * @param fingerprint the change stamp over those files
      */
-    private static async BuildAsync(repo: Repo, files: string[], fingerprint: string): Promise<ISnapshot>
+    private static async BuildAsync(repo: Repo, files: string[], stamps: Record<string, string>, fingerprint: string): Promise<ISnapshot>
     {
         const texts = new Map<string, string>()
         const queue = files.filter((path) => CODE_FILE.test(path))
@@ -86,6 +90,6 @@ export class Snapshot
         }
 
         const graph = await Graph.BuildAsync(repo, files, (path) => texts.has(path) ? Promise.resolve(texts.get(path)!) : repo.ReadFileAsync(path))
-        return { fingerprint, files, edges: graph.Edges(), lines, symbols }
+        return { fingerprint, files, stamps, edges: graph.Edges(), lines, symbols }
     }
 }

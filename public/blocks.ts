@@ -1,6 +1,8 @@
 /**
- * The blocks a source file is made of, and the rules that turn them into floors. Kept
- * dependency-free so the server, the browser, and the tests share one block vocabulary.
+ * The blocks a source file is made of, and the rules that turn them into floors. A block is one
+ * part of a file in reading order; a section is a block inside a long function or class. The words
+ * are defined in docs/GLOSSARY.md. Kept dependency-free so the server, the browser, and the tests
+ * share one vocabulary.
  */
 
 /** What a block is: the role it plays in the file, which is what the rail and the floors colour by. */
@@ -66,7 +68,7 @@ export interface IFloor
 }
 
 /** The longest span, in lines, that still gets its own thickness; longer blocks stop growing. */
-const MaxFloorLines = 40;
+const MaxFloorLines = 60;
 
 /** The thickness of a parent slab that is drawn as a header over its sections. */
 const HeaderWeight = 3;
@@ -77,16 +79,18 @@ export function hasChildren(blocks: ReadonlyArray<BlockInfo>, block: BlockInfo):
   return block.depth === 0 && blocks.some((other) => other.parent === block.name);
 }
 
-/** How much of a stack's height one block takes: its line span, or a thin header over its sections. */
+/** How much of a stack's height one block takes: its line span, or a thin header over its sections.
+ * The span is square-rooted, so a small block still gets a floor thick enough to see and click. */
 function floorWeight(blocks: ReadonlyArray<BlockInfo>, block: BlockInfo): number
 {
   if (hasChildren(blocks, block)) return HeaderWeight;
-  return Math.max(1, Math.min(MaxFloorLines, block.endLine - block.line + 1));
+  return Math.sqrt(Math.max(1, Math.min(MaxFloorLines, block.endLine - block.line + 1)));
 }
 
 /**
  * Splits a stack's height among its blocks, a slab per block, bottom to top in reverse reading
- * order so the file's first block sits highest, under the label like a page.
+ * order so the file's first block sits highest, under the label like a page. Thickness grows with
+ * the square root of a block's line span, so small blocks stay visible without hiding the large.
  * @param blocks the file's blocks in reading order
  * @param height the total height the stack should take
  */

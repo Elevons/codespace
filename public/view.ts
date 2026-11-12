@@ -1,6 +1,6 @@
 import { api } from "./endpoint.js";
 import { S, V3, camera, renderEdges, pathIndex } from "./state.js";
-import { escapeHtml, select, selectFile, renderOutliner } from "./panels.js";
+import { escapeHtml, select, selectFile, renderOutliner, setSelection } from "./panels.js";
 import { refreshGraph, setSpin } from "./controls.js";
 import { build } from "./city.js";
 import { recenterTarget } from "./meshes.js";
@@ -69,7 +69,7 @@ function show(shown: IShown): void
   let min = spots[0].clone(), max = spots[0].clone();
   for (const spot of spots) { min = V3.Minimize(min, spot); max = V3.Maximize(max, spot); }
   setSpin(false);
-  S.camGoal = { target: V3.Center(min, max), radius: camera.radius };
+  S.camGoal = { target: V3.Center(min, max), radius: Math.max(10, camera.radius) };
 }
 
 function clear(): void
@@ -78,6 +78,22 @@ function clear(): void
   routeTargets();
   renderShowing();
   renderEdges();
+}
+
+// Chooses several files at once, as a tool asks, and brings the whole selection into view. A
+// selection that arrives before the first graph is built waits for it.
+let pendingSelection: string[] | null = null;
+function selectMany(paths: string[] | null): void
+{
+  if (paths === null || paths.length === 0) { setSelection([]); return; }
+  if (S.NODES.length === 0) { pendingSelection = [...paths]; return; }
+  setSelection(paths);
+  const recs = paths.map((path) => S.fileRecords.get(path)).filter((rec): rec is FileRecord => rec !== undefined);
+  if (recs.length < 2) return;
+  let min = recs[0].target.clone(), max = recs[0].target.clone();
+  for (const rec of recs.slice(1)) { min = V3.Minimize(min, rec.target); max = V3.Maximize(max, rec.target); }
+  setSpin(false);
+  S.camGoal = { target: V3.Center(min, max), radius: Math.max(10, camera.radius) };
 }
 
 // Narrows the scene to an ad-hoc set of files, or clears that narrowing with null. Isolation is a
@@ -120,7 +136,7 @@ function focus(path: string): void
   }
   if (target === null) return;
   setSpin(false);
-  S.camGoal = { target, radius: Math.min(camera.radius, 28) };
+  S.camGoal = { target, radius: Math.max(9, Math.min(camera.radius, 28)) };
 }
 
 /* ------------------------------------------------------------- events ---- */
@@ -133,6 +149,7 @@ events.onmessage = (message) =>
   const event = JSON.parse(message.data);
   if (event.type === "show") show(event.shown);
   else if (event.type === "isolate") isolate(event.files ?? null);
+  else if (event.type === "select") selectMany(event.files ?? null);
   else if (event.type === "clear") clear();
   else if (event.type === "focus") focus(event.path);
   else if (event.type === "architecture") { S.graphSignature = ""; refreshGraph().then(renderShowing); window.dispatchEvent(new Event("codespace:architecture")); }
@@ -144,4 +161,13 @@ events.onmessage = (message) =>
 export { focus as focusPath };
 
 // A redraw can change which files exist, so refresh the list's links too.
-window.addEventListener("codespace:built", renderShowing);
+window.addEventListener("codespace:built", () =>
+{
+  if (pendingSelection !== null)
+  {
+    const paths = pendingSelection;
+    pendingSelection = null;
+    selectMany(paths);
+  }
+  renderShowing();
+});
