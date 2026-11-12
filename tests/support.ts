@@ -66,7 +66,7 @@ export async function startApi(root: string, options: { allowWrites?: boolean, c
     await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
     const port = (server.address() as AddressInfo).port
     api = new Api(options.allowWrites ?? false, options.cli ?? 'src/cli/Cli.ts', options.chat ?? null)
-    return { port, workspace, api, stop: () => new Promise((done) => { server.closeAllConnections(); server.close(() => done()) }) }
+    return { port, workspace, api, stop: () => new Promise((done) => { server.closeAllConnections(); server.close(() => done()); workspaces.Close() }) }
 }
 
 /** A running full server over one repository and one public folder, and how to call and stop it. */
@@ -89,7 +89,7 @@ export async function startServer(repoRoot: string, publicRoot: string, options:
     const { http } = await CodespaceServer.CreateAsync(workspace, publicRoot, options.allowWrites ?? false, options.mapUrl ?? 'http://localhost:5190', options.withChat ?? true)
     await new Promise<void>((done) => http.listen(0, '127.0.0.1', done))
     const port = (http.address() as AddressInfo).port
-    return { port, workspace, stop: () => new Promise((done) => { http.closeAllConnections(); http.close(() => done()) }) }
+    return { port, workspace, stop: () => new Promise((done) => { http.closeAllConnections(); http.close(() => done()); workspace.Close() }) }
 }
 
 /** One HTTP answer: the status, the headers, the parsed JSON body (or null), and the raw text. */

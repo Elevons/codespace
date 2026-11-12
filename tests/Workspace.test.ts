@@ -1,10 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
+import { writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { Workspace } from '../src/server/Workspace.ts'
-import { makeTemp, removeTemp } from './support.ts'
+import { makeRepo, makeTemp, removeTemp, waitFor } from './support.ts'
 
 test('A workspace opens one repository, switches to another, and keeps them recent', async () =>
 {
@@ -49,4 +50,34 @@ test('A typed path resolves ~/ to the home folder and a relative path to the cur
     assert.equal(Workspace.ResolvePath('~'), homedir())
     assert.equal(Workspace.ResolvePath('~/projects/../repo '), join(homedir(), 'repo'))
     assert.equal(Workspace.ResolvePath(' relative/folder '), join(process.cwd(), 'relative', 'folder'))
+})
+
+test('A workspace tells its pages when the architecture file changes, and watches the repository it switches to', async () =>
+{
+    const first = await makeRepo({ '.codespace/architecture.json': '{}\n' }, 'codespace-watch-a-')
+    const second = await makeRepo({ '.codespace/architecture.json': '{}\n' }, 'codespace-watch-b-')
+    const workspace = await Workspace.OpenAsync(first)
+    const told: string[] = []
+    workspace.view.ArchitectureChanged = () => { told.push(workspace.repo.Root) }
+    try
+    {
+        // A write by hand, outside the server, is picked up from the file itself.
+        await writeFile(join(first, '.codespace', 'architecture.json'), '{"layers": []}\n')
+        await waitFor(() => told.length === 1)
+
+        // After a switch, the watch follows the repository the map now reads.
+        await workspace.SwitchAsync(second)
+        await writeFile(join(second, '.codespace', 'architecture.json'), '{"layers": ["config"]}\n')
+        await waitFor(() => told.length === 2)
+
+        // A change elsewhere in the folder is not the architecture file, and is not announced.
+        await writeFile(join(second, '.codespace', 'ingested.json'), '{}\n')
+        await new Promise((done) => setTimeout(done, 300))
+        assert.deepEqual(told, [first, second])
+    }
+    finally
+    {
+        workspace.Close()
+        await removeTemp(first, second)
+    }
 })

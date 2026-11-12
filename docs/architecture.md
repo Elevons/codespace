@@ -42,8 +42,9 @@ the code.
 `entry` is used by both systems here; `repo` belongs to one. A system's secondary layers are just
 the layer names its own files use, and another system may share any of them.
 
-The map reads it live: edit the file and the page redraws within its poll interval, or on
-Refresh. A repository without one still draws, with layers coloured by folder. The Repo
+The map reads it live: the server watches the file, so saving it redraws every open page at
+once, without a reload; a change made while the page is closed is there when it loads. A
+repository without one still draws, with layers coloured by folder. The Repo
 panel can delete this folder whole, so a repository can be described again from nothing.
 
 ## Fields

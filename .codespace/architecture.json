@@ -382,7 +382,7 @@
       "system": "server",
       "layer": "api",
       "tags": ["orchestrate"],
-      "summary": "The repositories a server reads: its own, which a page can switch, and those asked for with ?repo=, each with its own view."
+      "summary": "The repositories a server reads, each with its own view and a watch on its architecture file that tells the open pages to redraw."
     },
     "tests/Api.test.ts": {
       "system": "meta",

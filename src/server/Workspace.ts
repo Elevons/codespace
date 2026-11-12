@@ -1,5 +1,7 @@
+import { watch, type FSWatcher } from 'node:fs'
 import { homedir } from 'node:os'
-import { resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
+import { ArchitecturePath, CodespaceFolder } from '../repo/JsonStore.ts'
 import { Repo } from '../repo/Repo.ts'
 import { View } from './View.ts'
 
@@ -24,6 +26,9 @@ export interface IWorkspaceInfo extends IRecentRepo
 /** The most repositories kept in the recent list. */
 const MaxRecent = 8
 
+/** How long a burst of writes to the architecture file is gathered before the pages are told, in milliseconds. */
+const WatchQuiet = 150
+
 /** The repository the map is reading, and the ones it read before, which it can switch between. */
 export class Workspace
 {
@@ -39,6 +44,12 @@ export class Workspace
     /** The repositories opened so far, newest first. */
     private recent: IRecentRepo[]
 
+    /** The watch on the repository's architecture file, or null when it has none. */
+    private watcher: FSWatcher | null = null
+
+    /** The pending burst of writes gathered into one notice, or null. */
+    private watchTimer: NodeJS.Timeout | null = null
+
     /**
      * Holds one repository.
      * @param repo the repository being read
@@ -51,6 +62,7 @@ export class Workspace
         this.view = new View()
         this.recent = []
         this.Remember(repo)
+        this.Watch()
     }
 
     /**
@@ -78,11 +90,54 @@ export class Workspace
         if (this.pinned) throw new Error('This page reads the repository it was opened with (?repo=), so it cannot switch.')
         const repo = await Repo.OpenAsync(Workspace.ResolvePath(path))
         this.repo = repo
+        this.Watch()
         this.view.Clear()
         this.view.Isolate(null)
         this.Remember(repo)
         this.view.RepoChanged()
         return this.Info
+    }
+
+    /** Stops watching the repository, for a workspace that is let go. */
+    public Close(): void
+    {
+        if (this.watchTimer !== null) { clearTimeout(this.watchTimer); this.watchTimer = null }
+        this.watcher?.close()
+        this.watcher = null
+    }
+
+    /**
+     * Watches the repository's architecture file, so a page reads it again the moment it changes.
+     * The folder is watched rather than the file, because an editor that saves by renaming replaces
+     * the file itself and a watch on the old one would end.
+     */
+    private Watch(): void
+    {
+        this.watcher?.close()
+        this.watcher = null
+        try
+        {
+            this.watcher = watch(join(this.repo.Root, CodespaceFolder), { persistent: false }, (_event, name) =>
+            {
+                // A write or a rename into place names the file; a change below the folder leaves it unnamed.
+                if (name !== null && String(name) !== basename(ArchitecturePath)) return
+                this.Changed()
+            })
+            this.watcher.on('error', () => { this.watcher?.close(); this.watcher = null })
+        }
+        catch { this.watcher = null }
+    }
+
+    /** Gathers a burst of writes into one notice, so one save does not set several reads going. */
+    private Changed(): void
+    {
+        if (this.watchTimer !== null) return
+        this.watchTimer = setTimeout(() =>
+        {
+            this.watchTimer = null
+            this.view.ArchitectureChanged()
+        }, WatchQuiet)
+        this.watchTimer.unref()
     }
 
     /**
@@ -139,6 +194,14 @@ export class Workspaces
         return resolved === this.main.repo.Root || this.pinned.has(resolved)
     }
 
+    /** Stops watching every repository this server holds, for a server that is shutting down. */
+    public Close(): void
+    {
+        this.main.Close()
+        for (const workspace of this.pinned.values()) workspace.Close()
+        this.pinned.clear()
+    }
+
     /**
      * The workspace a request reads: the one its ?repo= names, opened the first time it is asked for, or
      * the server's own when it names none or names the server's own root.
@@ -159,9 +222,14 @@ export class Workspaces
         const opened = await Workspace.OpenAsync(root, true)
         // A path that is a link to an open repository reads that one.
         const known = this.pinned.get(opened.repo.Root)
-        if (known !== undefined) return known
+        if (known !== undefined) { opened.Close(); return known }
         this.pinned.set(opened.repo.Root, opened)
-        while (this.pinned.size > MaxPinned) this.pinned.delete(this.pinned.keys().next().value!)
+        while (this.pinned.size > MaxPinned)
+        {
+            const oldest = this.pinned.keys().next().value!
+            this.pinned.get(oldest)?.Close()
+            this.pinned.delete(oldest)
+        }
         return opened
     }
 }

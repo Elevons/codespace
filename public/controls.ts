@@ -28,7 +28,8 @@ async function refreshGraph(force = false): Promise<void>
     {
       graph = await loadGraph(force || !S.fingerprint ? null : S.fingerprint);
     }
-    catch (error) { return; }
+    catch (error) { if (S.liveOn) showLive("retry"); return; }
+    if (S.liveOn) showLive("on");
     if (graph === null || graph.nodes.length === 0) return;
     S.fingerprint = graph.fingerprint;
 
@@ -103,13 +104,31 @@ async function refreshNow(): Promise<void>
 
 document.getElementById("refresh")!.addEventListener("click", () => { void refreshNow(); });
 const liveButton = document.getElementById("live") as HTMLButtonElement;
+
+// What Live says about the last read: on, off, or retrying after a failed one, so a dead or
+// restarted server does not keep looking like "nothing changed".
+function showLive(state: "on" | "off" | "retry"): void
+{
+  setToggleText(liveButton, "Live", state === "retry" ? "retrying" : state);
+  liveButton.classList.toggle("on", state === "on");
+  liveButton.classList.toggle("warn", state === "retry");
+  liveButton.title = state === "retry" ? "The last read failed; trying again" : "";
+}
+
 liveButton.addEventListener("click", () =>
 {
   S.liveOn = !S.liveOn;
-  setToggleText(liveButton, "Live", S.liveOn ? "on" : "off");
-  liveButton.classList.toggle("on", S.liveOn);
+  showLive(S.liveOn ? "on" : "off");
 });
-setInterval(() => { if (S.liveOn && !document.hidden) refreshGraph(); }, 15000);
+
+// How often Live re-reads the repository while it is on and the page is visible, in milliseconds.
+const PollInterval = 5000;
+setInterval(() => { if (S.liveOn && !document.hidden) void refreshGraph(); }, PollInterval);
+
+// Coming back to the page should show what changed while it was in the background, rather than
+// waiting out the rest of a poll.
+document.addEventListener("visibilitychange", () => { if (!document.hidden && S.liveOn) void refreshGraph(); });
+window.addEventListener("focus", () => { if (S.liveOn) void refreshGraph(); });
 
 /* ------------------------------------------------------ outliner search ---- */
 

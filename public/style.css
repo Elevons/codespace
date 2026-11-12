@@ -467,6 +467,8 @@
   #spin::before, #live::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px;
     border-radius: 3px; background: #6e7681; vertical-align: 1px; }
   #spin.on::before, #live.on::before { background: #e6edf3; }
+  /* Live's dot turns amber while the last read failed and it is trying again. */
+  #live.warn::before { background: #d29922; }
 
   /* Hints for a keyboard and mouse, or for a touch screen: each device sees only its own. */
   .touch-only { display: none; }

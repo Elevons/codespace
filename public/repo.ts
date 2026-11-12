@@ -77,15 +77,33 @@ function takePrefetched(): Promise<Bootstrap | null> | undefined
   return early;
 }
 
+// How long the page waits for one answer before treating the read as failed, in milliseconds. A
+// request that never settles would otherwise hold the one refresh the page allows at a time forever,
+// so Live would stop for the rest of the session.
+const BootstrapTimeout = 10000;
+
+// Resolves to null after a delay, so a read that never settles can be abandoned.
+function after(ms: number): Promise<null>
+{
+  return new Promise((done) => setTimeout(() => done(null), ms));
+}
+
 // Asks the server for everything in one request. With a stamp the page already holds, an
 // unchanged repository answers with the stamp alone.
 async function fetchBootstrap(since: string | null): Promise<Bootstrap>
 {
   const early = since === null ? takePrefetched() : undefined;
-  const body = (early && await early) ||
-    await fetch(api("bootstrap", since === null ? {} : { since }), { cache: "no-cache" })
-      .then((response) => { if (!response.ok) throw new Error("bootstrap " + response.status); return response.json(); });
-  return body as Bootstrap;
+  const started = early === undefined ? null : await Promise.race([early, after(BootstrapTimeout)]);
+  if (started !== null) return started;
+  const wait = new AbortController();
+  const timer = setTimeout(() => wait.abort(), BootstrapTimeout);
+  try
+  {
+    const response = await fetch(api("bootstrap", since === null ? {} : { since }), { cache: "no-cache", signal: wait.signal });
+    if (!response.ok) throw new Error("bootstrap " + response.status);
+    return await response.json() as Bootstrap;
+  }
+  finally { clearTimeout(timer); }
 }
 
 // Reads the whole codebase through the server and turns it into nodes and edges. Returns null

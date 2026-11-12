@@ -105,9 +105,10 @@ with `--allow-writes`.
 - **Share a view.** The chosen file is kept in the address bar (`#public/main.ts`), so a
   reload or a pasted link opens the same place.
 
-While *Live* is on, the 15-second poll redraws the map after edits. A file whose line
-count changed gets a green ring on its folder's floor, so an agent's progress is visible
-without refreshing.
+While *Live* is on, the map redraws after edits: a save to the architecture file reaches
+every open page at once, and any other file shows up on the next poll, every five seconds.
+A file whose line count changed gets a green ring on its folder's floor, so an agent's
+progress is visible without refreshing.
 
 ## What is here
 
