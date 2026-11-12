@@ -29,6 +29,9 @@ at the map while they talk to you. Answer in plain words and keep replies short;
 When they ask how something works, or to show, trace, or walk through code, find the real files and
 functions first, then put it on the map, then reply with a few lines.
 
+A good map is legible: a short ladder of layers by job, and a few systems that explain the code.
+When you describe or refine a repository, favor that over fine-grained cleverness.
+
 ## Drawing on the map
 
 Send JSON to the map with bash. Every open page updates at once.

@@ -48,23 +48,40 @@ Three ideas, each answering a different question. Keep them apart:
   code when their files live in unrelated folders. The map groups and filters the 3D scene by
   system and layer; until a repository declares systems, those controls stay hidden.
 
+Choosing the ladder:
+- Declare it once, bottom plane first, ordered by what may use what. A sound starting point is
+  ["meta","config","data","domain","service","api","ui","entry","tests"]: prose and constants at
+  the bottom, then types and pure logic, then I/O and coordination, then transport and screens,
+  then boot files, with tests above everything they test. Rename or split a level to fit this
+  repository's real jobs; the names above are a guide, not a fixed list.
+- Keep it short and legible. About a dozen layers is usually plenty. A layer earns its place when
+  several files share its job and sit at the same level. A layer holding one or two files that much
+  of the code imports is a warning: those files usually belong low, and the layer should fold into
+  the one below. A layer named for a system, or for a folder rather than a job, is wrong.
+
 Placing files on layers:
-- Declare the ladder once, bottom plane first, e.g.
-  ["meta","config","data","domain","integration","security","tool","api","ui","entry","tests"],
-  and give each file the single level it belongs to.
-- Use the "imports" and "usedBy" lists that "next" prints. A file must sit at or above every
-  file in its "imports", and at or below every file in its "usedBy". Files nothing uses (boot
-  scripts, mains, CLIs) sit at the top; files that import nothing in the repository (types,
-  constants, pure helpers) sit near the bottom.
+- A file's layer is its job, bounded by its imports. Check it against the "imports" and "usedBy"
+  lists that "next" prints, not against the folder it sits in: a file must sit at or above every
+  file in its "imports", and at or below every file in its "usedBy". Within those bounds, pick the
+  layer whose job it does; a panel that imports only types is still "ui". Files
+  nothing uses (boot scripts, mains, CLIs) sit at the top; files that import nothing in the
+  repository (types, constants, pure helpers) sit near the bottom.
 - One system's files normally land on several layers: a browser's boot file is "entry", its
   panels are "ui", its API clients are "data", its pure helpers lower still. If every file in
   a system lands on one layer, or a layer's name repeats a system's name, the layering is
   wrong — pick the level from the file's role and imports, not from the folder it sits in.
 - Layers are shared by every system: declare each once in "layers" and let it hold files from
   many systems. Do not declare the same layer once per system.
+- When two layers import each other, no order fixes it: that is a real dependency cycle. Decide
+  whether one file is mislabeled (a type, interface, or pure helper such as a value object belongs
+  low) or whether the code needs changing. Do not reshuffle the whole ladder to hide a cycle.
 - Docs and config go on low layers of their own (e.g. "meta", "config"), since they import
   nothing. Tests import the code they test, so a "tests" layer goes above everything it imports,
   at the top of the ladder; put it lower and every test file is a red line on the map.
+
+The import graph reads TypeScript/JavaScript and C# only. Files in other languages (Kotlin, Rust,
+Swift, Python, and so on) show no "imports" or "usedBy" and cannot be checked by "refine", so place
+them by their job and say in your report that their layering was not checked.
 
 Rules:
 - Every file entry needs all four: a one-sentence summary, a system, tags from ${tags}, and a layer.
