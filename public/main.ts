@@ -3,6 +3,7 @@ import { settleCamera, updatePulses } from "./meshes.js";
 import { pickFile, placeBox, flushBoxes } from "./boxes.js";
 import { rayBox } from "./rules.js";
 import { applyHighlight } from "./highlight.js";
+import { syncFloors } from "./floors.js";
 import { rebuildEdges, updateFlow } from "./edges.js";
 import { updateLabels } from "./labels.js";
 import { select, selectFile } from "./panels.js";
@@ -126,6 +127,7 @@ engine.runRenderLoop(() =>
   }
 
   if (S.dirty) applyHighlight();
+  syncFloors();
   flushBoxes();
   if (S.edgesDirty) { rebuildEdges(); syncPads(); edgeClock = 0; }
   else if (moving)

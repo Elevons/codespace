@@ -193,10 +193,11 @@ function collectEdges(): Edge[]
       const user = S.NODES[userRec.node], used = S.NODES[usedRec.node];
       if (!user || !used || user.hidden || used.hidden || user.cx === undefined || used.cx === undefined) continue;
       const broken = S.LAYERS.length > 0 ? pointsUp(from, to) : user.rank < used.rank;
-      // A chosen file's wires join the blocks themselves, nothing on the folder pads.
+      // A chosen file's wires join its floors when it is open, and its box until then,
+      // with nothing drawn on the folder pads.
       if (chosen !== null)
       {
-        result.push({ user: userRec.shape.position, used: usedRec.shape.position, broken, state });
+        result.push({ user: WireEnd(userRec, "user"), used: WireEnd(usedRec, "used"), broken, state });
         continue;
       }
       const userPad = footOf(userRec), usedPad = footOf(usedRec);
@@ -229,6 +230,15 @@ function collectEdges(): Edge[]
   }
 
   return result;
+}
+
+// Where one end of a chosen file's wire meets the file: the floor that carries the block
+// when the file is open, and the middle of its box otherwise.
+function WireEnd(rec: FileRecord, role: "user" | "used"): BABYLON.Vector3
+{
+  const anchors = S.floorAnchors;
+  if (anchors !== null && anchors.path === rec.path) return role === "used" ? anchors.used : anchors.user;
+  return rec.shape.position;
 }
 
 /** One file import that points up the layers, from the user's tether foot to the used file's. */

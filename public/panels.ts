@@ -1,8 +1,8 @@
 import { S, camera, colorFor, colorForSystem, copyText, frameFile, frameFolder, hasFilters, inScene as isInScene, isFileVisible, matchesFilters, matchesTagFilter, passesSlice, sliceValue, systemLabel, filePath, pathIndex, render, renderEdges } from "./state.js";
 import { folderColor, folderOf, labelFor } from "./rules.js";
 import { ancestorFolders, foldersToKeepOpen, matchesQueryTerms, queryTerms } from "./filter.js";
-import { displayName, readSource } from "./repo.js";
-import { symbolsOf, type SymbolInfo } from "./symbols.js";
+import { displayName, readBlockSummaries, readBlocks, readSource } from "./repo.js";
+import { blockColor, type BlockInfo, type IBlocksReport } from "./blocks.js";
 import type { FileSpot, GroupAxis } from "./types.js";
 /* --------------------------------------------------------------- panels ---- */
 
@@ -67,15 +67,16 @@ function highlightLine(line: string, hashComments: boolean): string
   return out + escapeHtml(line.slice(last));
 }
 
-// A whole file with a line-number gutter and coloured tokens.
-function renderCode(code: string, name: string): string
+// A run of lines with a line-number gutter and coloured tokens, numbered from the line it
+// starts on, so a block's fragment reads in the file's own numbering.
+function renderCode(code: string, name: string, first = 1): string
 {
   const hashComments = /\.(py|sh|bash|zsh|ya?ml|rb|ex|exs|toml|ini|tf)$/i.test(name);
   const lines = code.split("\n");
   const gutter: string[] = [], body: string[] = [];
   lines.forEach((line, index) =>
   {
-    gutter.push("<span>" + (index + 1) + "</span>");
+    gutter.push("<span>" + (index + first) + "</span>");
     body.push('<div class="code-line">' + (highlightLine(line, hashComments) || " ") + "</div>");
   });
   return '<div class="code-wrap"><pre class="code-gutter">' + gutter.join("\n") + '</pre><div class="code-body">' + body.join("") + "</div></div>";
@@ -110,68 +111,144 @@ function selectFile(nodeIndex: number, fileIndex: number): void
       (summary ? '<div class="chosen-sum">' + escapeHtml(summary) + "</div>" : "") +
     "</div>" +
     '<div id="symbols"><p class="hint">reading…</p></div>';
-  showSymbols(path);
+  showBlocks(path);
   renderOutliner();
 }
 
-// The last file chosen, so a slow source read cannot paint over a newer choice.
-let symbolsWanted = 0;
+// The last file chosen, so a slow read cannot paint over a newer choice.
+let blocksWanted = 0;
 
-// The source of each symbol the panel lists, by index, so a click can open the one it names.
-let symbolCode: string[] = [];
+// The opened file's lines, so a block's source can be shown by its line range.
+let blockLines: string[] = [];
 
-// The path whose symbols the code panel is showing, for the code panel's language guess.
+// The path whose blocks the panel is showing, for the code panel's language guess.
 let shownPath = "";
 
-// A symbol a search asked for, opened once its file's list is read.
-let pendingSymbol: string | null = null;
+// A block name a search asked for, opened once its file's blocks are read.
+let pendingBlock: string | null = null;
 
-async function showSymbols(path: string): Promise<void>
+// Asks the server for the blocks one file is made of, and lists them beside a strip of the
+// whole file. The blocks are read when the file is opened, never for a whole repository.
+async function showBlocks(path: string): Promise<void>
 {
-  const wanted = ++symbolsWanted;
+  const wanted = ++blocksWanted;
   shownPath = path;
   const box = document.getElementById("symbols");
   if (!box) return;
-  let text = "";
-  try { text = await readSource(path); }
-  catch { /* an unreadable file simply lists nothing */ }
-  if (wanted !== symbolsWanted) return;
-  // A new file's symbols replace the last list, and close any snippet that was open.
-  symbolCode = [];
-  hideCode();
-  const { functions, classes, interfaces, variables } = symbolsOf(text);
-  const section = (title: string, items: SymbolInfo[]): string => items.length === 0 ? "" :
-    "<h4>" + title + " (" + items.length + ")</h4><ul>" +
-    items.map((item) =>
-    {
-      symbolCode.push(item.code);
-      return '<li class="sym" data-i="' + (symbolCode.length - 1) + '"><span>' + escapeHtml(item.name) + '</span><span class="n">L' + item.line + "</span></li>";
-    }).join("") + "</ul>";
-  box.innerHTML = section("Functions", functions) + section("Classes", classes) + section("Interfaces", interfaces) + section("Variables", variables) ||
-    '<p class="hint">No symbols found.</p>';
-  // A symbol picked from search opens straight away, once its code is in hand.
-  if (pendingSymbol !== null)
+  let text = "", report: IBlocksReport | null = null;
+  try
   {
-    const requested = pendingSymbol;
-    pendingSymbol = null;
-    const found = [...functions, ...classes, ...interfaces, ...variables].find((item) => item.name === requested);
-    if (found) showCode(found.name, found.code, path);
+    [text, report] = await Promise.all([readSource(path), readBlocks(path)]);
   }
+  catch { /* an unreadable file simply lists nothing */ }
+  if (wanted !== blocksWanted) return;
+  // A new file's blocks replace the last list, and close any block that was open.
+  blockLines = text.split("\n");
+  hideCode();
+  S.selectedBlock = -1;
+  if (report === null || report.blocks.length === 0)
+  {
+    box.innerHTML = '<p class="hint">No blocks found.</p>';
+    return;
+  }
+  S.BLOCKS.set(path, report);
+  box.innerHTML = railHtml(report);
+  render();
+  // The chosen file's wires can now meet its floors rather than its whole box.
+  renderEdges();
+  // Blocks with no comment show a plain description first, and the model's sentence when it comes.
+  if (report.blocks.some((block) => block.fromComment === false)) void fillSummaries(path, report, wanted, box);
+  // A block picked from search opens straight away, once its file's blocks are in hand.
+  if (pendingBlock === null) return;
+  const requested = pendingBlock;
+  pendingBlock = null;
+  const found = report.blocks.findIndex((block) => block.name === requested || block.members?.includes(requested));
+  if (found >= 0) openBlock(found);
 }
 
-// Opens a symbol's source in the code panel, or closes it again.
-function showCode(name: string, code: string, langName?: string): void
+// The block rail: a strip of the whole file, one mark per block, beside a row of summaries.
+// The strip is line-accurate in the manner of SeeSoft, so a person sees where each block sits.
+function railHtml(report: IBlocksReport): string
+{
+  const total = Math.max(1, report.lines);
+  const strip = report.blocks.map((block, index) =>
+  {
+    const top = (block.line - 1) / total * 100;
+    const height = Math.max(0.8, (block.endLine - block.line + 1) / total * 100);
+    return '<i class="rail-mark' + (block.depth > 0 ? " sub" : "") + '" data-block="' + index +
+      '" style="top:' + top.toFixed(2) + "%;height:" + height.toFixed(2) + "%;background:" + blockColor(block.kind) +
+      '" title="' + escapeHtml(block.name) + '"></i>';
+  }).join("");
+  const rows = report.blocks.map((block, index) => railRow(block, index)).join("");
+  return '<div class="rail"><div class="rail-strip">' + strip + '</div><div class="rail-list">' + rows + "</div></div>";
+}
+
+// Fills in a written sentence for each block the source left without a comment. Only the text
+// changes, so the strip, the rows, and the chosen block stay where they are.
+async function fillSummaries(path: string, report: IBlocksReport, wanted: number, box: HTMLElement): Promise<void>
+{
+  let summaries: Record<string, string> | null = null;
+  try { summaries = await readBlockSummaries(path); }
+  catch { return; }
+  if (summaries === null || wanted !== blocksWanted || shownPath !== path) return;
+  report.blocks.forEach((block, index) =>
+  {
+    const summary = summaries![block.name + "@" + block.line];
+    if (summary === undefined || block.fromComment) return;
+    block.summary = summary;
+    block.fromModel = true;
+    const row = box.querySelector<HTMLElement>('[data-block="' + index + '"] .rail-sum');
+    if (row === null) return;
+    row.textContent = summary;
+    row.classList.remove("made");
+    row.title = "";
+  });
+}
+
+// One block's row: what it is called, what it is for, and which of the file's blocks it uses.
+function railRow(block: BlockInfo, index: number): string
+{
+  const range = "L" + block.line + (block.endLine > block.line ? "–" + block.endLine : "");
+  const refs = block.refs.length === 0 ? "" : '<span class="rail-refs">uses ' + escapeHtml(block.refs.join(", ")) + "</span>";
+  return '<button type="button" class="rail-row' + (block.depth > 0 ? " sub" : "") + '" data-block="' + index + '">' +
+    '<span class="rail-kind" style="background:' + blockColor(block.kind) + '"></span>' +
+    '<span class="rail-text"><span class="rail-head"><span class="rail-name">' + escapeHtml(block.name) + '</span>' +
+    '<span class="rail-lines">' + range + '</span></span>' +
+    '<span class="rail-sum' + (block.fromComment ? "" : " made") + '" title="' +
+    (block.fromComment ? "" : "No comment in the source: this is a plain description of the block.") + '">' +
+    escapeHtml(block.summary) + "</span>" + refs + "</span></button>";
+}
+
+// Opens one block of the shown file: its lines in the code panel, and its floor on the map.
+function openBlock(index: number): void
+{
+  const report = S.BLOCKS.get(shownPath);
+  const block = report?.blocks[index];
+  if (!block) return;
+  S.selectedBlock = index;
+  render();
+  const code = blockLines.slice(block.line - 1, block.endLine).join("\n");
+  showCode(block.name, code, shownPath, block.line);
+  document.querySelectorAll<HTMLElement>("#symbols [data-block]").forEach((element) =>
+  {
+    element.classList.toggle("sel", Number(element.getAttribute("data-block")) === index);
+  });
+}
+
+// Opens a block's source in the code panel, or closes it again. The gutter starts at the
+// block's own line, so the fragment reads in the file's numbering.
+function showCode(name: string, code: string, langName?: string, first = 1): void
 {
   document.getElementById("codeblock-name")!.textContent = name;
-  document.getElementById("symbol-code")!.innerHTML = renderCode(code, langName ?? shownPath);
+  document.getElementById("symbol-code")!.innerHTML = renderCode(code, langName ?? shownPath, first);
   document.getElementById("codeblock")!.hidden = false;
 }
 
-// Opens one symbol of a file in the code panel, after its file's list is read.
+// Opens one block of a file in the code panel, after its file's blocks are read.
 function openSymbol(path: string, name: string): void
 {
-  pendingSymbol = name;
-  showSymbols(path);
+  pendingBlock = name;
+  showBlocks(path);
 }
 
 function hideCode(): void
@@ -201,11 +278,10 @@ document.getElementById("info")!.addEventListener("click", (event) =>
     toggle.setAttribute("aria-expanded", String(!statsCollapsed));
     return;
   }
-  const item = target.closest("li.sym") as HTMLElement | null;
-  if (item)
+  const block = target.closest("[data-block]") as HTMLElement | null;
+  if (block)
   {
-    const code = symbolCode[Number(item.dataset.i)];
-    if (code !== undefined) showCode(item.querySelector("span")?.textContent ?? "", code);
+    openBlock(Number(block.dataset.block));
     return;
   }
   const crumb = target.closest("[data-selectfolder]") as HTMLElement | null;

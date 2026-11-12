@@ -306,6 +306,28 @@
   .keys { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; color: #8b91ad; font-size: 11px; }
   #info li.sym span.n { color: #484f58; }
 
+  /* The block rail: a line-accurate strip of the file beside a row per block, in the manner
+     of SeeSoft, so where each block sits in the file reads at a glance. */
+  .rail { display: grid; grid-template-columns: 12px 1fr; gap: 8px; align-items: stretch; }
+  .rail-strip { position: relative; border-radius: 3px; background: #161b22; overflow: hidden; min-height: 140px; }
+  .rail-mark { position: absolute; left: 0; right: 0; border-radius: 1px; opacity: .8; cursor: pointer; }
+  .rail-mark.sub { left: 4px; opacity: .65; }
+  .rail-mark.sel { opacity: 1; box-shadow: 0 0 0 1px #e6edf3; }
+  .rail-list { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .rail-row { display: flex; align-items: flex-start; gap: 6px; width: 100%; padding: 4px 6px; background: none;
+    border: 0; border-radius: 6px; color: inherit; text-align: left; cursor: pointer; }
+  .rail-row:hover { background: #161b22; }
+  .rail-row.sel { background: #161b22; box-shadow: inset 2px 0 0 #1f6feb; }
+  .rail-row.sub { margin-left: 10px; width: calc(100% - 10px); }
+  .rail-kind { flex: none; width: 6px; height: 6px; margin-top: 5px; border-radius: 2px; }
+  .rail-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; }
+  .rail-head { display: flex; justify-content: space-between; gap: 8px; min-width: 0; }
+  .rail-name { font: 600 11.5px ui-monospace, Menlo, monospace; color: #e6edf3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rail-lines { flex: none; font: 10px ui-monospace, Menlo, monospace; color: #6e7681; }
+  .rail-sum { font-size: 11px; line-height: 1.35; color: #9aa4b2; }
+  .rail-sum.made { color: #6e7681; font-style: italic; }
+  .rail-refs { font-size: 10px; color: #6e7681; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
   /* The code panel: a line-number gutter and coloured tokens. */
   #symbol-code { margin: 0; padding: 0; overflow: auto; white-space: normal; font: 11.5px/1.5 ui-monospace, Menlo, monospace; color: #c9d1d9; }
   .code-wrap { display: flex; align-items: flex-start; min-width: max-content; }

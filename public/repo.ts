@@ -2,6 +2,7 @@ import { api } from "./endpoint.js";
 import { S } from "./state.js";
 import { folderOf } from "./rules.js";
 import type { Graph, GraphNode } from "./types.js";
+import type { IBlocksReport } from "./blocks.js";
 
 // The layer and shelf rank for a folder: its top segment names the band, and its
 // depth sets how high the band sits, so any tree lands somewhere sensible.
@@ -284,4 +285,29 @@ async function buildChanged(): Promise<boolean>
   }
 }
 
-export { displayName, labelOf, plateLabel, loadGraph, loadRepo, readSource, buildChanged };
+// Reads the blocks one file is made of, on demand, when the panel opens it. The repository's
+// other files are never cut into blocks, so describing a file costs nothing until it is read.
+async function readBlocks(path: string): Promise<IBlocksReport>
+{
+  const response = await fetch(api("blocks", { path }), { cache: "no-cache" });
+  if (!response.ok) throw new Error("blocks " + response.status);
+  return await response.json() as IBlocksReport;
+}
+
+// Asks the server to write a sentence for each block of a file that the source leaves without a
+// comment. The page shows the plain descriptions straight away and swaps them in when they arrive;
+// a server with no model answers 503, and the plain ones stay.
+async function readBlockSummaries(path: string): Promise<Record<string, string> | null>
+{
+  const response = await fetch(api("blocks/summaries"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-cache",
+    body: JSON.stringify({ path }),
+  });
+  if (!response.ok) return null;
+  const data = await response.json() as { summaries?: Record<string, string> };
+  return data.summaries ?? null;
+}
+
+export { displayName, labelOf, plateLabel, loadGraph, loadRepo, readSource, readBlocks, readBlockSummaries, buildChanged };

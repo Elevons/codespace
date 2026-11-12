@@ -24,6 +24,7 @@ function argumentsFor(tool: IMapTool, other: string): Record<string, unknown>
     {
         case 'switch_repo': return { path: other }
         case 'source': return { path: 'src/a.ts' }
+        case 'blocks': return { path: 'src/a.ts' }
         case 'graph': return { folder: 'src' }
         case 'show': return { trace: true, title: 'A route', files: [{ path: 'src/a.ts', note: 'First.' }, { path: 'src/b.ts', note: 'Second.' }] }
         case 'isolate': return { files: ['src/a.ts'] }

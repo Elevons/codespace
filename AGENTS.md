@@ -154,11 +154,21 @@ Reading, for finding the right files and steps before you show them:
 | `GET /api/architecture` | the architecture file: layers, systems, and each file's summary, tags, and layer |
 | `GET /api/graph?folder=src` | the import edges, optionally only those under a folder |
 | `GET /api/source?path=src/a.ts` | one file's text |
+| `GET /api/blocks?path=src/a.ts` | one file's blocks: its declarations, groups, and the commented sections of a long function, each with a summary, a kind, a line range, and the blocks it refers to |
 | `GET /api/changes` | each file changed since `HEAD`, with how many lines changed |
 | `GET /api/ingest/status` | how much is left to describe and to refine |
 | `POST /api/ingest/next` | `{"size": n}`: the CLI's `next` over HTTP (it can settle generated files, so it is a write) |
 | `GET /api/ingest/refine?size=n` | the CLI's `refine` over HTTP |
 | `GET /api/tools` | every endpoint above as a tool: name, description, method, path, fixed body fields, and a JSON Schema for its arguments |
+
+Read one file as its blocks when you need to explain how the file itself is put together. Selecting a
+file on the map opens its building into floors, one slab per block, and the rail in the info panel lists
+the same blocks with their summaries and line ranges. The blocks are read on demand, when the file is
+opened, and never stored: a summary comes from the block's own comment. A block with no comment shows a
+plain description of its shape first, then `POST /api/blocks/summaries` (a page call, not a tool) asks the
+configured model for one sentence, kept in memory for the session; a server with no model leaves the plain
+description. The file's own comments are never replaced. A function longer than about 40 lines is cut at the comments that
+lead its steps, so its parts can be named and walked one at a time. See `src/repo/Blocks.ts`.
 
 `POST /api/architecture` is the CLI's `apply` over HTTP: same validation, same ledger stamp.
 
@@ -203,15 +213,17 @@ machine as `chat` events on the view stream. Chats and pi's settings live in `~/
 
 - `src/cli/` — the commands an agent runs to describe a repository, and `Options.ts` for reading their flags.
 - `src/repo/` — reading a repository, its architecture file, the import graph, and
-  what to ingest next (`Next.ts` is the one `next`, shared by the CLI and the API). No HTTP in here. `DescribeGuide.ts`, `JsonStore.ts`, and `ShowLimits.ts`
+  what to ingest next (`Next.ts` is the one `next`, shared by the CLI and the API), and its files'
+  blocks on demand (`Blocks.ts`). No HTTP in here. `DescribeGuide.ts`, `JsonStore.ts`, and `ShowLimits.ts`
   hold the first-pass instructions, the repository-scoped JSON access, and the show limits.
 - `src/server/` — the HTTP server, the endpoints, the tool list (`Tools.ts`), the view stream,
   the write guard, and the switchable workspace.
 - `src/agent/` — the built-in chat: its pi agent, what that agent is told, and which model it uses.
 - `public/` — the browser side: the 3D city, the Outliner with its system/layer filters,
   the panels and controls, the chat, and the phone sheet. `public/endpoint.ts` builds every API address. `public/filter.ts`, `public/rules.ts`, and
-  `public/symbols.ts` hold the pure filter, layout/visibility, and symbol rules; `public/tags.ts` is
-  the one tag vocabulary the server shares.
+  `public/symbols.ts` hold the pure filter, layout/visibility, and symbol rules; `public/blocks.ts` holds
+  the block kinds, colours, and the rule that stacks blocks into floors, and `public/floors.ts` draws them;
+  `public/tags.ts` is the one tag vocabulary the server shares.
 - `tests/` — one test file per piece of the server side, plus the dependency-free browser
   helpers; run `npm test`.
 - `docs/` — architecture file details, the review rubric, and deferred ideas.

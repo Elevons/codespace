@@ -66,6 +66,12 @@
       "tags": ["core"],
       "summary": "Draws many copies of one shape in a single Babylon batch, tinted per slot for the file boxes and layer pads."
     },
+    "public/blocks.ts": {
+      "system": "browser",
+      "layer": "model",
+      "tags": ["core"],
+      "summary": "The blocks a source file is made of, and the rules that stack them into floors and colour them by kind."
+    },
     "public/boxes.ts": {
       "system": "browser",
       "layer": "render",
@@ -100,7 +106,7 @@
       "system": "browser",
       "layer": "render",
       "tags": ["core"],
-      "summary": "Draws the import edges, tethers, and route strands between the files' boxes."
+      "summary": "Draws the import edges, tethers, and route strands between the files' boxes and, once a file is open, its floors."
     },
     "public/endpoint.ts": {
       "system": "browser",
@@ -113,6 +119,12 @@
       "layer": "model",
       "tags": ["core"],
       "summary": "The pure filter and search rules the state and outliner share, kept testable away from the scene and DOM."
+    },
+    "public/floors.ts": {
+      "system": "browser",
+      "layer": "render",
+      "tags": ["core", "ui"],
+      "summary": "Opens a chosen file into a stack of floors, one slab per block, with strands between the blocks that use each other, the picked block lit, and the import wires landing on the block that carries them."
     },
     "public/highlight.ts": {
       "system": "browser",
@@ -166,7 +178,7 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "core"],
-      "summary": "The outliner, the info panel, and everything a person can click, select, fold, or search in the tree."
+      "summary": "The outliner, the info panel with its block rail, and everything a person can click, select, fold, or search in the tree."
     },
     "public/repo-switch.ts": {
       "system": "browser",
@@ -178,7 +190,7 @@
       "system": "browser",
       "layer": "model",
       "tags": ["io", "core"],
-      "summary": "Loads the repository's graph and source from the server and folds the folder tree into map nodes."
+      "summary": "Loads the repository's graph, source, and blocks from the server, fills in block summaries, and folds the folder tree into map nodes."
     },
     "public/route.ts": {
       "system": "browser",
@@ -202,19 +214,19 @@
       "system": "browser",
       "layer": "model",
       "tags": ["core"],
-      "summary": "The page's mutable world and constants: the live graph, the chosen file, the filters, and the scene handles."
+      "summary": "The page's mutable world and constants: the live graph, the chosen file and block, the filters, and the scene handles."
     },
     "public/style.css": {
       "system": "browser",
       "layer": "shell",
       "tags": ["ui"],
-      "summary": "The styles for the page, its panels, the outliner, and the phone sheets."
+      "summary": "The styles for the page, its panels, the outliner, the block rail, and the phone sheets."
     },
     "public/symbols.ts": {
       "system": "browser",
       "layer": "model",
       "tags": ["core"],
-      "summary": "Reads the declarations a source file lists, with the lines they span, for search and the symbol list."
+      "summary": "Reads the declarations a source file lists, with the lines they span, for search."
     },
     "public/tags.ts": {
       "system": "browser",
@@ -233,6 +245,12 @@
       "layer": "panels",
       "tags": ["ui", "io"],
       "summary": "The Showing panel: receives what a tool asks the map to show and lists the steps, files, and notes."
+    },
+    "src/agent/BlockSummaries.ts": {
+      "system": "server",
+      "layer": "api",
+      "tags": ["io", "core"],
+      "summary": "Writes one sentence for each block a file leaves without a comment, through the configured model, and keeps the answers for the session."
     },
     "src/agent/Chat.ts": {
       "system": "server",
@@ -269,6 +287,12 @@
       "layer": "repo",
       "tags": ["core", "io"],
       "summary": "Reads, validates, and writes a repository's architecture file and the batches applied to it."
+    },
+    "src/repo/Blocks.ts": {
+      "system": "server",
+      "layer": "repo",
+      "tags": ["core"],
+      "summary": "Reads the blocks a file is made of, with a summary for each and the blocks it refers to, when a file is opened."
     },
     "src/repo/DescribeGuide.ts": {
       "system": "server",
@@ -395,6 +419,18 @@
       "layer": "tests",
       "tags": ["test"],
       "summary": "Tests reading, validating, and patching the architecture file."
+    },
+    "tests/BlockSummaries.test.ts": {
+      "system": "meta",
+      "layer": "tests",
+      "tags": ["test"],
+      "summary": "Tests writing block summaries through a stand-in model: the request it sends, the replies it reads, the session cache, and the missing key."
+    },
+    "tests/Blocks.test.ts": {
+      "system": "meta",
+      "layer": "tests",
+      "tags": ["test"],
+      "summary": "Tests reading a file's blocks, the sections of a long function, the summaries taken from comments, and the floor stack they make."
     },
     "tests/Chat.test.ts": {
       "system": "meta",

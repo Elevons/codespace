@@ -1,4 +1,5 @@
 import { CODE_FILE } from "./symbols.js";
+import type { IBlocksReport } from "./blocks.js";
 import { passesSliceValues } from "./filter.js";
 import { folderColor, folderOf, isFileVisible as fileVisible, layerRank as rankOf, nodeMatchesFilters as nodeMatches } from "./rules.js";
 import { TAG_COLORS, type Tag } from "./tags.js";
@@ -23,6 +24,9 @@ export const S = {
   FILE_TAGS: new Map<string, string[]>(),      // path -> the tags the architecture file gives it
   FILE_SUMMARIES: new Map<string, string>(),   // path -> what the architecture file says the file is for
   FILE_SYMBOLS: new Map<string, string[]>(),   // path -> the names it declares, for search
+  BLOCKS: new Map<string, IBlocksReport>(),    // path -> the blocks its text is made of, read when the file is opened
+  selectedBlock: -1,                           // which block of the opened file the rail picked, or -1
+  floorAnchors: null as { path: string, user: BABYLON.Vector3, used: BABYLON.Vector3 } | null, // where the opened file's wires join its floors
   FILE_CHANGES: new Map<string, number>(),     // path -> changed lines since HEAD, for the changes colouring
   ARCH_NOTES: [] as string[],                  // problems found in the architecture file, to show
   FILE_LAYERS: new Map<string, string>(),      // path -> the layer the architecture file puts it in

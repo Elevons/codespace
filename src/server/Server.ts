@@ -8,9 +8,12 @@ import { brotliCompress, constants, gzip } from 'node:zlib'
 import { pathToFileURL } from 'node:url'
 import { Api } from './Api.ts'
 import { Chat } from '../agent/Chat.ts'
+import { MaxBlocks, SummarizeBlocksAsync } from '../agent/BlockSummaries.ts'
+import { ReadModelSettings } from '../agent/ModelSettings.ts'
 import { ReadOption } from '../cli/Options.ts'
 import { ReadJsonAsync, RefuseOutside, RefuseRemoteRead, RefuseWrite, SendJson } from './Guard.ts'
 import { Architecture } from '../repo/Architecture.ts'
+import { Blocks } from '../repo/Blocks.ts'
 import { CodespaceFolder } from '../repo/JsonStore.ts'
 import { Snapshot } from '../repo/Snapshot.ts'
 import { Workspace, Workspaces, type IWorkspaceInfo } from './Workspace.ts'
@@ -187,6 +190,18 @@ export class Server
             return
         }
 
+        if (url.pathname === '/api/blocks')
+        {
+            await this.SendBlocksAsync(response, url.searchParams.get('path'), workspace)
+            return
+        }
+
+        if (url.pathname === '/api/blocks/summaries')
+        {
+            await this.SendBlockSummariesAsync(request, response, workspace)
+            return
+        }
+
         SendJson(response, 404, { error: 'Not found' })
     }
 
@@ -341,6 +356,93 @@ export class Server
             const message = (error as Error).message
             SendJson(response, message === 'Forbidden' ? 403 : 404, { error: message })
         }
+    }
+
+    /**
+     * Sends the blocks one file is made of: its declarations, its groups, and the commented
+     * sections of a long function. The page reads them when a file is opened, so a repository
+     * that nobody opens costs nothing.
+     * @param response the response to write
+     * @param path the file's repository-relative path
+     * @param workspace the repository to read
+     */
+    private async SendBlocksAsync(response: ServerResponse, path: string | null, workspace: Workspace): Promise<void>
+    {
+        if (path === null || path.trim() === '')
+        {
+            SendJson(response, 400, { error: 'path is required' })
+            return
+        }
+
+        try
+        {
+            const text = await workspace.repo.ReadFileAsync(path)
+            SendJson(response, 200, Blocks.Read(path, text))
+        }
+        catch (error)
+        {
+            const message = (error as Error).message
+            SendJson(response, message === 'Forbidden' ? 403 : 404, { error: message })
+        }
+    }
+
+    /**
+     * Writes a sentence for each block of one file that the source leaves without a comment. The
+     * page asks for this after it shows a file, so a file nobody opens costs no model call; the
+     * answers are cached by the block's text for the rest of the session. The file's own comments
+     * are never replaced.
+     * @param request the incoming request, whose JSON body names the file
+     * @param response the response to write
+     * @param workspace the repository to read
+     */
+    private async SendBlockSummariesAsync(request: IncomingMessage, response: ServerResponse, workspace: Workspace): Promise<void>
+    {
+        const refusal = RefuseWrite(request, this.allowWrites)
+        if (refusal !== null) { SendJson(response, 403, { error: refusal }); return }
+        if (request.method !== 'POST') { SendJson(response, 405, { error: 'The block summaries take POST.' }); return }
+
+        let body: Record<string, unknown>
+        try { body = await ReadJsonAsync(request) }
+        catch (error) { SendJson(response, 400, { error: (error as Error).message }); return }
+        const path = typeof body.path === 'string' ? body.path : ''
+
+        let text: string
+        try { text = await workspace.repo.ReadFileAsync(path) }
+        catch (error)
+        {
+            const message = (error as Error).message
+            SendJson(response, message === 'Forbidden' ? 403 : 404, { error: message })
+            return
+        }
+
+        const report = Blocks.Read(path, text)
+        const lines = text.split('\n')
+        const wanted = report.blocks.filter((block) => block.fromComment === false).slice(0, MaxBlocks)
+        if (wanted.length === 0) { SendJson(response, 200, { ok: true, summaries: {} }); return }
+
+        const settings = ReadModelSettings(process.env)
+        if (settings.apiKey === undefined)
+        {
+            SendJson(response, 503, { error: 'No model is configured, so these blocks keep a plain description of their shape.' })
+            return
+        }
+
+        const requests = wanted.map((block, index) => ({
+            id: `b${index}`, kind: block.kind, name: block.name, line: block.line, endLine: block.endLine,
+            code: lines.slice(block.line - 1, block.endLine).join('\n'),
+        }))
+        try
+        {
+            const answers = await SummarizeBlocksAsync(requests, settings)
+            const summaries: Record<string, string> = {}
+            wanted.forEach((block, index) =>
+            {
+                const summary = answers[`b${index}`]
+                if (summary !== undefined) summaries[block.name + '@' + block.line] = summary
+            })
+            SendJson(response, 200, { ok: true, summaries })
+        }
+        catch (error) { SendJson(response, 502, { error: (error as Error).message }) }
     }
 
     /**

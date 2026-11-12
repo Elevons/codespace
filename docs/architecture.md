@@ -153,5 +153,15 @@ the two trees cannot drift.
 - The info panel shows the chosen file's summary, or each file's when a folder is chosen, and
   lists problems found in the architecture file: invalid JSON, entries for files that are gone,
   and systems or layers a file names that the file does not declare.
+- Choosing a file opens its building into floors, read from the file itself when it is opened:
+  one slab per block, in the block's kind colour, in reading order, with strands between the blocks
+  that use each other. A block is an import run, a run of constants or types, a function or class,
+  or a section of a long function cut at the comments that lead its steps. The block rail in the
+  info panel lists the same blocks with their line ranges and a summary: the block's own comment
+  first; a block with none starts with a plain description of its shape, and the model writes a
+  sentence for it as the file opens (kept in memory for the session, and skipped when no model is
+  configured). Nothing about blocks is stored in the architecture file, and no pass reads a whole
+  repository for them. The chosen file's import wires
+  end on the block that carries them rather than on the middle of its box.
 - `.codespace/` is part of the repository, so it is on the map like anything else, as an
   extra: hidden until you turn Extras on, along with `docs` and `tests`.
