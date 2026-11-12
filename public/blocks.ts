@@ -44,6 +44,8 @@ export interface BlockInfo
   members?: string[];
   /** The names of the file's other blocks this one mentions. */
   refs: string[];
+  /** The files this block imports or re-exports, when its text mentions their names. */
+  imports?: string[];
 }
 
 /** One file's blocks, as the map API answers them. */

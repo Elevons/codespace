@@ -37,7 +37,7 @@ const Source = [
 
 test('Blocks groups declarations and cuts a long function at its comments', () =>
 {
-    const report = Blocks.Read('src/Things.ts', Source)
+    const report = Blocks.Read('src/Things.ts', Source, (specifier) => specifier === './Helper.ts' ? 'src/Helper.ts' : null)
     const blocks = report.blocks
     assert.equal(report.lines, 29)
 
@@ -59,6 +59,11 @@ test('Blocks groups declarations and cuts a long function at its comments', () =
     assert.equal(look.fromComment, true)
     // A block is not a reference to the sections inside it.
     assert.deepEqual(look.refs, ['IThing'])
+    // The function's text uses Helper, so its own wire to Helper.ts is attributed to it;
+    // the imports block owns every module the file names.
+    assert.deepEqual(look.imports, ['src/Helper.ts'])
+    assert.deepEqual(imports.imports, ['src/Helper.ts'])
+    assert.equal(constants.imports, undefined)
 })
 
 test('A function of more than 40 lines opens into its commented sections', () =>

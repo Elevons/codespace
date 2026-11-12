@@ -156,6 +156,19 @@ export class Graph
      * @param resolved the specifier joined onto the importing file's folder
      * @param known every file in the repository
      */
+    /**
+     * Resolves one import specifier, written in a file, to the file it names, when the repository holds it.
+     * @param fromPath the importing file
+     * @param specifier the specifier as written, such as './Helper.ts'
+     * @param known the repository's file paths
+     */
+    public static ResolveImport(fromPath: string, specifier: string, known: ReadonlySet<string>): string | null
+    {
+        const folder = dirname(fromPath) === '.' ? '' : dirname(fromPath)
+        return Graph.Resolve(posix.join(folder, specifier), known)
+    }
+
+    /** Resolves one path against the repository's files, trying the usual source extensions. */
     private static Resolve(resolved: string, known: ReadonlySet<string>): string | null
     {
         const base = posix.normalize(resolved)

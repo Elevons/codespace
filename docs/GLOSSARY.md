@@ -28,6 +28,8 @@ interface, in the code, and in a description of the map; they name one thing eac
     italics when no model answers.
 - **block reference** — another block of the same file that a block's text mentions. The rail
   shows these as `uses …`. No line is drawn for them.
+- **block wire** — an import wire the block's text names, such as a module whose symbol it uses.
+  Choosing the block keeps its own wires bright and starting from its floor, and dims the rest.
 
 ## The chosen file
 

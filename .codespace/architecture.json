@@ -19,7 +19,7 @@
       "system": "meta",
       "layer": "docs",
       "tags": ["config"],
-      "summary": "Instructions for an agent working in this repository: its commands, the architecture-file rule, and how the pieces fit, including the map's select action."
+      "summary": "Instructions for an agent working in this repository: its commands, the architecture-file rule, and how the pieces fit, including the map's select action and block wires."
     },
     "README.md": {
       "system": "meta",
@@ -37,13 +37,13 @@
       "system": "meta",
       "layer": "docs",
       "tags": ["config"],
-      "summary": "The words the map uses for a file and its parts, the selection, the block rail, and the block summaries."
+      "summary": "The words the map uses for a file and its parts, the selection, the block rail, the block summaries, and the wires a block names."
     },
     "docs/architecture.md": {
       "system": "meta",
       "layer": "docs",
       "tags": ["config"],
-      "summary": "The full explanation of the architecture file: its fields, the tag vocabulary, and what the map does with it, including multi-selection."
+      "summary": "The full explanation of the architecture file: its fields, the tag vocabulary, and what the map does with it, including multi-selection and block wires."
     },
     "docs/review-rubric.md": {
       "system": "meta",
@@ -76,7 +76,7 @@
       "system": "browser",
       "layer": "model",
       "tags": ["core"],
-      "summary": "The blocks a source file is made of, and the rules that stack them into floors and colour them by kind."
+      "summary": "The blocks a source file is made of, the files each block's text imports, and the rules that stack them into floors."
     },
     "public/boxes.ts": {
       "system": "browser",
@@ -112,7 +112,7 @@
       "system": "browser",
       "layer": "render",
       "tags": ["core"],
-      "summary": "Draws the import edges, tethers, and route strands between the files' boxes for every selected file, landing on its floors when a file is open."
+      "summary": "Draws the import edges, tethers, and route strands for every selected file, dimming the wires a chosen block does not name and starting its own at its floor."
     },
     "public/endpoint.ts": {
       "system": "browser",
@@ -130,7 +130,7 @@
       "system": "browser",
       "layer": "render",
       "tags": ["core", "ui"],
-      "summary": "Opens a chosen file box into its block stack: the cube shrinks to the lowest block and becomes it, the rest grow upward to 1.5 times the box's height, and a tap on the stack picks the block at that height."
+      "summary": "Opens a chosen file box into its block stack in two stages, picks the block under a tap, and gives the chosen block's wires their own anchor on its floor."
     },
     "public/highlight.ts": {
       "system": "browser",
@@ -220,7 +220,7 @@
       "system": "browser",
       "layer": "model",
       "tags": ["core"],
-      "summary": "The page's mutable world and constants: the live graph, the chosen file and block, the rest of the selection, the filters, the edit flashes, the scene handles, and the camera framing that always shows a chosen file."
+      "summary": "The page's mutable world and constants: the live graph, the chosen file and block, the rest of the selection, the filters, the edit flashes, the anchors the wires use, and the scene handles."
     },
     "public/style.css": {
       "system": "browser",
@@ -298,7 +298,7 @@
       "system": "server",
       "layer": "repo",
       "tags": ["core"],
-      "summary": "Reads the blocks a file is made of, with a summary for each and the blocks it refers to, when a file is opened."
+      "summary": "Reads the blocks a file is made of, with a summary for each, the blocks it refers to, and the files each block's own text imports."
     },
     "src/repo/DescribeGuide.ts": {
       "system": "server",
@@ -309,8 +309,8 @@
     "src/repo/Graph.ts": {
       "system": "server",
       "layer": "repo",
-      "tags": ["core"],
-      "summary": "Links the imports between a repository's code files into the graph the map draws."
+      "tags": ["core", "data"],
+      "summary": "Reads the import graph between a repository's files and resolves one import specifier to the file it names, for the block reader too."
     },
     "src/repo/Ingest.ts": {
       "system": "server",
@@ -394,7 +394,7 @@
       "system": "server",
       "layer": "entry",
       "tags": ["entry", "io"],
-      "summary": "Serves the page and its assets, the installed Babylon build, and the repository endpoints over HTTP, with each file's stamp, the workspace, and the view stream."
+      "summary": "Serves the page and its assets, the installed Babylon build, and the repository endpoints over HTTP, with each file's stamp, each block's imports, the workspace, and the view stream."
     },
     "src/server/Tools.ts": {
       "system": "server",
@@ -436,7 +436,7 @@
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests reading a file's blocks, the sections of a long function, the summaries taken from comments, and the floor stack they make."
+      "summary": "Tests reading a file's blocks, their summaries, sections, references, and imported files, and the floor stack they make."
     },
     "tests/Chat.test.ts": {
       "system": "meta",

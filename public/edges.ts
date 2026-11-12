@@ -14,6 +14,8 @@ interface Edge
   trace?: BABYLON.Vector3[];
   broken: boolean;
   state: string;
+  /** A wire that belongs to a block other than the chosen one, drawn faint so the chosen one reads. */
+  dim?: boolean;
   bow?: number;
 }
 
@@ -150,6 +152,15 @@ function traceThrough(from: BABYLON.Vector3, to: BABYLON.Vector3, height: number
   return [from.clone(), ...cut, to.clone()];
 }
 
+// A hex colour taken toward black, for a wire that should step back.
+function FadeHex(hex: string, share: number): string
+{
+  const value = parseInt(hex.slice(1), 16);
+  const dim = (channel: number) => Math.round(channel * share);
+  const red = dim((value >> 16) & 255), green = dim((value >> 8) & 255), blue = dim(value & 255);
+  return "#" + ((red << 16) | (green << 8) | blue).toString(16).padStart(6, "0");
+}
+
 // Whether one file using another points up the layers the repository declares.
 function pointsUp(userPath: string, usedPath: string): boolean
 {
@@ -173,6 +184,13 @@ function collectEdges(): Edge[]
   const chosen = S.selected >= 0 && S.selectedFile >= 0 && S.trace === null
     ? new Set([filePath(S.selected, S.selectedFile), ...S.extraFiles])
     : null;
+  // A chosen block keeps the wires it names bright and starts them at its own floor; the rest fade.
+  const openPath = chosen !== null ? filePath(S.selected, S.selectedFile) : null;
+  const openReport = openPath === null ? undefined : S.BLOCKS.get(openPath);
+  const chosenBlock = openReport !== undefined && S.selectedBlock >= 0 ? openReport.blocks[S.selectedBlock] : undefined;
+  const brightImports = new Set(chosenBlock?.imports ?? []);
+  const usedAnchor = openReport?.blocks.find((block) => block.kind !== "import" && block.depth === 0);
+  const onUsedAnchor = chosenBlock !== undefined && chosenBlock === usedAnchor;
   // The bus each chosen folder's wire joins: its direction and the folder at its other end.
   const busOf: string[] = [];
   if (folderChosen || chosen !== null)
@@ -197,10 +215,20 @@ function collectEdges(): Edge[]
       if (!user || !used || user.hidden || used.hidden || user.cx === undefined || used.cx === undefined) continue;
       const broken = S.LAYERS.length > 0 ? pointsUp(from, to) : user.rank < used.rank;
       // A chosen file's wires join its floors when it is open, and its box until then,
-      // with nothing drawn on the folder pads.
+      // with nothing drawn on the folder pads. A chosen block dims the wires that are not its own.
       if (chosen !== null)
       {
-        result.push({ user: WireEnd(userRec, "user"), used: WireEnd(usedRec, "used"), broken, state });
+        let dim = false;
+        if (chosenBlock !== undefined && openPath !== null)
+        {
+          if (from === openPath) dim = brightImports.has(to) === false;
+          else if (to === openPath) dim = onUsedAnchor === false;
+          else dim = true;
+        }
+        const user = dim === false && chosenBlock !== undefined && from === openPath && S.floorAnchors?.chosen !== null && S.floorAnchors?.chosen !== undefined
+          ? S.floorAnchors.chosen
+          : WireEnd(userRec, "user");
+        result.push({ user, used: WireEnd(usedRec, "used"), broken, state, dim });
         continue;
       }
       const userPad = footOf(userRec), usedPad = footOf(usedRec);
@@ -340,6 +368,7 @@ function rebuildEdges(): void
 
   // Every wire is for something chosen (a folder, a file, or a route), so each is a solid strand
   // with a travelling dot: green along a route, red for a layer break, blue going out, amber coming in.
+  // A wire that belongs to another block when one is chosen is drawn faint, with no travelling dot.
   const lines: BABYLON.Vector3[][] = [], colors: BABYLON.Color4[][] = [];
   for (const edge of collectEdges())
   {
@@ -347,6 +376,11 @@ function rebuildEdges(): void
     const bow = edge.bow !== undefined ? edge.bow : Math.min(6, 0.25 * length + 0.3);
     const state = edge.state;
     const hex = state === "trace" ? "#3fb950" : edge.broken ? "#f85149" : state === "out" ? "#58a6ff" : "#d29922";
+    if (edge.dim === true)
+    {
+      addStrand(edge, bow, FadeHex(hex, 0.35), 0.02);
+      continue;
+    }
     addStrand(edge, bow, hex, state === "trace" ? 0.04 : 0.05);
     flowEdges.push({ edge, bow, hex });
   }

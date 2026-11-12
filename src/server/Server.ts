@@ -14,6 +14,7 @@ import { ReadOption } from '../cli/Options.ts'
 import { ReadJsonAsync, RefuseOutside, RefuseRemoteRead, RefuseWrite, SendJson } from './Guard.ts'
 import { Architecture } from '../repo/Architecture.ts'
 import { Blocks } from '../repo/Blocks.ts'
+import { Graph } from '../repo/Graph.ts'
 import { CodespaceFolder } from '../repo/JsonStore.ts'
 import { Snapshot } from '../repo/Snapshot.ts'
 import { Workspace, Workspaces, type IWorkspaceInfo } from './Workspace.ts'
@@ -378,7 +379,9 @@ export class Server
         try
         {
             const text = await workspace.repo.ReadFileAsync(path)
-            SendJson(response, 200, Blocks.Read(path, text))
+            const known = new Set(await workspace.repo.ListFilesAsync())
+            // Each block carries the files its own text imports, so a chosen block can show its wires.
+            SendJson(response, 200, Blocks.Read(path, text, (specifier) => Graph.ResolveImport(path, specifier, known)))
         }
         catch (error)
         {

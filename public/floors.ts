@@ -1,4 +1,4 @@
-import { S, V3, camera, scene, filePath, materialFor } from "./state.js";
+import { S, V3, camera, scene, filePath, materialFor, renderEdges } from "./state.js";
 import { rayBox } from "./rules.js";
 import { blockColor, stackLayout, type BlockInfo, type IBlocksReport, type IFloor } from "./blocks.js";
 
@@ -27,6 +27,9 @@ let hiddenPath = "";
 
 /** Seconds since the cube started opening, which drives the two stages below. */
 let opened = 0;
+
+/** Which block the wires were last built for, so a new choice rebuilds them with its own anchor. */
+let lastChosenBlock = -1;
 
 /** How much taller the block stack is than the file cube, so small blocks still read. */
 const StackScale = 1.5;
@@ -112,7 +115,22 @@ export function syncFloors(seconds = 1 / 60): void
     slab.mesh.renderOutline = chosen;
   }
 
-  S.floorAnchors = { path, user: AnchorOf(floors, "user", position, width, base), used: AnchorOf(floors, "used", position, width, base) };
+  // The chosen block's own top, so a wire that belongs to it can start there rather than at the file's top.
+  const chosenFloor = S.selectedBlock >= 0 ? floorsByBlock.get(report.blocks[S.selectedBlock]!) : undefined;
+  S.floorAnchors = {
+    path,
+    user: AnchorOf(floors, "user", position, width, base),
+    used: AnchorOf(floors, "used", position, width, base),
+    chosen: chosenFloor === undefined ? null : new V3(position.x, base + chosenFloor.center + chosenFloor.thickness / 2, position.z),
+  };
+
+  // The chosen block's own wire anchor was just worked out, so the wires can start from it. This
+  // runs a frame after the choice, once the floor's place is known, so a wire never starts late.
+  if (S.selectedBlock !== lastChosenBlock)
+  {
+    lastChosenBlock = S.selectedBlock;
+    renderEdges();
+  }
 }
 
 /** The share of an open animation's time that has passed, eased out so a block settles gently. */

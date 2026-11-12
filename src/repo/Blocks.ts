@@ -27,9 +27,9 @@ export class Blocks
      * @param path the file's repository-relative path, which picks the parser
      * @param text the file's text
      */
-    public static Read(path: string, text: string): IBlocksReport
+    public static Read(path: string, text: string, resolve: (specifier: string) => string | null = () => null): IBlocksReport
     {
-        const blocks = TS_JS_FILE.test(path) ? ScriptBlocks(text, path) : LineBlocks(text, path)
+        const blocks = TS_JS_FILE.test(path) ? ScriptBlocks(text, path, resolve) : LineBlocks(text, path)
         AddReferences(text, blocks)
         return { path, lines: text.split('\n').length, blocks }
     }
@@ -67,7 +67,7 @@ function NamesOf(node: ts.Statement, source: ts.SourceFile): string[]
 }
 
 /** The blocks of a TypeScript or JavaScript file. */
-function ScriptBlocks(text: string, path: string): BlockInfo[]
+function ScriptBlocks(text: string, path: string, resolve: (specifier: string) => string | null): BlockInfo[]
 {
     const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true)
     const statements = [...source.statements]
@@ -110,7 +110,70 @@ function ScriptBlocks(text: string, path: string): BlockInfo[]
         index++
     }
 
+    AddImports(text, blocks, ImportBindings(source), resolve)
     return blocks
+}
+
+/** The local names a file's imports bind, each to its module specifier, and every specifier it names. */
+interface IImportBindings
+{
+    /** Each local name an import binds, mapped to the module specifier it came from. */
+    local: Map<string, string>
+    /** Every module specifier the file names, including side-effect imports and re-exports. */
+    all: Set<string>
+}
+
+/** Reads the imports of a TypeScript or JavaScript file, for attributing them to the blocks that use them. */
+function ImportBindings(source: ts.SourceFile): IImportBindings
+{
+    const local = new Map<string, string>(), all = new Set<string>()
+    for (const statement of source.statements)
+    {
+        if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier))
+        {
+            const specifier = statement.moduleSpecifier.text
+            all.add(specifier)
+            const clause = statement.importClause
+            if (clause === undefined) continue
+            if (clause.name !== undefined) local.set(clause.name.text, specifier)
+            if (clause.namedBindings === undefined) continue
+            if (ts.isNamespaceImport(clause.namedBindings)) local.set(clause.namedBindings.name.text, specifier)
+            else for (const element of clause.namedBindings.elements) local.set(element.name.text, specifier)
+        }
+        else if (ts.isExportDeclaration(statement) && statement.moduleSpecifier !== undefined && ts.isStringLiteral(statement.moduleSpecifier))
+        {
+            all.add(statement.moduleSpecifier.text)
+        }
+        else if (ts.isImportEqualsDeclaration(statement) && ts.isExternalModuleReference(statement.moduleReference))
+        {
+            const expression = statement.moduleReference.expression
+            if (ts.isStringLiteral(expression)) { all.add(expression.text); local.set(statement.name.text, expression.text) }
+        }
+    }
+    return { local, all }
+}
+
+/** Gives each block the imported files its text uses, so a selected block can show its own wires. */
+function AddImports(text: string, blocks: BlockInfo[], bindings: IImportBindings, resolve: (specifier: string) => string | null): void
+{
+    const lines = text.split('\n')
+    for (const block of blocks)
+    {
+        const specs = new Set<string>()
+        if (block.kind === 'import') for (const specifier of bindings.all) specs.add(specifier)
+        else
+        {
+            const words = new Set(lines.slice(block.line - 1, block.endLine).join('\n').match(/[A-Za-z_$][\w$]*/g) ?? [])
+            for (const [name, specifier] of bindings.local) if (words.has(name)) specs.add(specifier)
+        }
+        const files = new Set<string>()
+        for (const specifier of specs)
+        {
+            const file = resolve(specifier)
+            if (file !== null) files.add(file)
+        }
+        if (files.size > 0) block.imports = [...files].sort()
+    }
 }
 
 /** One block for a run of statements that declare the same kind of thing. */

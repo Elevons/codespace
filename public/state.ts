@@ -28,7 +28,7 @@ export const S = {
   flashes: new Map<string, number>(),          // path -> how much of its edit flash is left, from 1 to 0
   BLOCKS: new Map<string, IBlocksReport>(),    // path -> the blocks its text is made of, read when the file is opened
   selectedBlock: -1,                           // which block of the opened file the rail picked, or -1
-  floorAnchors: null as { path: string, user: BABYLON.Vector3, used: BABYLON.Vector3 } | null, // where the opened file's wires join its floors
+  floorAnchors: null as { path: string, user: BABYLON.Vector3, used: BABYLON.Vector3, chosen: BABYLON.Vector3 | null } | null, // where the opened file's wires join its floors
   FILE_CHANGES: new Map<string, number>(),     // path -> changed lines since HEAD, for the changes colouring
   ARCH_NOTES: [] as string[],                  // problems found in the architecture file, to show
   FILE_LAYERS: new Map<string, string>(),      // path -> the layer the architecture file puts it in

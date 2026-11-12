@@ -171,7 +171,8 @@ the two trees cannot drift.
   blocks with their line ranges and a summary: the block's own comment first; a block with none
   starts with a plain description of its shape, and the model writes a sentence for it as the file
   opens (kept in memory for the session, and skipped when no model is configured). Choosing a rail
-  row or a floor opens that block's lines. Nothing about blocks is stored in the architecture file,
+  row or a floor opens that block's lines; the import wires its text names stay bright and start
+  at that floor, while the rest fade back. Nothing about blocks is stored in the architecture file,
   and no pass reads a whole repository for them. The open file's import wires end on the block that
   carries them rather than on the middle of its box. The words are defined in `docs/GLOSSARY.md`.
 - `.codespace/` is part of the repository, so it is on the map like anything else, as an
