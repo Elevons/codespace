@@ -206,11 +206,13 @@ export function isLitRecord(rec: FileRecord): boolean
 }
 
 // Glides the camera to one file, close enough to read it.
-export function frameFile(rec: FileRecord, currentRadius: number): void
+export function frameFile(rec: FileRecord): void
 {
   S.autoSpin = false;
   window.dispatchEvent(new Event("codespace:spin"));
-  S.camGoal = { target: rec.target.clone(), radius: Math.max(9, Math.min(currentRadius, 24)) };
+  // Frame the box and its block stack by its own height: small files are pulled close enough to
+  // read, tall ones keep some air. Never so close that the box fills the screen.
+  S.camGoal = { target: rec.target.clone(), radius: Math.max(7, Math.min(14, rec.shape.scaling.y * 8)) };
 }
 
 // Glides the camera to one folder, close enough that its files read.

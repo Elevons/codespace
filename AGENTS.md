@@ -129,6 +129,8 @@ curl -s -X POST localhost:5190/api/view -H 'Content-Type: application/json' -d @
   simply highlighted as a set. A plain path string works in place of `{"path", "note"}`. Each
   step is one file, so name the function or method in its note (`Table.UpdateNeeds drains ...`).
   Limits: 1000 files, 600 characters per file note, 120 for the title, 1500 for the overall note.
+  While a route is shown, the imports between its files are drawn too, as thin blue wires, so the
+  route reads as a line graph and not only a chain; opening a step shows its own wires beside it.
   The reply is `{"ok": true, "shown": n, "unknown": [...]}`; any path in `unknown` was not drawn,
   so fix it and send again.
 - **`focus`** — `{"action": "focus", "path": "src/repo"}` selects a file or folder and moves the

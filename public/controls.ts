@@ -247,7 +247,7 @@ function frameSelection(): void
   if (S.selectedFile >= 0)
   {
     const rec = S.fileRecords.get(filePath(S.selected, S.selectedFile));
-    if (rec) frameFile(rec, camera.radius);
+    if (rec) frameFile(rec);
     return;
   }
   frameFolder(S.NODES[S.selected], camera.radius);

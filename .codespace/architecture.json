@@ -19,7 +19,7 @@
       "system": "meta",
       "layer": "docs",
       "tags": ["config"],
-      "summary": "Instructions for an agent working in this repository: its commands, the architecture-file rule, and how the pieces fit, including the map's select action and block wires."
+      "summary": "Instructions for an agent working in this repository: its commands, the architecture-file rule, and how the pieces fit, including select, a trace's import graph, and block wires."
     },
     "README.md": {
       "system": "meta",
@@ -43,7 +43,7 @@
       "system": "meta",
       "layer": "docs",
       "tags": ["config"],
-      "summary": "The full explanation of the architecture file: its fields, the tag vocabulary, and what the map does with it, including multi-selection and block wires."
+      "summary": "The full explanation of the architecture file: its fields, the tag vocabulary, and what the map does with it, including a trace's import graph and how files are framed."
     },
     "docs/review-rubric.md": {
       "system": "meta",
@@ -112,7 +112,7 @@
       "system": "browser",
       "layer": "render",
       "tags": ["core"],
-      "summary": "Draws the import edges, tethers, and route strands for every selected file, dimming the wires a chosen block does not name and starting its own at its floor."
+      "summary": "Draws import edges, tethers, route strands, the import graph between a route's files, and a chosen block's wires starting at its floor."
     },
     "public/endpoint.ts": {
       "system": "browser",
@@ -184,7 +184,7 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "core"],
-      "summary": "The outliner, the info panel with its block rail and its list of other selected files, and everything a person can click, select, fold, or search."
+      "summary": "The outliner, the info panel with its block rail and selected files, and everything a person can click, select, fold, or search; a chosen file is framed by its height."
     },
     "public/repo-switch.ts": {
       "system": "browser",
@@ -220,7 +220,7 @@
       "system": "browser",
       "layer": "model",
       "tags": ["core"],
-      "summary": "The page's mutable world and constants: the live graph, the chosen file and block, the rest of the selection, the filters, the edit flashes, the anchors the wires use, and the scene handles."
+      "summary": "The page's mutable world and constants: the graph, the chosen file and block, the selection, filters, edit flashes, wire anchors, scene handles, and framing that fits a file."
     },
     "public/style.css": {
       "system": "browser",
@@ -250,7 +250,7 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "io"],
-      "summary": "The Showing panel and the tool events: shows a route or a selection, isolates files, focuses a file or folder, and keeps the camera far enough back to see what it frames."
+      "summary": "The Showing panel and tool events: shows a route and its import graph, selects and isolates files, and frames the whole route or selection."
     },
     "src/agent/BlockSummaries.ts": {
       "system": "server",

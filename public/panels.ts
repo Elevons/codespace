@@ -174,7 +174,7 @@ function selectFile(nodeIndex: number, fileIndex: number): void
   const path = filePath(nodeIndex, fileIndex);
   syncHash(path);
   const rec = S.fileRecords.get(path);
-  if (rec) frameFile(rec, camera.radius);
+  if (rec) frameFile(rec);
   const uses = S.FILE_EDGES.filter(([from]) => from === path).length;
   const usedBy = S.FILE_EDGES.filter(([, to]) => to === path).length;
   const lines = S.FILE_LINES.get(path);
@@ -458,7 +458,9 @@ function select(i: number, outline = true): void
   S.extraFiles.clear();
   S.selectedBlock = -1;
   hideCode();
-  S.focusSet = i >= 0 ? neighboursOf(i) : null;
+  // A folder dims everything outside it and its import neighbours. The root holds everything,
+  // so choosing it (which a click on the empty ground does) must not fade the whole map.
+  S.focusSet = i >= 0 && S.NODES[i]?.id !== "" ? neighboursOf(i) : null;
   const info = document.getElementById("info")!;
   info.classList.toggle("empty", i < 0);
   info.classList.toggle("collapsed", i < 0 && statsCollapsed);

@@ -152,6 +152,13 @@ function traceThrough(from: BABYLON.Vector3, to: BABYLON.Vector3, height: number
   return [from.clone(), ...cut, to.clone()];
 }
 
+// The middle of a file box's top, where a route's or an import graph's wire meets it.
+function TopOf(rec: FileRecord): BABYLON.Vector3
+{
+  const p = rec.shape.position;
+  return new V3(p.x, p.y + rec.shape.scaling.y / 2 + 0.03, p.z);
+}
+
 // A hex colour taken toward black, for a wire that should step back.
 function FadeHex(hex: string, share: number): string
 {
@@ -181,7 +188,9 @@ function collectEdges(): Edge[]
 {
   const result: Edge[] = [];
   const folderChosen = S.selected >= 0 && S.selectedFile < 0 && S.trace === null;
-  const chosen = S.selected >= 0 && S.selectedFile >= 0 && S.trace === null
+  // A chosen file keeps its wires while a route is shown too, so a step that is opened still shows
+  // its own imports beside the route. A chosen folder keeps its bus only when no route is shown.
+  const chosen = S.selected >= 0 && S.selectedFile >= 0
     ? new Set([filePath(S.selected, S.selectedFile), ...S.extraFiles])
     : null;
   // A chosen block keeps the wires it names bright and starts them at its own floor; the rest fade.
@@ -239,21 +248,29 @@ function collectEdges(): Edge[]
     if (folderChosen) routeTraces(result, busOf);
   }
 
+  // The files on a shown route also keep the imports between them, so the route reads as a
+  // line graph, not only a chain. The blue wires sit under the green steps of the route.
+  if (S.trace !== null && S.trace.set.size > 1)
+  {
+    for (const [from, to] of S.FILE_EDGES)
+    {
+      if (from === to || S.trace.set.has(from) === false || S.trace.set.has(to) === false) continue;
+      const userRec = S.fileRecords.get(from), usedRec = S.fileRecords.get(to);
+      if (!userRec || !usedRec || !inScene(from) || !inScene(to)) continue;
+      result.push({ user: TopOf(userRec), used: TopOf(usedRec), broken: false, state: "import" });
+    }
+  }
+
   // A code path being traced (S.trace): a strand from each file to the next, in order. Each
   // strand leaves the top of one block and lands on the top of the next, arching clear of the
   // blocks between, so its arrowhead sits in view instead of buried in the block's middle.
   if (S.trace && S.trace.trace)
   {
-    const topOf = (rec: FileRecord): BABYLON.Vector3 =>
-    {
-      const p = rec.shape.position;
-      return new V3(p.x, p.y + rec.shape.scaling.y / 2 + 0.03, p.z);
-    };
     for (let i = 0; i + 1 < S.trace.paths.length; i++)
     {
       const from = S.fileRecords.get(S.trace.paths[i]), to = S.fileRecords.get(S.trace.paths[i + 1]);
       if (!from || !to || from === to) continue;
-      const used = topOf(from), user = topOf(to);
+      const used = TopOf(from), user = TopOf(to);
       const length = V3.Distance(used, user);
       result.push({ user, used, broken: false, state: "trace",
         bow: Math.min(5, Math.max(1.1, 0.35 * length + 0.6)) });
@@ -289,7 +306,9 @@ function collectBreaks(): Break[]
 {
   const result: Break[] = [];
   if (S.LAYERS.length === 0) return result;
-  const chosen = S.selected >= 0 && S.selectedFile >= 0 && S.trace === null
+  // A chosen file keeps its wires while a route is shown too, so a step that is opened still shows
+  // its own imports beside the route. A chosen folder keeps its bus only when no route is shown.
+  const chosen = S.selected >= 0 && S.selectedFile >= 0
     ? new Set([filePath(S.selected, S.selectedFile), ...S.extraFiles])
     : null;
   const folderChosen = S.selected >= 0 && S.selectedFile < 0 && S.trace === null;
@@ -375,7 +394,13 @@ function rebuildEdges(): void
     const length = V3.Distance(edge.user, edge.used);
     const bow = edge.bow !== undefined ? edge.bow : Math.min(6, 0.25 * length + 0.3);
     const state = edge.state;
-    const hex = state === "trace" ? "#3fb950" : edge.broken ? "#f85149" : state === "out" ? "#58a6ff" : "#d29922";
+    const hex = state === "trace" ? "#3fb950" : state === "import" ? "#79c0ff" : edge.broken ? "#f85149" : state === "out" ? "#58a6ff" : "#d29922";
+    // The route's line graph is a thin stranded hint, with no travelling dot to compete with the steps.
+    if (state === "import")
+    {
+      addStrand(edge, bow, hex, 0.028);
+      continue;
+    }
     if (edge.dim === true)
     {
       addStrand(edge, bow, FadeHex(hex, 0.35), 0.02);

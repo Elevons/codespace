@@ -69,7 +69,8 @@ function show(shown: IShown): void
   let min = spots[0].clone(), max = spots[0].clone();
   for (const spot of spots) { min = V3.Minimize(min, spot); max = V3.Maximize(max, spot); }
   setSpin(false);
-  S.camGoal = { target: V3.Center(min, max), radius: Math.max(10, camera.radius) };
+  // A route can spread across the city, so frame the whole of it rather than the old close radius.
+  S.camGoal = { target: V3.Center(min, max), radius: Math.max(10, Math.min(120, V3.Distance(min, max) * 1.4 + 2)) };
 }
 
 function clear(): void
@@ -93,7 +94,9 @@ function selectMany(paths: string[] | null): void
   let min = recs[0].target.clone(), max = recs[0].target.clone();
   for (const rec of recs.slice(1)) { min = V3.Minimize(min, rec.target); max = V3.Maximize(max, rec.target); }
   setSpin(false);
-  S.camGoal = { target: V3.Center(min, max), radius: Math.max(10, camera.radius) };
+  // Fit the whole selection: a spread-out set is framed from further back, never kept at a close
+  // radius that would leave most of it off screen.
+  S.camGoal = { target: V3.Center(min, max), radius: Math.max(10, Math.min(120, V3.Distance(min, max) * 1.4 + 2)) };
 }
 
 // Narrows the scene to an ad-hoc set of files, or clears that narrowing with null. Isolation is a
