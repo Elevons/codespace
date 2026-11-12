@@ -383,7 +383,7 @@ function rebuildEdges(): void
       continue;
     }
 
-    const alpha = faded ? 0.12 : lit ? 0.6 : 0.1;
+    const alpha = faded ? 0.06 : lit ? 0.3 : 0.05;
     const shade = new BABYLON.Color4(0.55, 0.64, 0.75, alpha);
     pillarLines.push(points);
     pillarColors.push(points.map(() => shade));
