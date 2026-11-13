@@ -64,6 +64,8 @@ test('Graph still links TypeScript imports by relative specifier', async () =>
         const repo = await Repo.OpenAsync(root)
         const graph = await Graph.BuildAsync(repo)
         assert.deepEqual(graph.ImportsOf('a.ts'), ['b.ts'])
+        // The names it imports travel with the edge, so a wire can meet the block that declares b.
+        assert.deepEqual(graph.ImportNames(), { 'a.ts': { 'b.ts': ['b'] } })
     }
     finally { await removeTemp(root) }
 })
@@ -81,6 +83,7 @@ test('A .mts file importing ./a.mjs links to a.mts, and .cts to .cjs the same wa
         const repo = await Repo.OpenAsync(root)
         const graph = await Graph.BuildAsync(repo)
         assert.deepEqual(graph.ImportsOf('b.mts'), ['a.mts'])
+        assert.deepEqual(graph.ImportNames()['b.mts'], { 'a.mts': ['a'] })
         assert.deepEqual(graph.ImportsOf('d.cts'), ['c.cts'])
     }
     finally { await removeTemp(root) }

@@ -14,13 +14,18 @@ export class Graph
     /** For each file, the files it imports. */
     private readonly imports: ReadonlyMap<string, readonly string[]>
 
+    /** For each file, the names it imports from each file it imports, so a wire can meet the block. */
+    private readonly importNames: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>
+
     /**
      * Holds one graph.
      * @param imports for each file, the files it imports
+     * @param importNames for each file, the names it takes from each imported file
      */
-    private constructor(imports: ReadonlyMap<string, readonly string[]>)
+    private constructor(imports: ReadonlyMap<string, readonly string[]>, importNames: ReadonlyMap<string, ReadonlyMap<string, readonly string[]>>)
     {
         this.imports = imports
+        this.importNames = importNames
     }
 
     /**
@@ -38,6 +43,7 @@ export class Graph
         files ??= await repo.ListFilesAsync()
         const known = new Set(files)
         const imports = new Map<string, string[]>()
+        const importNames = new Map<string, Map<string, string[]>>()
 
         // C# imports name namespaces, not files, so first we index which files declare each one
         // and which namespaces each file uses, reading every C# file once for both.
@@ -64,17 +70,22 @@ export class Graph
             else if (TS_JS_FILE.test(path))
             {
                 const text = await read(path).catch(() => '')
-                for (const specifier of Graph.ParseSpecifiers(text.slice(0, MaxImportScanChars)))
+                for (const { specifier, names } of Graph.ParseImports(text.slice(0, MaxImportScanChars)))
                 {
                     const folder = dirname(path) === '.' ? '' : dirname(path)
                     const target = Graph.Resolve(posix.join(folder, specifier), known)
-                    if (target !== null && target !== path) targets.add(target)
+                    if (target === null || target === path) continue
+                    targets.add(target)
+                    if (names.length === 0) continue
+                    const perTarget = importNames.get(path) ?? new Map<string, string[]>()
+                    perTarget.set(target, [...new Set([...(perTarget.get(target) ?? []), ...names])].sort())
+                    importNames.set(path, perTarget)
                 }
             }
             else continue
             imports.set(path, [...targets].sort())
         }
-        return new Graph(imports)
+        return new Graph(imports, importNames)
     }
 
     /**
@@ -95,6 +106,18 @@ export class Graph
         const edges: Array<[string, string]> = []
         for (const [from, targets] of this.imports) for (const to of targets) edges.push([from, to])
         return edges
+    }
+
+    /**
+     * Lists the names each file takes from each file it imports, keyed by importing file and then
+     * imported file, so a wire into an open file can meet the block that declares the used name.
+     * A namespace import is `*`, and a default import is `default`.
+     */
+    public ImportNames(): Record<string, Record<string, string[]>>
+    {
+        const out: Record<string, Record<string, string[]>> = {}
+        for (const [from, toNames] of this.importNames) out[from] = Object.fromEntries([...toNames].map(([to, names]) => [to, [...names]]))
+        return out
     }
 
     /**
@@ -137,18 +160,49 @@ export class Graph
      * `export ... from`, and bare `import '...'` lines.
      * @param text the source text
      */
-    private static ParseSpecifiers(text: string): string[]
+    private static ParseImports(text: string): Array<{ specifier: string, names: string[] }>
     {
-        const specifiers: string[] = []
+        const found = new Map<string, string[]>()
+        // A clause may span lines, so it reads until its `from`; the side-effect form names no clause.
         const patterns = [
-            /(?:^|\n)[ \t]*(?:import|export)\b[^\n]*?\bfrom\s*['"]([^'"]+)['"]/g,
+            /(?:^|\n)[ \t]*(?:import|export)\b([^;]*?)\bfrom\s*['"]([^'"]+)['"]/gs,
             /(?:^|\n)[ \t]*import\s*['"]([^'"]+)['"]/g,
         ]
-        for (const pattern of patterns)
+        for (const match of text.matchAll(patterns[0]!))
         {
-            for (const match of text.matchAll(pattern)) if (match[1]!.startsWith('.')) specifiers.push(match[1]!)
+            const specifier = match[2]!
+            if (specifier.startsWith('.') === false) continue
+            const names = Graph.NamesOfImport(match[1]!)
+            found.set(specifier, [...new Set([...(found.get(specifier) ?? []), ...names])])
         }
-        return specifiers
+        for (const match of text.matchAll(patterns[1]!))
+        {
+            const specifier = match[1]!
+            if (specifier.startsWith('.')) found.set(specifier, found.get(specifier) ?? [])
+        }
+        return [...found].map(([specifier, names]) => ({ specifier, names }))
+    }
+
+    /** The names a file takes from one import clause: named, default, or a namespace. */
+    private static NamesOfImport(clause: string): string[]
+    {
+        let text = clause.trim()
+        if (text.startsWith('type ')) text = text.slice(5).trim()
+        if (text.startsWith('*')) return ['*']
+        const names: string[] = []
+        const brace = text.indexOf('{')
+        if (brace >= 0)
+        {
+            const inside = text.slice(brace + 1, text.indexOf('}', brace))
+            for (const part of inside.split(','))
+            {
+                const name = part.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0]!.trim()
+                if (/^[A-Za-z_$][\w$]*$/.test(name)) names.push(name)
+            }
+        }
+        const before = (brace >= 0 ? text.slice(0, brace) : text).replace(/,/g, ' ').trim()
+        if (/^[A-Za-z_$][\w$]*$/.test(before)) names.push('default')
+        return names
     }
 
     /**

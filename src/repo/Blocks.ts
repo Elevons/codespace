@@ -35,6 +35,12 @@ export class Blocks
     }
 }
 
+/** Whether a declaration carries the `export` keyword. */
+function HasExport(node: ts.Node): boolean
+{
+    return ts.canHaveModifiers(node) && (ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false)
+}
+
 /** A line as a reader counts it, starting at 1. */
 function LineOf(source: ts.SourceFile, position: number): number
 {
@@ -102,6 +108,7 @@ function ScriptBlocks(text: string, path: string, resolve: (specifier: string) =
                 name, kind, line, endLine, depth: 0,
                 summary: written.summary !== '' ? written.summary : FallbackSummary(kind, name, endLine - line + 1),
                 fromComment: written.summary !== '',
+                exported: HasExport(node),
                 refs: [],
             })
             if (endLine - line + 1 > LongFunction) blocks.push(...SectionsOf(text, source, name, node))
@@ -190,7 +197,7 @@ function GroupBlock(text: string, source: ts.SourceFile, group: ts.Statement[], 
         : family === 'import'
             ? `The ${names.length === 1 ? 'module' : names.length + ' modules'} this file uses.`
             : `${family === 'constant' ? 'Constants' : 'Types'}: ${names.join(', ')}.`
-    return { name, kind, line, endLine, depth: 0, summary, fromComment: written.summary !== '', members: names, refs: [] }
+    return { name, kind, line, endLine, depth: 0, summary, fromComment: written.summary !== '', members: names, exported: group.some(HasExport), refs: [] }
 }
 
 /** The commented sections of a long function, or its named members when it is a long class. */
@@ -213,7 +220,7 @@ function ClassSections(text: string, source: ts.SourceFile, parent: string, node
         const written = CommentAbove(text, line)
         return {
             name, kind: 'section' as BlockKind, line: line - written.lines, endLine: EndLineOf(source, member),
-            depth: 1, parent,
+            depth: 1, parent, exported: false,
             summary: written.summary !== '' ? written.summary : `The ${name} member of ${parent}.`,
             fromComment: written.summary !== '', refs: [],
         }
@@ -248,6 +255,7 @@ function FunctionSections(text: string, source: ts.SourceFile, parent: string, n
             endLine: EndLineOf(source, last),
             depth: 1,
             parent,
+            exported: false,
             summary: start.summary === '' ? `The ${k === 0 ? 'first' : 'next'} steps of ${parent}.` : start.summary,
             fromComment: start.summary !== '',
             refs: [],
@@ -318,7 +326,7 @@ const LineDeclaration = /^(?:export\s+)?(?:public\s+|private\s+|protected\s+|int
 function LineBlocks(text: string, path: string): BlockInfo[]
 {
     const lines = text.split('\n')
-    const starts: { line: number, name: string, kind: BlockKind }[] = []
+    const starts: { line: number, name: string, kind: BlockKind, exported: boolean }[] = []
     lines.forEach((raw, at) =>
     {
         if (/^\s/.test(raw) || raw.trim() === '') return
@@ -329,7 +337,7 @@ function LineBlocks(text: string, path: string): BlockInfo[]
             : /^(function|func|fn|def)$/.test(keyword) ? 'function'
             : /^(class|interface|struct|enum|impl|trait)$/.test(keyword) ? 'type'
             : 'declaration'
-        starts.push({ line: at + 1, name, kind })
+        starts.push({ line: at + 1, name, kind, exported: /^(?:export|public)\b/.test(raw.trim()) })
     })
 
     if (starts.length === 0)
@@ -349,7 +357,7 @@ function LineBlocks(text: string, path: string): BlockInfo[]
         return {
             name: start.name, kind: start.kind, line: start.line, endLine, depth: 0,
             summary: written.summary !== '' ? written.summary : FallbackSummary(start.kind, start.name, endLine - start.line + 1),
-            fromComment: written.summary !== '', refs: [],
+            fromComment: written.summary !== '', exported: start.exported, refs: [],
         }
     })
 }

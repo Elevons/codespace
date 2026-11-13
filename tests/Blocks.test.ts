@@ -64,6 +64,10 @@ test('Blocks groups declarations and cuts a long function at its comments', () =
     assert.deepEqual(look.imports, ['src/Helper.ts'])
     assert.deepEqual(imports.imports, ['src/Helper.ts'])
     assert.equal(constants.imports, undefined)
+    // The function and the constant are exported; the interface is not.
+    assert.equal(look.exported, true)
+    assert.equal(constants.exported, true)
+    assert.equal(types.exported, false)
 })
 
 test('A function of more than 40 lines opens into its commented sections', () =>

@@ -25,10 +25,18 @@ export const S = {
   FILE_SUMMARIES: new Map<string, string>(),   // path -> what the architecture file says the file is for
   FILE_SYMBOLS: new Map<string, string[]>(),   // path -> the names it declares, for search
   FILE_STAMPS: new Map<string, string>(),      // path -> its size and modified time, to tell an edited file
+  FILE_IMPORT_NAMES: new Map<string, Map<string, string[]>>(), // importer -> imported -> names it takes
   flashes: new Map<string, number>(),          // path -> how much of its edit flash is left, from 1 to 0
   BLOCKS: new Map<string, IBlocksReport>(),    // path -> the blocks its text is made of, read when the file is opened
   selectedBlock: -1,                           // which block of the opened file the rail picked, or -1
-  floorAnchors: null as { path: string, user: BABYLON.Vector3, used: BABYLON.Vector3, chosen: BABYLON.Vector3 | null } | null, // where the opened file's wires join its floors
+  floorAnchors: null as {
+    path: string,
+    user: BABYLON.Vector3,
+    used: BABYLON.Vector3,
+    chosen: BABYLON.Vector3 | null,
+    points: Map<string, BABYLON.Vector3>,
+    kinds: Map<string, string>,
+  } | null, // where the opened file's wires join its floors, and the top and kind of each block by name
   FILE_CHANGES: new Map<string, number>(),     // path -> changed lines since HEAD, for the changes colouring
   ARCH_NOTES: [] as string[],                  // problems found in the architecture file, to show
   FILE_LAYERS: new Map<string, string>(),      // path -> the layer the architecture file puts it in

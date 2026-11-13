@@ -19,7 +19,7 @@
       "system": "meta",
       "layer": "docs",
       "tags": ["config"],
-      "summary": "Instructions for an agent working in this repository: its commands, the architecture-file rule, and how the pieces fit, including select, a trace's import graph, and block wires."
+      "summary": "Instructions for an agent working in this repository: its commands, the architecture-file rule, and how the pieces fit, including select, a trace's import graph, and where block wires meet."
     },
     "README.md": {
       "system": "meta",
@@ -43,7 +43,7 @@
       "system": "meta",
       "layer": "docs",
       "tags": ["config"],
-      "summary": "The full explanation of the architecture file: its fields, the tag vocabulary, and what the map does with it, including a trace's import graph and how files are framed."
+      "summary": "The full explanation of the architecture file: its fields, the tag vocabulary, and what the map does with it, including a trace's import graph and where wires meet blocks."
     },
     "docs/review-rubric.md": {
       "system": "meta",
@@ -76,7 +76,7 @@
       "system": "browser",
       "layer": "model",
       "tags": ["core"],
-      "summary": "The blocks a source file is made of, the files each block's text imports, and the rules that stack them into floors."
+      "summary": "The blocks a source file is made of, the files and names each block imports, whether it is exported, and the rules that stack blocks into floors."
     },
     "public/boxes.ts": {
       "system": "browser",
@@ -112,7 +112,7 @@
       "system": "browser",
       "layer": "render",
       "tags": ["core"],
-      "summary": "Draws import edges, tethers, route strands, the import graph between a route's files, and a chosen block's wires starting at its floor."
+      "summary": "Draws import edges, tethers, route strands, a route's import graph, and block wires, landing an incoming wire on the exported block the importer names."
     },
     "public/endpoint.ts": {
       "system": "browser",
@@ -130,7 +130,7 @@
       "system": "browser",
       "layer": "render",
       "tags": ["core", "ui"],
-      "summary": "Opens a chosen file box into its block stack in two stages, picks the block under a tap, and gives the chosen block's wires their own anchor on its floor."
+      "summary": "Opens a chosen file box into its block stack in two stages, picks the block under a tap, and exposes each floor's top so wires can meet the block by name."
     },
     "public/highlight.ts": {
       "system": "browser",
@@ -196,7 +196,7 @@
       "system": "browser",
       "layer": "model",
       "tags": ["io", "core"],
-      "summary": "Loads the repository's graph, source, and blocks from the server, fills in block summaries, flashes files edited since the last read, and folds the folder tree into map nodes."
+      "summary": "Loads the graph, source, blocks, and import names from the server, flashes edited files, and folds the folder tree into map nodes."
     },
     "public/route.ts": {
       "system": "browser",
@@ -220,7 +220,7 @@
       "system": "browser",
       "layer": "model",
       "tags": ["core"],
-      "summary": "The page's mutable world and constants: the graph, the chosen file and block, the selection, filters, edit flashes, wire anchors, scene handles, and framing that fits a file."
+      "summary": "The page's mutable world and constants: the graph, the chosen file and block, the selection, import names, filters, edit flashes, wire anchors, and scene handles."
     },
     "public/style.css": {
       "system": "browser",
@@ -298,7 +298,7 @@
       "system": "server",
       "layer": "repo",
       "tags": ["core"],
-      "summary": "Reads the blocks a file is made of, with a summary for each, the blocks it refers to, and the files each block's own text imports."
+      "summary": "Reads the blocks a file is made of, with a summary, their references, exported names, and the files their own text imports."
     },
     "src/repo/DescribeGuide.ts": {
       "system": "server",
@@ -310,7 +310,7 @@
       "system": "server",
       "layer": "repo",
       "tags": ["core", "data"],
-      "summary": "Reads the import graph between a repository's files and resolves one import specifier to the file it names, for the block reader too."
+      "summary": "Reads the import graph between a repository's files, with the names each file takes from each imported file, and resolves one specifier to its file."
     },
     "src/repo/Ingest.ts": {
       "system": "server",
@@ -370,7 +370,7 @@
       "system": "server",
       "layer": "repo",
       "tags": ["core", "io"],
-      "summary": "Reads everything the page needs to draw a repository in one pass, with each file's own stamp, and reuses it until a file changes."
+      "summary": "Reads everything the page needs to draw a repository in one pass, with each file's stamp and import names, and reuses it until a file changes."
     },
     "src/repo/Sync.ts": {
       "system": "server",
@@ -394,7 +394,7 @@
       "system": "server",
       "layer": "entry",
       "tags": ["entry", "io"],
-      "summary": "Serves the page and its assets, the installed Babylon build, and the repository endpoints over HTTP, with each file's stamp, each block's imports, the workspace, and the view stream."
+      "summary": "Serves the page and its assets, the installed Babylon build, and the repository endpoints over HTTP, with stamps, import names, the workspace, and the view stream."
     },
     "src/server/Tools.ts": {
       "system": "server",
@@ -436,7 +436,7 @@
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests reading a file's blocks, their summaries, sections, references, and imported files, and the floor stack they make."
+      "summary": "Tests reading a file's blocks, their summaries, sections, references, exports, and imported files, and the floor stack they make."
     },
     "tests/Chat.test.ts": {
       "system": "meta",
@@ -460,7 +460,7 @@
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests linking imports between files, including C# namespaces and .mts/.cts siblings named with .mjs/.cjs."
+      "summary": "Tests the import graph between files, including the names each file takes from an import, for C# and TypeScript."
     },
     "tests/Guard.test.ts": {
       "system": "meta",
@@ -514,13 +514,13 @@
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests serving the page, static assets, the installed Babylon, the bootstrap with each file's stamp, repository switching, changes, and the view stream."
+      "summary": "Tests serving the page and assets, the bootstrap with stamps and import names, repository switching, changes, and the view stream."
     },
     "tests/Snapshot.test.ts": {
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests reading a repository snapshot once and reusing it until a file changes, each file's own stamp, and narrowing import edges to a folder."
+      "summary": "Tests reading a snapshot once and reusing it, each file's stamp, the names it imports, and narrowing import edges to a folder."
     },
     "tests/Symbols.test.ts": {
       "system": "meta",

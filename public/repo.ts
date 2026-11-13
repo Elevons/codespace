@@ -67,6 +67,7 @@ interface Bootstrap
   lines: Record<string, number>;
   symbols: Record<string, string[]>;
   stamps: Record<string, string>;
+  importNames?: Record<string, Record<string, string[]>>;
   changes: Record<string, number>;
 }
 
@@ -210,6 +211,7 @@ async function loadGraph(since: string | null = null): Promise<Graph | null>
     if (edited.length > 0) flashFiles(edited);
   }
   S.FILE_STAMPS = new Map(Object.entries(data.stamps ?? {}));
+  S.FILE_IMPORT_NAMES = new Map(Object.entries(data.importNames ?? {}).map(([from, tos]) => [from, new Map(Object.entries(tos))]));
   for (const [from, to] of data.edges)
   {
     if (from === to || !knownSet.has(from) || !knownSet.has(to)) continue;

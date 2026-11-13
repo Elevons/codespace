@@ -177,7 +177,9 @@ Read one file as its blocks when you need to explain how the file itself is put 
 opens its **file box** into its **block stack**: one **floor** per block, on the box's own footprint and
 1.5× its height, and the **block rail** in the info panel lists the same blocks with their summaries and line
 ranges. Choosing a rail row or a floor opens that block's lines, keeps the import wires its own text
-names bright and starting from that floor, and dims the rest. The blocks are read on demand, when the
+names bright and starting from that floor, and dims the rest. An import into an open file ends at
+the block that declares the name the importing file takes, so its wire meets that block rather
+than the middle of the file. The blocks are read on demand, when the
 file is opened, and never stored: a summary comes from the block's own comment. A block with no comment
 shows a plain description of its shape first, then `POST /api/blocks/summaries` (a page call, not a tool)
 asks the configured model for one sentence, kept in memory for the session; a server with no model leaves

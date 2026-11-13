@@ -237,7 +237,7 @@ function collectEdges(): Edge[]
         const user = dim === false && chosenBlock !== undefined && from === openPath && S.floorAnchors?.chosen !== null && S.floorAnchors?.chosen !== undefined
           ? S.floorAnchors.chosen
           : WireEnd(userRec, "user");
-        result.push({ user, used: WireEnd(usedRec, "used"), broken, state, dim });
+        result.push({ user, used: WireEnd(usedRec, "used", from), broken, state, dim });
         continue;
       }
       const userPad = footOf(userRec), usedPad = footOf(usedRec);
@@ -282,10 +282,24 @@ function collectEdges(): Edge[]
 
 // Where one end of a chosen file's wire meets the file: the floor that carries the block
 // when the file is open, and the middle of its box otherwise.
-function WireEnd(rec: FileRecord, role: "user" | "used"): BABYLON.Vector3
+function WireEnd(rec: FileRecord, role: "user" | "used", otherPath?: string): BABYLON.Vector3
 {
   const anchors = S.floorAnchors;
-  if (anchors !== null && anchors.path === rec.path) return role === "used" ? anchors.used : anchors.user;
+  if (anchors !== null && anchors.path === rec.path)
+  {
+    // An import into the open file lands on the block that declares the name the importer takes.
+    // A function or class is preferred over a constants or types group when it takes several.
+    if (role === "used" && otherPath !== undefined)
+    {
+      const rank = (kind: string | undefined): number => kind === "function" || kind === "class" ? 0 : kind === "type" ? 1 : kind === "constant" ? 2 : 3;
+      const found = (S.FILE_IMPORT_NAMES.get(otherPath)?.get(rec.path) ?? [])
+        .map((name) => ({ name, point: anchors.points.get(name), kind: anchors.kinds.get(name) }))
+        .filter((item): item is { name: string, point: BABYLON.Vector3, kind: string | undefined } => item.point !== undefined)
+        .sort((a, b) => rank(a.kind) - rank(b.kind));
+      if (found.length > 0) return found[0].point;
+    }
+    return role === "used" ? anchors.used : anchors.user;
+  }
   return rec.shape.position;
 }
 

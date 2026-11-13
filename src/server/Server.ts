@@ -237,6 +237,7 @@ export class Server
             lines: snapshot.lines,
             symbols: snapshot.symbols,
             stamps: snapshot.stamps,
+            importNames: snapshot.importNames,
             changes: changes.files,
         }, request)
     }

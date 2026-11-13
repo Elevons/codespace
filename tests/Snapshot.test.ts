@@ -24,6 +24,7 @@ test('Snapshot reads lines, declarations, and imports once, and reuses them unti
         assert.equal(first.lines['src/a.ts'], 3)
         assert.deepEqual(first.symbols['src/a.ts'], ['a'])
         assert.deepEqual(first.symbols['src/b.ts'], ['b'])
+        assert.deepEqual(first.importNames['src/a.ts']['src/b.ts'], ['b'])
         assert.equal(typeof first.stamps['src/a.ts'], 'string')
         // A file that declares nothing is left out of the symbols, but still has a line count.
         assert.equal(first.symbols['notes.md'], undefined)

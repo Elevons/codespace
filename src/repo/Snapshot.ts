@@ -28,6 +28,9 @@ interface ISnapshot
 
     /** The names each scanned file declares, for search; files that declare none are left out. */
     symbols: Record<string, string[]>
+
+    /** The names each file takes from each file it imports, so a wire can meet the right block. */
+    importNames: Record<string, Record<string, string[]>>
 }
 
 /** What was last read for each repository, kept until its files change. */
@@ -90,6 +93,6 @@ export class Snapshot
         }
 
         const graph = await Graph.BuildAsync(repo, files, (path) => texts.has(path) ? Promise.resolve(texts.get(path)!) : repo.ReadFileAsync(path))
-        return { fingerprint, files, stamps, edges: graph.Edges(), lines, symbols }
+        return { fingerprint, files, stamps, edges: graph.Edges(), lines, symbols, importNames: graph.ImportNames() }
     }
 }

@@ -55,7 +55,14 @@ export function syncFloors(seconds = 1 / 60): void
   if (rec === undefined || report === undefined || report.blocks.length === 0) { closeFloors(); return; }
 
   const key = path + "|" + report.blocks.map((block) => block.name + ":" + block.line + "-" + block.endLine).join("|");
-  if (key !== openKey) { build(report); openKey = key; opened = 0; }
+  if (key !== openKey)
+  {
+    build(report);
+    openKey = key;
+    opened = 0;
+    // The new floors' anchors are worked out below; rebuild the wires once this frame has them.
+    renderEdges();
+  }
 
   if (hiddenPath !== "" && hiddenPath !== path) RestoreCube(hiddenPath);
   hiddenPath = path;
@@ -115,13 +122,24 @@ export function syncFloors(seconds = 1 / 60): void
     slab.mesh.renderOutline = chosen;
   }
 
-  // The chosen block's own top, so a wire that belongs to it can start there rather than at the file's top.
+  // Each block's top by name (and by member name), so an incoming wire can meet the exported
+  // block the importing file names rather than the middle of the file or a generic floor.
+  const points = new Map<string, BABYLON.Vector3>(), kinds = new Map<string, string>();
+  for (const floor of floors)
+  {
+    const point = new V3(position.x, base + floor.center + floor.thickness / 2, position.z);
+    points.set(floor.block.name, point);
+    kinds.set(floor.block.name, floor.block.kind);
+    for (const member of floor.block.members ?? []) { points.set(member, point); kinds.set(member, floor.block.kind) }
+  }
   const chosenFloor = S.selectedBlock >= 0 ? floorsByBlock.get(report.blocks[S.selectedBlock]!) : undefined;
   S.floorAnchors = {
     path,
     user: AnchorOf(floors, "user", position, width, base),
     used: AnchorOf(floors, "used", position, width, base),
-    chosen: chosenFloor === undefined ? null : new V3(position.x, base + chosenFloor.center + chosenFloor.thickness / 2, position.z),
+    chosen: chosenFloor === undefined ? null : points.get(chosenFloor.block.name) ?? null,
+    points,
+    kinds,
   };
 
   // The chosen block's own wire anchor was just worked out, so the wires can start from it. This
@@ -139,15 +157,17 @@ function Ease(t: number): number
   return 1 - Math.pow(1 - t, 3);
 }
 
-/** The point on the stack a wire joins: the top block for what the file imports, the
- * first block the file itself declares for what imports it. */
+/** The fallback point a wire joins: the top of the stack for what the file imports, the top of
+ * its first exported block (else its first block) for what imports it. A named import is placed
+ * on its exact block by `WireEnd`, from the importing file's own names. */
 function AnchorOf(floors: IFloor[], role: "user" | "used", position: BABYLON.Vector3, width: number, base: number): BABYLON.Vector3
 {
   const top = floors[floors.length - 1];
   const target = role === "user"
     ? top
-    : (floors.find((floor) => floor.block.kind !== "import" && floor.block.depth === 0) ?? top);
-  const y = base + target.center + (target === top ? target.thickness / 2 : 0);
+    : (floors.find((floor) => floor.block.depth === 0 && floor.block.kind !== "import" && floor.block.exported) ??
+       floors.find((floor) => floor.block.depth === 0 && floor.block.kind !== "import") ?? top);
+  const y = base + target.center + target.thickness / 2;
   return new V3(position.x + (role === "user" ? width * 0.25 : -width * 0.25), y, position.z);
 }
 
