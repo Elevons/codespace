@@ -166,7 +166,7 @@ Reading, for finding the right files and steps before you show them:
 | `GET /api/architecture` | the architecture file: layers, systems, and each file's summary, tags, and layer |
 | `GET /api/graph?folder=src` | the import edges, optionally only those under a folder |
 | `GET /api/source?path=src/a.ts` | one file's text |
-| `GET /api/blocks?path=src/a.ts` | one file's blocks: its declarations, groups, and the commented sections of a long function, each with a summary, a kind, a line range, and the blocks it refers to |
+| `GET /api/blocks?path=src/a.ts` | one file's blocks: its declarations and groups, each with a summary, a kind, a line range, and the blocks it refers to |
 | `GET /api/changes` | each file changed since `HEAD`, with how many lines changed |
 | `GET /api/ingest/status` | how much is left to describe and to refine |
 | `POST /api/ingest/next` | `{"size": n}`: the CLI's `next` over HTTP (it can settle generated files, so it is a write) |
@@ -183,9 +183,8 @@ than the middle of the file. The blocks are read on demand, when the
 file is opened, and never stored: a summary comes from the block's own comment. A block with no comment
 shows a plain description of its shape first, then `POST /api/blocks/summaries` (a page call, not a tool)
 asks the configured model for one sentence, kept in memory for the session; a server with no model leaves
-the plain description. The file's own comments are never replaced. A function longer than about 40 lines
-is cut at the comments that lead its steps, so its **sections** can be named and walked one at a time. See
-`src/repo/Blocks.ts`, and `docs/GLOSSARY.md` for these words.
+the plain description. The file's own comments are never replaced. Every function and class stays one
+block, however long it is. See `src/repo/Blocks.ts`, and `docs/GLOSSARY.md` for these words.
 
 `POST /api/architecture` is the CLI's `apply` over HTTP: same validation, same ledger stamp.
 

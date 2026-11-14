@@ -35,7 +35,7 @@ const Source = [
     '}',
 ].join('\n')
 
-test('Blocks groups declarations and cuts a long function at its comments', () =>
+test('Blocks groups declarations and keeps each function whole', () =>
 {
     const report = Blocks.Read('src/Things.ts', Source, (specifier) => specifier === './Helper.ts' ? 'src/Helper.ts' : null)
     const blocks = report.blocks
@@ -57,7 +57,7 @@ test('Blocks groups declarations and cuts a long function at its comments', () =
     assert.equal(look.endLine, 29)
     assert.equal(look.summary, 'Looks at the things and returns what it found.')
     assert.equal(look.fromComment, true)
-    // A block is not a reference to the sections inside it.
+    // The function names the interface it takes, so its refs list it.
     assert.deepEqual(look.refs, ['IThing'])
     // The function's text uses Helper, so its own wire to Helper.ts is attributed to it;
     // the imports block owns every module the file names.
@@ -70,7 +70,7 @@ test('Blocks groups declarations and cuts a long function at its comments', () =
     assert.equal(types.exported, false)
 })
 
-test('A function of more than 40 lines opens into its commented sections', () =>
+test('A function of more than 40 lines stays one block, however many comments it holds', () =>
 {
     const body = [
         '/** Long enough to open. */',
@@ -118,18 +118,48 @@ test('A function of more than 40 lines opens into its commented sections', () =>
         '    total = total / 2',
         '    total = total / 2',
         '    total = total / 2',
+        '    total = total / 2',
         '',
         '    // Report it.',
         '    return total',
         '}',
     ].join('\n')
-    const sections = Blocks.Read('src/Long.ts', body).blocks.filter((block) => block.depth === 1)
-    assert.equal(sections.length, 3)
-    assert.equal(sections[0].name, '¶1')
-    assert.equal(sections[0].parent, 'Long')
-    assert.equal(sections[1].name, 'Fold the total in half')
-    assert.equal(sections[2].summary, 'Report it.')
-    assert.equal(sections[2].endLine, 48)
+    const blocks = Blocks.Read('src/Long.ts', body).blocks
+    assert.equal(blocks.length, 1)
+    assert.equal(blocks[0].kind, 'function')
+    assert.equal(blocks[0].depth, 0)
+    assert.equal(blocks[0].line, 2)
+    assert.equal(blocks[0].endLine, 50)
+})
+
+test('A class of more than 40 lines stays one block too', () =>
+{
+    const body = [
+        '/** A long class. */',
+        'export class Wide',
+        '{',
+        '    // The running count.',
+        '    private count = 0',
+        '',
+        '    // Add one, many times.',
+        '    add(): void',
+        '    {',
+        ...Array.from({ length: 40 }, () => '        this.count += 1'),
+        '    }',
+        '',
+        '    // Read it.',
+        '    read(): number',
+        '    {',
+        '        return this.count',
+        '    }',
+        '}',
+    ].join('\n')
+    const blocks = Blocks.Read('src/Wide.ts', body).blocks
+    assert.equal(blocks.length, 1)
+    assert.equal(blocks[0].kind, 'class')
+    assert.equal(blocks[0].name, 'Wide')
+    assert.equal(blocks[0].depth, 0)
+    assert.equal(blocks[0].endLine, 57)
 })
 
 test('A block with no comment gets a plain description of its shape, and says so', () =>
@@ -171,7 +201,7 @@ test('A text file with no declarations is one block of the whole file', () =>
     assert.equal(blocks[0].endLine, 4)
 })
 
-test('Stack layout gives every block a slab, a header over its sections, filling the height', () =>
+test('Stack layout gives every block a slab, and a parent with children a thin header', () =>
 {
     const blocks: BlockInfo[] = [
         { name: 'imports', kind: 'import', line: 1, endLine: 1, depth: 0, summary: '', fromComment: false, refs: [] },
@@ -186,7 +216,7 @@ test('Stack layout gives every block a slab, a header over its sections, filling
     assert.equal(floors[0].block.name, '¶2')
     assert.equal(floors[3].block.name, 'imports')
     assert.ok(Math.abs(floors.reduce((sum, floor) => sum + floor.thickness, 0) - 10) < 1e-9)
-    // The function is only a header over its two sections, so each section gets real height.
+    // The parent is only a header over its two children, so each child gets real height.
     const header = floors.find((floor) => floor.block.name === 'Work')!
     assert.ok(header.thickness < floors[0].thickness)
     assert.deepEqual(stackLayout([], 10), [])

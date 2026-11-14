@@ -436,7 +436,7 @@
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests reading a file's blocks, their summaries, sections, references, exports, and imported files, and the floor stack they make."
+      "summary": "Tests reading a file's blocks, their summaries, references, exports, and imported files, and the floor stack they make."
     },
     "tests/Chat.test.ts": {
       "system": "meta",

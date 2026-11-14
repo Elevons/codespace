@@ -14,12 +14,10 @@ interface, in the code, and in a description of the map; they name one thing eac
 
 - **block** — one part of a file, in reading order: a run of imports, a run of constants, a run of
   types, one function, or one class. A block is what the server returns and what the rail lists.
-- **section** — a block inside a long function or a long class, led by the comment above it. In the
-  rail a section is indented under the function or class it belongs to, and a section with no
-  comment is named `¶1`, `¶2`, and so on. Only a declaration longer than about 40 lines is cut into
-  sections.
+- **section** — a block that would sit inside a bigger one, indented in the rail. Codespace keeps
+  every function and class whole, so a file is not cut into sections today.
 - **block kind** — what a block is, which sets its colour: `import`, `constant`, `type`,
-  `function`, `class`, `section`, or `declaration`.
+  `function`, `class`, or `declaration`.
 - **block summary** — one plain sentence about what a block is for. It has one of three sources:
   - **comment summary** — the block's own leading comment, used as it is;
   - **model summary** — written by the configured model for a block with no comment, kept for the
@@ -59,5 +57,5 @@ interface, in the code, and in a description of the map; they name one thing eac
 
 - "symbol" for a block: a symbol is one declared name, and blocks group several.
 - "strand" or "wire" for a block reference: references are text in the rail and draw no line.
-- "sub-block" or "chunk": use **section** for a part of a function, and **block** for everything
-  else.
+- "sub-block" or "chunk": use **block** for every part of a file; nothing is cut into smaller
+  parts.

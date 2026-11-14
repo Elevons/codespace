@@ -362,9 +362,9 @@ export class Server
     }
 
     /**
-     * Sends the blocks one file is made of: its declarations, its groups, and the commented
-     * sections of a long function. The page reads them when a file is opened, so a repository
-     * that nobody opens costs nothing.
+     * Sends the blocks one file is made of: its declarations and its groups of declarations. Every
+     * function and class stays one block, however long it is. The page reads them when a file is
+     * opened, so a repository that nobody opens costs nothing.
      * @param response the response to write
      * @param path the file's repository-relative path
      * @param workspace the repository to read

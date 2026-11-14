@@ -1,8 +1,8 @@
 /**
  * The blocks a source file is made of, and the rules that turn them into floors. A block is one
- * part of a file in reading order; a section is a block inside a long function or class. The words
- * are defined in docs/GLOSSARY.md. Kept dependency-free so the server, the browser, and the tests
- * share one vocabulary.
+ * part of a file in reading order: a group of declarations, a whole function, or a whole class.
+ * The words are defined in docs/GLOSSARY.md. Kept dependency-free so the server, the browser, and
+ * the tests share one vocabulary.
  */
 
 /** What a block is: the role it plays in the file, which is what the rail and the floors colour by. */
@@ -19,10 +19,10 @@ export const BLOCK_COLORS: Record<BlockKind, string> = {
   declaration: "#8a93a2",
 };
 
-/** One block: a declaration, a group of them, or a section of a long function. */
+/** One block: a declaration or a group of them. */
 export interface BlockInfo
 {
-  /** What the block is called: a declaration's name, a group's count, or a section's comment. */
+  /** What the block is called: a declaration's name or a group's count. */
   name: string;
   /** The role the block plays, which sets its colour. */
   kind: BlockKind;
@@ -30,9 +30,9 @@ export interface BlockInfo
   line: number;
   /** The line the block ends on, counting from 1 and included. */
   endLine: number;
-  /** 0 for a declaration of the file, 1 for a section or member inside one. */
+  /** 0 for a block of the file, 1 for a block nested inside another. */
   depth: number;
-  /** The block this one sits inside, when it is a section or a member. */
+  /** The block this one sits inside, when it is nested. */
   parent?: string;
   /** What the block is for: its own comment when it has one, else a plain mechanical line. */
   summary: string;
@@ -57,7 +57,7 @@ export interface IBlocksReport
   path: string;
   /** The file's line count. */
   lines: number;
-  /** The blocks in reading order, a parent before the sections inside it. */
+  /** The blocks in reading order, a parent before anything nested inside it. */
   blocks: BlockInfo[];
 }
 
@@ -74,16 +74,16 @@ export interface IFloor
 /** The longest span, in lines, that still gets its own thickness; longer blocks stop growing. */
 const MaxFloorLines = 60;
 
-/** The thickness of a parent slab that is drawn as a header over its sections. */
+/** The thickness of a parent slab that is drawn as a header over its children. */
 const HeaderWeight = 3;
 
-/** Whether a block holds sections or members, and so is drawn as a header. */
+/** Whether a block holds child blocks, and so is drawn as a header. */
 export function hasChildren(blocks: ReadonlyArray<BlockInfo>, block: BlockInfo): boolean
 {
   return block.depth === 0 && blocks.some((other) => other.parent === block.name);
 }
 
-/** How much of a stack's height one block takes: its line span, or a thin header over its sections.
+/** How much of a stack's height one block takes: its line span, or a thin header over its children.
  * The span is square-rooted, so a small block still gets a floor thick enough to see and click. */
 function floorWeight(blocks: ReadonlyArray<BlockInfo>, block: BlockInfo): number
 {

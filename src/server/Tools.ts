@@ -108,7 +108,7 @@ export const MapTools: readonly IMapTool[] = [
     },
     {
         name: 'blocks', method: 'GET', path: '/api/blocks', writes: false,
-        description: 'Returns the blocks that one file is made of: its imports, its groups of constants and types, each function and class, and the commented sections of a long function. Each block has a summary, a kind, its line range, and the names of the other blocks it uses. Use a path from the files tool.',
+        description: 'Returns the blocks that one file is made of: its imports, its groups of constants and types, and each function and class. Every function and class stays one block, however long it is. Each block has a summary, a kind, its line range, and the names of the other blocks it uses. Use a path from the files tool.',
         parameters: { type: 'object', properties: { path: PathArgument('The file path, relative to the repository root.') }, required: ['path'], additionalProperties: false },
     },
     {

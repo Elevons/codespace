@@ -2,12 +2,6 @@ import ts from 'typescript'
 import { TS_JS_FILE } from '../../public/symbols.ts'
 import { shortSummary, type BlockInfo, type BlockKind, type IBlocksReport } from '../../public/blocks.ts'
 
-/** A function longer than this is cut into the sections its comments lead. */
-const LongFunction = 40
-
-/** The most sections a long function is cut into before it is left whole. */
-const MaxSections = 10
-
 /** The most references one block lists to the file's other blocks. */
 const MaxRefs = 8
 
@@ -15,10 +9,10 @@ const MaxRefs = 8
 const GenericName = /^\d+ (constants|types)$/
 
 /**
- * Reads the blocks a file is made of: its imports, its groups of constants and types, each
- * function and class, and the commented sections inside a long one. TypeScript and JavaScript
- * are read with the TypeScript parser, so braces in strings and comments cannot fool it; every
- * other language falls back to a line scan of its top-level declarations.
+ * Reads the blocks a file is made of: its imports, its groups of constants and types, and each
+ * function and class. Every function and class stays one block, however long it is. TypeScript and
+ * JavaScript are read with the TypeScript parser, so braces in strings and comments cannot fool it;
+ * every other language falls back to a line scan of its top-level declarations.
  */
 export class Blocks
 {
@@ -111,7 +105,6 @@ function ScriptBlocks(text: string, path: string, resolve: (specifier: string) =
                 exported: HasExport(node),
                 refs: [],
             })
-            if (endLine - line + 1 > LongFunction) blocks.push(...SectionsOf(text, source, name, node))
         }
 
         index++
@@ -198,77 +191,6 @@ function GroupBlock(text: string, source: ts.SourceFile, group: ts.Statement[], 
             ? `The ${names.length === 1 ? 'module' : names.length + ' modules'} this file uses.`
             : `${family === 'constant' ? 'Constants' : 'Types'}: ${names.join(', ')}.`
     return { name, kind, line, endLine, depth: 0, summary, fromComment: written.summary !== '', members: names, exported: group.some(HasExport), refs: [] }
-}
-
-/** The commented sections of a long function, or its named members when it is a long class. */
-function SectionsOf(text: string, source: ts.SourceFile, parent: string, node: ts.FunctionDeclaration | ts.ClassDeclaration): BlockInfo[]
-{
-    return ts.isClassDeclaration(node) ? ClassSections(text, source, parent, node) : FunctionSections(text, source, parent, node)
-}
-
-/** The members of a long class, one block each, so a file written as one class still opens up. */
-function ClassSections(text: string, source: ts.SourceFile, parent: string, node: ts.ClassDeclaration): BlockInfo[]
-{
-    const members = node.members.filter((member) =>
-        ts.isMethodDeclaration(member) || ts.isPropertyDeclaration(member) ||
-        ts.isGetAccessorDeclaration(member) || ts.isSetAccessorDeclaration(member) || ts.isConstructorDeclaration(member))
-    if (members.length < 2 || members.length > MaxSections) return []
-    return members.map((member) =>
-    {
-        const name = member.name === undefined ? 'constructor' : member.name.getText(source)
-        const line = LineOf(source, member.getStart(source))
-        const written = CommentAbove(text, line)
-        return {
-            name, kind: 'section' as BlockKind, line: line - written.lines, endLine: EndLineOf(source, member),
-            depth: 1, parent, exported: false,
-            summary: written.summary !== '' ? written.summary : `The ${name} member of ${parent}.`,
-            fromComment: written.summary !== '', refs: [],
-        }
-    })
-}
-
-/** The sections a long function's comments divide its body into. */
-function FunctionSections(text: string, source: ts.SourceFile, parent: string, node: ts.FunctionDeclaration): BlockInfo[]
-{
-    const body = node.body
-    if (body === undefined) return []
-    const statements = [...body.statements]
-    if (statements.length < 2) return []
-
-    // A section starts at the first statement and at every statement a comment leads into.
-    const starts = statements.map((statement, at) =>
-    {
-        const line = LineOf(source, statement.getStart(source))
-        const written = CommentAbove(text, line)
-        return { at, line, commentLines: written.lines, summary: written.summary }
-    }).filter((start, at) => at === 0 || start.summary !== '')
-    if (starts.length < 2 || starts.length > MaxSections) return []
-
-    return starts.map((start, k) =>
-    {
-        const next = starts[k + 1]
-        const last = next === undefined ? statements[statements.length - 1] : statements[next.at - 1]
-        return {
-            name: start.summary === '' ? `¶${k + 1}` : SectionName(start.summary, k),
-            kind: 'section' as BlockKind,
-            line: start.line - start.commentLines,
-            endLine: EndLineOf(source, last),
-            depth: 1,
-            parent,
-            exported: false,
-            summary: start.summary === '' ? `The ${k === 0 ? 'first' : 'next'} steps of ${parent}.` : start.summary,
-            fromComment: start.summary !== '',
-            refs: [],
-        }
-    })
-}
-
-/** A section's name: the first clause of its comment, short enough to sit on a floor. */
-function SectionName(summary: string, at: number): string
-{
-    const clause = summary.split(/[.;:,]/)[0].trim()
-    if (clause === '') return `¶${at + 1}`
-    return shortSummary(clause, 48)
 }
 
 /** A block's summary when the source gives it no comment: a plain description of its shape. */
@@ -373,12 +295,11 @@ function AddReferences(text: string, blocks: BlockInfo[]): void
         for (const other of blocks)
         {
             if (other === block || other.kind === 'import') continue
-            // A block and the sections inside it use each other by definition, so they are not refs.
+            // A block and anything nested inside it use each other by definition, so they are not refs.
             if (other.parent === block.name || block.parent === other.name) continue
             const names = other.members !== undefined && GenericName.test(other.name) ? other.members : [other.name]
             const hit = names.find((name) => words.has(name))
             if (hit === undefined) continue
-            // A run of sections all named by their comment still reads best by its first few words.
             if (refs.includes(hit) === false) refs.push(hit)
             if (refs.length >= MaxRefs) break
         }

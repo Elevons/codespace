@@ -25,7 +25,7 @@ export interface IBlockRequest
 {
     /** The id the answer uses for this block. */
     id: string
-    /** What the block is: a constant, a type, a function, a class, or a section. */
+    /** What the block is: a constant, a type, a function, or a class. */
     kind: string
     /** What the block is called. */
     name: string
