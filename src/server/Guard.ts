@@ -10,21 +10,12 @@ const LoopbackAddresses = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 /** The host names a page or tool uses to reach this machine's own server. */
 const LocalHosts = new Set(['localhost', '127.0.0.1', '[::1]'])
 
-/** The host suffixes of a private overlay network whose proxy runs on this machine, such as Tailscale. */
-const OverlayHostSuffixes = ['.ts.net']
-
-/** Whether a host name reaches this machine's own server, as localhost or through an overlay proxy on it. */
-function IsOwnHost(host: string): boolean
-{
-    return LocalHosts.has(host) || OverlayHostSuffixes.some((suffix) => host.endsWith(suffix))
-}
-
 /**
  * Says why a request may not change anything, or null when it may. Reading is open, as it is
  * for the map itself; changing the view or the architecture file is for a tool or page on
  * this machine only, unless the server was started to allow changes from anywhere. The server
- * listens on the network, and a proxy such as Tailscale Serve forwards from this machine, so
- * the host name has to be local as well as the address.
+ * listens on the network, and a proxy may forward from this machine, so the host name has to be
+ * local as well as the address.
  * @param request the incoming request
  * @param anywhere whether changes from any machine are allowed, as started with --allow-writes
  */
@@ -67,7 +58,7 @@ export function RefuseRemoteRead(request: IncomingMessage): string | null
 {
     if (!LoopbackAddresses.has(request.socket.remoteAddress ?? '')) return 'The folder picker is only available on the machine running Codespace.'
     const host = (request.headers.host ?? '').replace(/:\d+$/, '').toLowerCase()
-    if (!IsOwnHost(host)) return `The folder picker is only available on this machine, as localhost or its tailnet name (this request used "${host}").`
+    if (!LocalHosts.has(host)) return `The folder picker is only available on this machine, as localhost (this request used "${host}").`
     return null
 }
 

@@ -21,7 +21,7 @@ test('A write from this machine over localhost is accepted', () =>
 test('A write from another machine or host is refused unless started with --allow-writes', () =>
 {
     const fromLan = request({ socket: { remoteAddress: '192.168.1.20' } })
-    const otherHost = request({ headers: { host: 'my-laptop.tail1234.ts.net', 'content-type': 'application/json' } })
+    const otherHost = request({ headers: { host: 'my-laptop.example', 'content-type': 'application/json' } })
 
     assert.match(RefuseWrite(fromLan)!, /machine running Codespace/)
     assert.match(RefuseWrite(otherHost)!, /reached as localhost/)
@@ -39,14 +39,14 @@ test('Even allowing any machine, a cross-site or non-JSON request is refused', (
 
 test('Behind a proxy, the forwarded host is what the origin is compared with', () =>
 {
-    const forwarded = request({ headers: { host: '127.0.0.1:5190', 'x-forwarded-host': 'my-laptop.tail1234.ts.net', origin: 'https://my-laptop.tail1234.ts.net', 'content-type': 'application/json' } })
+    const forwarded = request({ headers: { host: '127.0.0.1:5190', 'x-forwarded-host': 'my-laptop.example', origin: 'https://my-laptop.example', 'content-type': 'application/json' } })
     assert.equal(RefuseWrite(forwarded, true), null)
 })
 
-test('The folder picker is only available on this machine, over localhost or its tailnet name', () =>
+test('The folder picker is only available on this machine, over localhost', () =>
 {
     assert.equal(RefuseRemoteRead(request()), null)
-    assert.equal(RefuseRemoteRead(request({ headers: { host: 'my-laptop.tail1234.ts.net' } })), null)
+    assert.match(RefuseRemoteRead(request({ headers: { host: 'my-laptop.example' } }))!, /on this machine/)
     assert.match(RefuseRemoteRead(request({ socket: { remoteAddress: '192.168.1.20' } }))!, /machine running Codespace/)
     assert.match(RefuseRemoteRead(request({ headers: { host: 'evil.example' } }))!, /on this machine/)
 })
