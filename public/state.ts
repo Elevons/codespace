@@ -1,5 +1,5 @@
 import { CODE_FILE } from "./symbols.js";
-import type { IBlocksReport } from "./blocks.js";
+import { STACK_SCALE, type IBlocksReport } from "./blocks.js";
 import { passesSliceValues } from "./filter.js";
 import { folderColor, folderOf, isFileVisible as fileVisible, layerRank as rankOf, nodeMatchesFilters as nodeMatches } from "./rules.js";
 import { TAG_COLORS, type Tag } from "./tags.js";
@@ -34,9 +34,10 @@ export const S = {
     user: BABYLON.Vector3,
     used: BABYLON.Vector3,
     chosen: BABYLON.Vector3 | null,
+    chosenBox: { center: BABYLON.Vector3, size: BABYLON.Vector3 } | null,
     points: Map<string, BABYLON.Vector3>,
     kinds: Map<string, string>,
-  } | null, // where the opened file's wires join its floors, and the top and kind of each block by name
+  } | null, // where the opened file's wires join its floors, and the chosen floor's box
   FILE_CHANGES: new Map<string, number>(),     // path -> changed lines since HEAD, for the changes colouring
   ARCH_NOTES: [] as string[],                  // problems found in the architecture file, to show
   FILE_LAYERS: new Map<string, string>(),      // path -> the layer the architecture file puts it in
@@ -213,14 +214,34 @@ export function isLitRecord(rec: FileRecord): boolean
   return true;
 }
 
-// Glides the camera to one file, close enough to read it.
+// Glides the camera to one file, close enough to read it and the block stack it opens into.
 export function frameFile(rec: FileRecord): void
 {
   S.autoSpin = false;
   window.dispatchEvent(new Event("codespace:spin"));
-  // Frame the box and its block stack by its own height: small files are pulled close enough to
-  // read, tall ones keep some air. Never so close that the box fills the screen.
-  S.camGoal = { target: rec.target.clone(), radius: Math.max(7, Math.min(14, rec.shape.scaling.y * 8)) };
+  // Frame the box and its block stack, not only the closed box: the stack stands 1.5× the box's
+  // height, so its centre sits a quarter of a box-height above the box's. Fitting the stack keeps
+  // every floor on screen and pulls a small file close enough to read.
+  const height = rec.targetSize.y;
+  const stack = height * STACK_SCALE;
+  S.camGoal = {
+    target: new V3(rec.target.x, rec.target.y + height * (STACK_SCALE - 1) / 2, rec.target.z),
+    radius: Math.max(3, stack * 1.8),
+  };
+}
+
+/** Glides the camera to the chosen block's floor, so one sliver of a tall stack can be read. */
+export function frameBlock(rec: FileRecord): boolean
+{
+  const anchors = S.floorAnchors;
+  if (anchors === null || anchors.path !== rec.path || anchors.chosenBox === null) return false;
+  S.autoSpin = false;
+  window.dispatchEvent(new Event("codespace:spin"));
+  // Fit the floor's own box: a thin block still leaves its neighbours in view, and a thick one
+  // steps back rather than filling the screen.
+  const { center, size } = anchors.chosenBox;
+  S.camGoal = { target: center.clone(), radius: Math.max(2.5, Math.min(12, Math.max(size.y, size.x) * 6)) };
+  return true;
 }
 
 // Glides the camera to one folder, close enough that its files read.

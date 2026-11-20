@@ -71,6 +71,9 @@ export interface IFloor
   center: number;
 }
 
+/** How much taller the block stack is than the file box it stands on, so small blocks stay readable. */
+export const STACK_SCALE = 1.5;
+
 /** The longest span, in lines, that still gets its own thickness; longer blocks stop growing. */
 const MaxFloorLines = 60;
 

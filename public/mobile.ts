@@ -17,7 +17,7 @@ const narrow = window.matchMedia("(max-width: 720px)");
 const PANES: Record<Pane, string[]> = {
   files: ["outliner"],
   filters: ["outliner-filters", "outliner-chips", "outliner-options", "outliner-bulk"],
-  details: ["showing", "info"],
+  details: ["showing", "insight", "info"],
   chat: ["chat-panel"],
   view: ["tools", "controls"],
 };
@@ -95,6 +95,9 @@ document.getElementById("msheet-close")!.addEventListener("click", () => setPane
 
 // A choice made in the outliner closes the sheet, so the map can glide to it.
 window.addEventListener("codespace:chosen", () => { if (narrow.matches && open === "files") setPane(null); });
+
+// The Insights button opens its panel, which the Details sheet holds on a phone.
+window.addEventListener("codespace:open-insight", () => { if (narrow.matches) setPane("details"); });
 
 // Another panel can open the chat, as Ingest Codebase does.
 window.addEventListener("codespace:open-chat", () => { if (narrow.matches) setPane("chat"); });

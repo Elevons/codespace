@@ -19,7 +19,7 @@
       "system": "meta",
       "layer": "docs",
       "tags": ["config"],
-      "summary": "Instructions for an agent working in this repository: its commands, the architecture-file rule, and how the pieces fit, including select, a trace's import graph, and where block wires meet."
+      "summary": "Instructions for an agent working in this repository: its commands, the architecture-file rule, how the pieces fit, the view actions, the insights panel with its flows and health check, and where block wires meet."
     },
     "README.md": {
       "system": "meta",
@@ -37,7 +37,7 @@
       "system": "meta",
       "layer": "docs",
       "tags": ["config"],
-      "summary": "The words the map uses for a file and its parts, the selection, the block rail, the block summaries, and the wires a block names."
+      "summary": "The words the map uses for a file and its parts, the selection, the block rail, the flows and the health check, and the wires a block names."
     },
     "docs/architecture.md": {
       "system": "meta",
@@ -106,7 +106,7 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "core"],
-      "summary": "The map's controls and options: camera, colouring, grouping, filters, shift-click selection, collapsing the outliner, and refreshing the graph."
+      "summary": "The map's controls and options: framing the chosen block, file, or folder; colouring, grouping, filters, shift-click selection, collapsing the outliner, and refreshing the graph."
     },
     "public/edges.ts": {
       "system": "browser",
@@ -130,7 +130,19 @@
       "system": "browser",
       "layer": "render",
       "tags": ["core", "ui"],
-      "summary": "Opens a chosen file box into its block stack in two stages, picks the block under a tap, and exposes each floor's top so wires can meet the block by name."
+      "summary": "Opens a chosen file box into its block stack in two stages, frames a chosen block's floor, picks the block under a tap, and exposes each floor's top so wires can meet the block by name."
+    },
+    "public/flows.ts": {
+      "system": "browser",
+      "layer": "model",
+      "tags": ["data"],
+      "summary": "The saved-view shape and its limits, shared by the page and the server so a field rename cannot drift."
+    },
+    "public/health.ts": {
+      "system": "browser",
+      "layer": "model",
+      "tags": ["data"],
+      "summary": "The health check's answer and its parts, shared by the page and the server so a field rename cannot drift."
     },
     "public/highlight.ts": {
       "system": "browser",
@@ -142,13 +154,19 @@
       "system": "browser",
       "layer": "shell",
       "tags": ["ui", "entry"],
-      "summary": "The page's HTML shell: the canvas, the panel markup, the outliner's collapse controls, and the bootstrap request for the repository."
+      "summary": "The page's HTML shell: the canvas, the panels, the outliner's collapse controls, the insights panel with its three tabs, and the bootstrap request for the repository."
     },
     "public/ingest.ts": {
       "system": "browser",
       "layer": "model",
       "tags": ["data"],
       "summary": "The shape of the ingest-status response, shared by the page and the server."
+    },
+    "public/insight.ts": {
+      "system": "browser",
+      "layer": "panels",
+      "tags": ["ui"],
+      "summary": "The Insights panel: the files changed since HEAD, the saved flows with the start-here tour, and the health check, each ending in a view call every page follows."
     },
     "public/labels.ts": {
       "system": "browser",
@@ -172,7 +190,19 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui"],
-      "summary": "The phone layout: a bottom tab bar whose sheets hold the same panels rather than copies of them."
+      "summary": "The phone layout: a bottom tab bar whose sheets hold the same panels rather than copies of them, including the insights panel."
+    },
+    "public/neighbourhood.ts": {
+      "system": "browser",
+      "layer": "panels",
+      "tags": ["ui"],
+      "summary": "Narrows the map to one file and what it imports or is imported by, and chooses the file, from the server's neighbours endpoint."
+    },
+    "public/neighbours.ts": {
+      "system": "browser",
+      "layer": "model",
+      "tags": ["core"],
+      "summary": "The depth rule and the neighbour shape, shared by the server that walks the graph and the page that asks for one."
     },
     "public/pads.ts": {
       "system": "browser",
@@ -184,7 +214,7 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "core"],
-      "summary": "The outliner, the info panel with its block rail and selected files, and everything a person can click, select, fold, or search; a chosen file is framed by its height."
+      "summary": "The outliner, the info panel with its block rail, the neighbourhood action, and the selected files, and everything a person can click, select, fold, or search."
     },
     "public/repo-switch.ts": {
       "system": "browser",
@@ -220,13 +250,13 @@
       "system": "browser",
       "layer": "model",
       "tags": ["core"],
-      "summary": "The page's mutable world and constants: the graph, the chosen file and block, the selection, import names, filters, edit flashes, wire anchors, and scene handles."
+      "summary": "The page's mutable world and constants: the graph, the chosen file and block, the selection, import names, filters, edit flashes, wire anchors, scene handles, and camera framing for a file's block stack or a chosen floor."
     },
     "public/style.css": {
       "system": "browser",
       "layer": "shell",
       "tags": ["ui"],
-      "summary": "The styles for the page, its panels, the outliner and its edge tab, the block rail, the selected-files list, and the phone sheets."
+      "summary": "The styles for the page, its panels, the outliner and its edge tab, the block rail, the insights panel, and the phone sheets."
     },
     "public/symbols.ts": {
       "system": "browser",
@@ -250,7 +280,7 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "io"],
-      "summary": "The Showing panel and tool events: shows a route and its import graph, selects and isolates files, and frames the whole route or selection."
+      "summary": "The Showing panel and tool events: shows a route and its import graph, selects and isolates files, frames the whole route or selection, and does not repeat a step's own summary."
     },
     "src/agent/BlockSummaries.ts": {
       "system": "server",
@@ -306,11 +336,23 @@
       "tags": ["data"],
       "summary": "The first-pass instructions for describing a repository, shared by the copied prompt and the built-in chat."
     },
+    "src/repo/Flows.ts": {
+      "system": "server",
+      "layer": "repo",
+      "tags": ["core", "data"],
+      "summary": "Reads and writes the flows a repository keeps at .codespace/flows.json, checks them against the files, and drafts a start-here tour from the descriptions."
+    },
     "src/repo/Graph.ts": {
       "system": "server",
       "layer": "repo",
       "tags": ["core", "data"],
       "summary": "Reads the import graph between a repository's files, with the names each file takes from each imported file, and resolves one specifier to its file."
+    },
+    "src/repo/Health.ts": {
+      "system": "server",
+      "layer": "repo",
+      "tags": ["core", "data"],
+      "summary": "Describes the shape of a codebase and points at what is worth a look: its size, the files nobody described, the imports that go up the layers, the largest files, and values that look like keys."
     },
     "src/repo/Ingest.ts": {
       "system": "server",
@@ -335,6 +377,12 @@
       "layer": "repo",
       "tags": ["core", "io"],
       "summary": "Remembers what each file looked like when its description was written, so a later update can tell which descriptions have gone stale."
+    },
+    "src/repo/Neighbours.ts": {
+      "system": "server",
+      "layer": "repo",
+      "tags": ["core"],
+      "summary": "Finds the files around one file: the chosen file, the files it imports, and the files that import it, outward by one step."
     },
     "src/repo/Next.ts": {
       "system": "server",
@@ -382,7 +430,7 @@
       "system": "server",
       "layer": "api",
       "tags": ["orchestrate", "io"],
-      "summary": "The endpoints for the architecture, the import graph, ingest status, next and refine, the tool list, the view stream, the selection, and the chat."
+      "summary": "The endpoints for the architecture, the import graph, a file's neighbours, the tool list, the view stream, flows, the health check, ingest status, next and refine, the selection, and the chat."
     },
     "src/server/Guard.ts": {
       "system": "server",
@@ -400,7 +448,7 @@
       "system": "server",
       "layer": "api",
       "tags": ["data"],
-      "summary": "The one list of what an agent can do with the map, including selecting several files at once, each as an HTTP call for hosts and the built-in chat."
+      "summary": "The one list of what an agent can do with the map, including its neighbours, health check, saved flows and tour, each as an HTTP call for hosts and the built-in chat."
     },
     "src/server/View.ts": {
       "system": "server",
@@ -456,6 +504,12 @@
       "tags": ["test"],
       "summary": "Tests the pure filter and search rules behind the map's outliner."
     },
+    "tests/Flows.test.ts": {
+      "system": "meta",
+      "layer": "tests",
+      "tags": ["test"],
+      "summary": "Checks a flow is trimmed and checked, the tour begins at an entry and follows its imports, and the flows endpoints save, show, and delete."
+    },
     "tests/Graph.test.ts": {
       "system": "meta",
       "layer": "tests",
@@ -467,6 +521,12 @@
       "layer": "tests",
       "tags": ["test"],
       "summary": "Tests which requests may read or write through the server, and how request bodies are read."
+    },
+    "tests/Health.test.ts": {
+      "system": "meta",
+      "layer": "tests",
+      "tags": ["test"],
+      "summary": "Checks the health survey counts a codebase and names its largest files and layer breaks, and that the secret scan finds key-shaped values without returning them."
     },
     "tests/Ingest.test.ts": {
       "system": "meta",
@@ -485,6 +545,12 @@
       "layer": "tests",
       "tags": ["test"],
       "summary": "Tests the one write path: whole writes with no temporary file left, and a .codespace path that is a file being refused untouched."
+    },
+    "tests/Neighbours.test.ts": {
+      "system": "meta",
+      "layer": "tests",
+      "tags": ["test"],
+      "summary": "Checks a neighbourhood walks imports both ways by one step, caps its size, and clamps the depth asked for."
     },
     "tests/Pinned.test.ts": {
       "system": "meta",
@@ -532,7 +598,7 @@
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests that the tool list is well formed, is served, reaches the chat, and that every listed tool, including select, answers through the real server."
+      "summary": "Tests that the tool list is well formed, is served, reaches the chat, and that every listed tool, including flows and health, answers through the real server."
     },
     "tests/Update.test.ts": {
       "system": "meta",

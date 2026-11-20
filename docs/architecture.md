@@ -152,7 +152,8 @@ the two trees cannot drift.
   same way with `{"action": "select", "files": [...]}`.
 - A shown route draws the imports between its own files as thin blue wires under the green steps, so
   the route is also a line graph; opening a step adds that file's own wires beside it. Choosing a
-  file frames it by its height, so a small box and its block stack are close enough to read.
+  file frames its box and block stack together, and choosing one of its blocks frames that floor,
+  so a small box, a tall stack, or a thin block is close enough to read.
 - An import that points up the layers (a lower layer using a higher one) is a thin red line
   on the folder plates, from the importing file's tether foot to the imported file's.
 - A tool can ask the map to show files with an explanation of each, which appears in the

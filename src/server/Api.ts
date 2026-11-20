@@ -2,7 +2,11 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Chat } from '../agent/Chat.ts'
 import { Architecture, type IArchitecturePatch } from '../repo/Architecture.ts'
 import { DescribeGuide } from '../repo/DescribeGuide.ts'
+import { DraftTour, NormaliseFlow, ReadFlowsAsync, WriteFlowsAsync } from '../repo/Flows.ts'
 import { Graph } from '../repo/Graph.ts'
+import { ScanSecretsAsync, Survey } from '../repo/Health.ts'
+import { JsonStore } from '../repo/JsonStore.ts'
+import { Neighbours } from '../repo/Neighbours.ts'
 import { ClampSize, DefaultBatch, StatusAsync } from '../repo/Ingest.ts'
 import { Ledger } from '../repo/Ledger.ts'
 import { TakeNextAsync } from '../repo/Next.ts'
@@ -14,6 +18,9 @@ import { ReadJsonAsync, RefuseOutside, RefuseWrite, SendJson } from './Guard.ts'
 import { MapTools, RepoQueryDescription, type IToolList } from './Tools.ts'
 import type { IShownFile } from './View.ts'
 import type { Workspace } from './Workspace.ts'
+import { MaxFlows } from '../../public/flows.ts'
+import type { IHealthAnswer } from '../../public/health.ts'
+import { ClampNeighbourDepth } from '../../public/neighbours.ts'
 import type { IIngestStatus } from '../../public/ingest.ts'
 
 /** The endpoints tools and the page use to read the architecture and change what the map shows. */
@@ -98,6 +105,41 @@ export class Api
             const size = ClampSize(url.searchParams.get('size'), DefaultRefineSize)
             SendJson(response, 200, { name: repo.Name, root: repo.Root, ...Refine(architecture, (await Snapshot.ReadAsync(repo)).edges, size) })
         }
+        else if (path === '/api/health' && reading)
+        {
+            const repo = workspace.repo
+            const snapshot = await Snapshot.ReadAsync(repo)
+            const architecture = await Architecture.ReadAsync(repo.Root, snapshot.files)
+            const report = Survey(architecture, snapshot.edges, snapshot.lines, snapshot.files)
+            const scan = await ScanSecretsAsync(snapshot.files, (file) => repo.ReadFileAsync(file))
+            const answer: IHealthAnswer = { ...report, secrets: scan.findings, scanned: scan.scanned }
+            SendJson(response, 200, { ok: true, ...answer })
+        }
+        else if (path === '/api/neighbours' && reading)
+        {
+            const snapshot = await Snapshot.ReadAsync(workspace.repo)
+            const file = url.searchParams.get('path') ?? ''
+            if (!snapshot.files.includes(file)) { SendJson(response, 400, { error: `"${file}" is not a file in the repository.` }); return true }
+            const depth = ClampNeighbourDepth(url.searchParams.get('depth'))
+            const neighbours = Neighbours(snapshot.edges, file, depth)
+            SendJson(response, 200, { ok: true, path: file, depth, paths: neighbours.map((item) => item.path), neighbours })
+        }
+        else if (path === '/api/flows' && reading)
+        {
+            try
+            {
+                const repo = workspace.repo
+                const draft = url.searchParams.get('draft')
+                if (draft !== null && draft !== '0' && draft !== 'false')
+                {
+                    const snapshot = await Snapshot.ReadAsync(repo)
+                    const architecture = await Architecture.ReadAsync(repo.Root, snapshot.files)
+                    SendJson(response, 200, { ok: true, flow: DraftTour(architecture, snapshot.edges, repo.Name) })
+                }
+                else SendJson(response, 200, { ok: true, flows: await ReadFlowsAsync(repo.Root) })
+            }
+            catch (error) { SendJson(response, 400, { error: (error as Error).message }) }
+        }
         else if (path === '/api/view' && reading) SendJson(response, 200, { shown: view.Shown, isolated: view.Isolated, selected: view.Selected })
         else if (path === '/api/view/events' && reading) view.Subscribe(response, RefuseOutside(request, this.allowWrites) === null)
         else if (path === '/api/chat' && (this.chat === null || workspace.pinned)) SendJson(response, 404, { error: this.chat === null ? 'This server was started without the chat.' : "The chat reads only the server's own repository, not one opened with ?repo=." })
@@ -112,7 +154,7 @@ export class Api
             try { await this.ChangeChatAsync(chat, await ReadJsonAsync(request)); SendJson(response, 200, { ok: true }) }
             catch (error) { SendJson(response, 400, { error: (error as Error).message }) }
         }
-        else if ((path === '/api/architecture' || path === '/api/view' || path === '/api/ingest/next') && request.method === 'POST')
+        else if ((path === '/api/architecture' || path === '/api/view' || path === '/api/flows' || path === '/api/ingest/next') && request.method === 'POST')
         {
             const refusal = RefuseWrite(request, this.allowWrites)
             if (refusal !== null) { SendJson(response, 403, { error: refusal }); return true }
@@ -122,6 +164,7 @@ export class Api
             try
             {
                 if (path === '/api/architecture') await this.UpdateArchitectureAsync(response, body, workspace)
+                else if (path === '/api/flows') await this.ChangeFlowsAsync(response, body, workspace)
                 else if (path === '/api/ingest/next') await this.SendNextAsync(response, body, workspace)
                 else await this.ChangeViewAsync(response, body, workspace)
             }
@@ -172,6 +215,56 @@ export class Api
         const batch = await TakeNextAsync(repo, ClampSize(body.size, DefaultBatch))
         workspace.view.ArchitectureChanged()
         SendJson(response, 200, { name: repo.Name, root: repo.Root, ...batch })
+    }
+
+    /**
+     * Saves, deletes, or shows one saved flow. Showing a flow lights its files the way a tool's show
+     * does, so every open page follows it.
+     * @param response the response to write
+     * @param body the request, as sent
+     * @param workspace the repository whose flows it changes
+     */
+    private async ChangeFlowsAsync(response: ServerResponse, body: Record<string, unknown>, workspace: Workspace): Promise<void>
+    {
+        const repo = workspace.repo
+        const name = typeof body.name === 'string' ? body.name.trim() : ''
+        if (body.action === 'save')
+        {
+            const flow = NormaliseFlow(body.flow, new Set(await repo.ListFilesAsync()))
+            const flows = await JsonStore.RunAsync(repo.Root, async () =>
+            {
+                const current = await ReadFlowsAsync(repo.Root)
+                const next = [...current.filter((item) => item.name.toLowerCase() !== flow.name.toLowerCase()), flow]
+                if (next.length > MaxFlows) throw new Error(`A repository keeps at most ${MaxFlows} flows; delete one first.`)
+                await WriteFlowsAsync(repo.Root, next)
+                return next
+            })
+            SendJson(response, 200, { ok: true, saved: flow.name, flows })
+        }
+        else if (body.action === 'delete')
+        {
+            if (name === '') throw new Error('Give the flow to delete as "name".')
+            const result = await JsonStore.RunAsync(repo.Root, async () =>
+            {
+                const current = await ReadFlowsAsync(repo.Root)
+                const next = current.filter((item) => item.name.toLowerCase() !== name.toLowerCase())
+                const removed = next.length !== current.length
+                if (removed) await WriteFlowsAsync(repo.Root, next)
+                return { flows: next, removed }
+            })
+            SendJson(response, 200, { ok: true, deleted: result.removed, flows: result.flows })
+        }
+        else if (body.action === 'show')
+        {
+            if (name === '') throw new Error('Give the flow to show as "name".')
+            const flows = await ReadFlowsAsync(repo.Root)
+            const flow = flows.find((item) => item.name.toLowerCase() === name.toLowerCase())
+            if (flow === undefined) throw new Error(`There is no flow named "${name}".`)
+            const checked = NormaliseFlow(flow, new Set(await repo.ListFilesAsync()))
+            workspace.view.Show({ files: checked.files, trace: checked.trace, title: checked.title, note: checked.note })
+            SendJson(response, 200, { ok: true, shown: checked.files.length, unknown: [] })
+        }
+        else throw new Error('action must be "save", "delete", or "show".')
     }
 
     /**

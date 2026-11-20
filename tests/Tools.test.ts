@@ -27,6 +27,10 @@ function argumentsFor(tool: IMapTool, other: string): Record<string, unknown>
         case 'blocks': return { path: 'src/a.ts' }
         case 'graph': return { folder: 'src' }
         case 'show': return { trace: true, title: 'A route', files: [{ path: 'src/a.ts', note: 'First.' }, { path: 'src/b.ts', note: 'Second.' }] }
+        case 'neighbours': return { path: 'src/a.ts', depth: 1 }
+        case 'tour': return { draft: true }
+        case 'save_flow': return { flow: { name: 'Tool test', title: 'A flow', trace: true, files: [{ path: 'src/a.ts', note: 'First.' }, { path: 'src/b.ts', note: 'Second.' }] } }
+        case 'show_flow': case 'delete_flow': return { name: 'Tool test' }
         case 'isolate': return { files: ['src/a.ts'] }
         case 'select': return { files: ['src/a.ts', 'src/b.ts'] }
         case 'focus': return { path: 'src' }

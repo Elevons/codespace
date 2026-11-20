@@ -156,6 +156,30 @@ On the page, shift-click a file row in the Outliner, or a file box on the map, t
 selection or take it out. The file chosen first stays the one whose block stack is open; the rest
 are listed under it, with a cross to remove each one.
 
+### Insights: recent work, flows, and a health check
+
+The Insights button opens a panel with three tabs, and each answer is also an endpoint:
+
+- **Recent** lists `/api/changes` — each file changed since `HEAD`, with its line count — and
+  can show or isolate them. Nothing new is read for it.
+- **Flows** are saved views: a name, a title, a note, and files in order with a note each, kept
+  at `.codespace/flows.json` in the repository they describe, so a flow travels with the repo and
+  is drawn the same way on every page. `GET /api/flows` lists them; `POST /api/flows` with
+  `{"action":"save","flow"}`, `{"action":"show","name"}`, or `{"action":"delete","name"}` keeps,
+  draws, or removes one. `GET /api/flows?draft=1` drafts a **start-here tour** from the
+  descriptions: the files tagged `entry` first, then their imports, one step per file, with each
+  step's note taken from that file's summary. Save it as `start-here` to keep it. A flow's paths
+  are checked against the repository whenever it is saved or shown, so it never lies about a file
+  that has gone.
+- **Health** is `GET /api/health`: the size of the codebase, the files still undescribed, the
+  imports that go up the layers (the same rule as `refine`), the largest files, and values that
+  look like keys in files a browser can read. The secret scan is a pattern, not proof: a key that
+  is public on purpose is reported too. It decides nothing; each item is a place to look.
+
+A **neighbourhood** is `GET /api/neighbours?path=…&depth=1|2`: the file, what it imports, and
+what imports it, ordered by distance. The file panel's Neighbourhood button isolates that set —
+the honest answer to "what does this part of the app touch" without guessing at frameworks.
+
 Reading, for finding the right files and steps before you show them:
 
 | Endpoint | Returns |
@@ -165,9 +189,13 @@ Reading, for finding the right files and steps before you show them:
 | `GET /api/files` | every repository-relative file path the map knows |
 | `GET /api/architecture` | the architecture file: layers, systems, and each file's summary, tags, and layer |
 | `GET /api/graph?folder=src` | the import edges, optionally only those under a folder |
+| `GET /api/neighbours?path=src/a.ts&depth=1` | one file and the files around it, by one or two steps |
 | `GET /api/source?path=src/a.ts` | one file's text |
 | `GET /api/blocks?path=src/a.ts` | one file's blocks: its declarations and groups, each with a summary, a kind, a line range, and the blocks it refers to |
 | `GET /api/changes` | each file changed since `HEAD`, with how many lines changed |
+| `GET /api/health` | the codebase's size, largest files, layer breaks, undescribed files, and key-shaped values |
+| `GET /api/flows` | the saved flows; `?draft=1` drafts a start-here tour instead |
+| `POST /api/flows` | `{"action":"save","flow"}`, `{"action":"show","name"}`, or `{"action":"delete","name"}` |
 | `GET /api/ingest/status` | how much is left to describe and to refine |
 | `POST /api/ingest/next` | `{"size": n}`: the CLI's `next` over HTTP (it can settle generated files, so it is a write) |
 | `GET /api/ingest/refine?size=n` | the CLI's `refine` over HTTP |
@@ -176,7 +204,7 @@ Reading, for finding the right files and steps before you show them:
 Read one file as its blocks when you need to explain how the file itself is put together. Choosing a file
 opens its **file box** into its **block stack**: one **floor** per block, on the box's own footprint and
 1.5× its height, and the **block rail** in the info panel lists the same blocks with their summaries and line
-ranges. Choosing a rail row or a floor opens that block's lines, keeps the import wires its own text
+ranges. Choosing a rail row or a floor frames that block's floor and opens its lines, keeps the import wires its own text
 names bright and starting from that floor, and dims the rest. An import into an open file ends at
 the block that declares the name the importing file takes, so its wire meets that block rather
 than the middle of the file. The blocks are read on demand, when the
@@ -209,7 +237,7 @@ own that forwards the call (a GET sends the arguments as query values, a POST se
 endpoint an agent should use, add or change its entry in `MapTools` in the same change**; `tests/Tools.test.ts`
 calls every listed tool through the real server.
 
-Writes (`POST /api/view`, `POST /api/repo`, `POST /api/ingest/next`, `POST`/`DELETE /api/architecture`) are accepted from
+Writes (`POST /api/view`, `POST /api/repo`, `POST /api/flows`, `POST /api/ingest/next`, `POST`/`DELETE /api/architecture`) are accepted from
 this machine through `localhost` only, unless the server was started with `--allow-writes`; a
 refused write answers 403 with the reason.
 
@@ -230,16 +258,20 @@ machine as `chat` events on the view stream. Chats and pi's settings live in `~/
 - `src/cli/` — the commands an agent runs to describe a repository, and `Options.ts` for reading their flags.
 - `src/repo/` — reading a repository, its architecture file, the import graph, and
   what to ingest next (`Next.ts` is the one `next`, shared by the CLI and the API), and its files'
-  blocks on demand (`Blocks.ts`). No HTTP in here. `DescribeGuide.ts`, `JsonStore.ts`, and `ShowLimits.ts`
-  hold the first-pass instructions, the repository-scoped JSON access, and the show limits.
+  blocks on demand (`Blocks.ts`). `Flows.ts` keeps saved views and drafts the tour, `Health.ts` makes
+  the health report and the secret scan, and `Neighbours.ts` walks the files around one file. No HTTP in here.
+  `DescribeGuide.ts`, `JsonStore.ts`, and `ShowLimits.ts` hold the first-pass instructions, the
+  repository-scoped JSON access, and the show limits.
 - `src/server/` — the HTTP server, the endpoints, the tool list (`Tools.ts`), the view stream,
   the write guard, and the switchable workspace.
 - `src/agent/` — the built-in chat: its pi agent, what that agent is told, and which model it uses.
 - `public/` — the browser side: the 3D city, the Outliner with its system/layer filters,
-  the panels and controls, the chat, and the phone sheet. `public/endpoint.ts` builds every API address. `public/filter.ts`, `public/rules.ts`, and
+  the panels and controls, the chat, and the phone sheet. `insight.ts` is the Insights panel
+  (recent work, flows, health), and `neighbourhood.ts` isolates the files around one file. `public/endpoint.ts` builds every API address. `public/filter.ts`, `public/rules.ts`, and
   `public/symbols.ts` hold the pure filter, layout/visibility, and symbol rules; `public/blocks.ts` holds
   the block kinds, colours, and the rule that stacks blocks into floors, and `public/floors.ts` draws them;
-  `public/tags.ts` is the one tag vocabulary the server shares.
+  `public/flows.ts`, `public/health.ts`, and `public/neighbours.ts` hold the shapes and limits the page and
+  the server share; `public/tags.ts` is the one tag vocabulary the server shares.
 - `tests/` — one test file per piece of the server side, plus the dependency-free browser
   helpers; run `npm test`.
 - `docs/` — architecture file details, the review rubric, and deferred ideas.

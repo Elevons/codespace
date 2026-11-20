@@ -2,6 +2,7 @@ import { S, camera, colorFor, colorForSystem, copyText, frameFile, frameFolder, 
 import { folderColor, folderOf, labelFor } from "./rules.js";
 import { ancestorFolders, foldersToKeepOpen, matchesQueryTerms, queryTerms } from "./filter.js";
 import { displayName, readBlockSummaries, readBlocks, readSource } from "./repo.js";
+import { showNeighbourhood } from "./neighbourhood.js";
 import { blockColor, type BlockInfo, type IBlocksReport } from "./blocks.js";
 import type { FileSpot, GroupAxis } from "./types.js";
 /* --------------------------------------------------------------- panels ---- */
@@ -186,6 +187,7 @@ function selectFile(nodeIndex: number, fileIndex: number): void
       '<div class="chosen-name open" data-openpath="' + escapeHtml(path) + '">' + escapeHtml(path.split("/").pop()!) + "</div>" +
       '<div class="chosen-meta">' + (lines ? lines + " lines · " : "") +
       "uses " + uses + " · used by " + usedBy + "</div>" +
+      '<div class="chosen-acts"><button type="button" class="chosen-act" data-neighbourhood="' + escapeHtml(path) + '" title="Keep only this file and what it imports or is imported by">Neighbourhood</button></div>' +
       (tags ? '<div class="chosen-tags">' + escapeHtml(tags.join(" · ")) + "</div>" : "") +
       (summary ? '<div class="chosen-sum">' + escapeHtml(summary) + "</div>" : "") +
     "</div>" +
@@ -231,7 +233,19 @@ async function showBlocks(path: string): Promise<void>
     box.innerHTML = '<p class="hint">No blocks found.</p>';
     return;
   }
-  S.BLOCKS.set(path, report);
+  // The file may be read again on a second choice. Keep the report already on the map when the
+  // blocks the floors read are the same, so the stack keeps its geometry instead of rebuilding
+  // and reopening; a change to a kind or a span still rebuilds.
+  const known = S.BLOCKS.get(path);
+  const unchanged = known !== undefined && known.lines === report.lines && known.blocks.length === report.blocks.length &&
+    known.blocks.every((block, at) =>
+    {
+      const fresh = report!.blocks[at];
+      return block.name === fresh.name && block.kind === fresh.kind && block.line === fresh.line &&
+        block.endLine === fresh.endLine && block.depth === fresh.depth && block.parent === fresh.parent &&
+        block.exported === fresh.exported && (block.members?.join("\u0000") ?? "") === (fresh.members?.join("\u0000") ?? "");
+    });
+  if (!unchanged) S.BLOCKS.set(path, report);
   box.innerHTML = railHtml(report);
   render();
   // The chosen file's wires can now meet its floors rather than its whole box.
@@ -372,6 +386,8 @@ document.getElementById("info")!.addEventListener("click", (event) =>
     toggle.setAttribute("aria-expanded", String(!statsCollapsed));
     return;
   }
+  const around = target.closest("[data-neighbourhood]") as HTMLElement | null;
+  if (around) { void showNeighbourhood(around.dataset.neighbourhood!); return; }
   const extra = target.closest("[data-extra]") as HTMLElement | null;
   if (extra)
   {

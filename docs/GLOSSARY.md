@@ -53,6 +53,21 @@ interface, in the code, and in a description of the map; they name one thing eac
 - **open a block** — show one block's lines in the code panel, numbered as they are in the file.
 - **show** and **isolate** — the two things a tool asks the map to draw, unchanged by blocks.
 
+## Looking from above
+
+- **insights** — the panel beside the map with three answers: recent work, flows, and the health check.
+- **recent work** — the files that differ from the last commit, with how many lines changed.
+- **flow** — a saved view of the map: a name, a title, a note, and files in order with a note each,
+  kept at `.codespace/flows.json` in the repository it describes. Showing a flow is a `show` like
+  any other, so every open page follows it, and a file may appear more than once.
+- **start-here tour** — a flow drafted from the architecture file: the files tagged `entry` first,
+  then their imports, one step per file, with each step's note taken from that file's summary.
+- **health check** — a checklist about the shape of the codebase, not its behaviour: its size, the
+  imports that go up the layers, the largest files, the files still undescribed, and values that
+  look like keys. It points; it decides nothing.
+- **neighbourhood** — one file with the files it imports and the files that import it, by one or
+  two steps. It is what the file panel's Neighbourhood button isolates.
+
 ## Words to avoid
 
 - "symbol" for a block: a symbol is one declared name, and blocks group several.

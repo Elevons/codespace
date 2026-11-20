@@ -1,6 +1,6 @@
-import { S, V3, camera, scene, filePath, materialFor, renderEdges } from "./state.js";
+import { S, V3, camera, scene, filePath, materialFor, renderEdges, frameBlock, frameFile } from "./state.js";
 import { rayBox } from "./rules.js";
-import { blockColor, stackLayout, type BlockInfo, type IBlocksReport, type IFloor } from "./blocks.js";
+import { blockColor, STACK_SCALE, stackLayout, type BlockInfo, type IBlocksReport, type IFloor } from "./blocks.js";
 
 /**
  * A chosen file opened into floors. The file's cube shrinks to the height of its lowest block
@@ -22,6 +22,9 @@ let slabs: Slab[] = [];
 /** The stack currently built, by the file and the blocks it holds, so a re-choice rebuilds it. */
 let openKey = "";
 
+/** The report the slabs were built from, so a re-read report with new block objects rebuilds them. */
+let openReport: IBlocksReport | null = null;
+
 /** The path whose cube is hidden behind the stack, so its accent can come back when it closes. */
 let hiddenPath = "";
 
@@ -30,9 +33,6 @@ let opened = 0;
 
 /** Which block the wires were last built for, so a new choice rebuilds them with its own anchor. */
 let lastChosenBlock = -1;
-
-/** How much taller the block stack is than the file cube, so small blocks still read. */
-const StackScale = 1.5;
 
 /** How long the cube takes to shrink into its lowest block, in seconds. */
 const ShrinkTime = 0.18;
@@ -55,10 +55,13 @@ export function syncFloors(seconds = 1 / 60): void
   if (rec === undefined || report === undefined || report.blocks.length === 0) { closeFloors(); return; }
 
   const key = path + "|" + report.blocks.map((block) => block.name + ":" + block.line + "-" + block.endLine).join("|");
-  if (key !== openKey)
+  // The floors are keyed by the report's own block objects, so a report read again must rebuild
+  // them even when its text is the same: otherwise no slab finds its floor and the stack freezes.
+  if (key !== openKey || report !== openReport)
   {
     build(report);
     openKey = key;
+    openReport = report;
     opened = 0;
     // The new floors' anchors are worked out below; rebuild the wires once this frame has them.
     renderEdges();
@@ -71,7 +74,7 @@ export function syncFloors(seconds = 1 / 60): void
   const position = rec.shape.position, scaling = rec.shape.scaling;
   const width = scaling.x, depth = scaling.z, height = scaling.y;
   const base = position.y - height / 2;
-  const totalHeight = height * StackScale;
+  const totalHeight = height * STACK_SCALE;
   const floors = stackLayout(report.blocks, totalHeight);
   floorsByBlock = new Map(floors.map((floor) => [floor.block, floor]));
   const order = new Map(floors.map((floor, at) => [floor.block, at]));
@@ -138,16 +141,26 @@ export function syncFloors(seconds = 1 / 60): void
     user: AnchorOf(floors, "user", position, width, base),
     used: AnchorOf(floors, "used", position, width, base),
     chosen: chosenFloor === undefined ? null : points.get(chosenFloor.block.name) ?? null,
+    chosenBox: chosenFloor === undefined ? null : {
+      center: new V3(position.x, base + chosenFloor.center, position.z),
+      size: new V3(width * 0.98, Math.max(0.004, chosenFloor.thickness * SlabFill), depth * 0.98),
+    },
     points,
     kinds,
   };
 
-  // The chosen block's own wire anchor was just worked out, so the wires can start from it. This
-  // runs a frame after the choice, once the floor's place is known, so a wire never starts late.
+  // The chosen block's own wire anchor was just worked out, so the wires can start from it, and
+  // the camera can frame its floor. This runs a frame after the choice, once the floor's place is
+  // known, so neither starts late.
   if (S.selectedBlock !== lastChosenBlock)
   {
+    const choseBlock = S.selectedBlock >= 0 && chosenFloor !== undefined;
+    const closedBlock = S.selectedBlock < 0 && lastChosenBlock >= 0;
     lastChosenBlock = S.selectedBlock;
     renderEdges();
+    if (choseBlock) frameBlock(rec);
+    // Closing a block returns to the whole stack, so the file does not stay framed on one sliver.
+    else if (closedBlock) frameFile(rec);
   }
 }
 
@@ -181,7 +194,7 @@ export function pickFloor(x: number, y: number): number | null
   if (rec === undefined) return null;
   const position = rec.shape.position, scaling = rec.shape.scaling;
   const base = position.y - scaling.y / 2;
-  const top = base + scaling.y * StackScale;
+  const top = base + scaling.y * STACK_SCALE;
   const ray = scene.createPickingRay(x, y, BABYLON.Matrix.IdentityReadOnly, camera);
   const t = rayBox(ray.origin, ray.direction,
     position.x - scaling.x / 2, position.x + scaling.x / 2,
@@ -238,6 +251,7 @@ function closeFloors(): void
   floorsByBlock = new Map();
   if (openKey === "" && restore === "") return;
   openKey = "";
+  openReport = null;
   hiddenPath = "";
   opened = 0;
   S.floorAnchors = null;

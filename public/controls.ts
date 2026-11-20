@@ -1,4 +1,4 @@
-import { S, camera, DEFAULT_ALPHA, filePath, frameFile, frameFolder, glow, hasFilters, isFileVisible, matchesTagFilter, render, renderEdges, fileIndex, pathIndex, sliceValue } from "./state.js";
+import { S, camera, DEFAULT_ALPHA, filePath, frameBlock, frameFile, frameFolder, glow, hasFilters, isFileVisible, matchesTagFilter, render, renderEdges, fileIndex, pathIndex, sliceValue } from "./state.js";
 import { api } from "./endpoint.js";
 import { build } from "./city.js";
 import { centerView, recenterTarget, pulseFile } from "./meshes.js";
@@ -240,14 +240,14 @@ function resetView(): void
   select(-1);
 }
 
-// Glides to the chosen folder or file, close enough to read it.
+// Glides to the chosen block, else the chosen file, else the chosen folder, close enough to read it.
 function frameSelection(): void
 {
   if (S.selected < 0) return;
   if (S.selectedFile >= 0)
   {
     const rec = S.fileRecords.get(filePath(S.selected, S.selectedFile));
-    if (rec) frameFile(rec);
+    if (rec && (S.selectedBlock < 0 || !frameBlock(rec))) frameFile(rec);
     return;
   }
   frameFolder(S.NODES[S.selected], camera.radius);

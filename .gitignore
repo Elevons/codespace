@@ -10,3 +10,6 @@ batch.json
 
 # What each description in .codespace/architecture.json was based on; it holds file times, so it is per machine.
 .codespace/ingested.json
+
+# The code map trail builds; it is per machine and regenerated.
+graft/

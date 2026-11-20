@@ -28,7 +28,7 @@ function renderShowing(): void
     return "<li>" + (shown.trace ? '<span class="step">' + (step + 1) + "</span>" : '<span class="dot"></span>') +
       "<div>" + (known.has(path) ? '<a href="#" class="path" data-path="' + escapeHtml(path) + '">' + escapeHtml(path) + "</a>" : "<code>" + escapeHtml(path) + "</code>") +
       (summary ? '<p class="summary">' + escapeHtml(summary) + "</p>" : "") +
-      (note ? (summary ? "<hr>" : "") + '<p class="what">' + escapeHtml(note) + "</p>" : "") + "</div></li>";
+      (note !== "" && note !== summary ? (summary ? "<hr>" : "") + '<p class="what">' + escapeHtml(note) + "</p>" : "") + "</div></li>";
   });
   body.innerHTML = (shown.title ? "<h3>" + escapeHtml(shown.title) + "</h3>" : "") +
     (shown.note ? '<p class="about">' + escapeHtml(shown.note) + "</p>" : "") +

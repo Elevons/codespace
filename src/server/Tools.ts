@@ -1,6 +1,8 @@
 import { DefaultBatch, MaxBatchSize } from '../repo/Ingest.ts'
 import { DefaultRefineSize } from '../repo/Refine.ts'
 import { MaxFileNote, MaxNote, MaxShown, MaxTitle } from '../repo/ShowLimits.ts'
+import { MaxFlowName } from '../../public/flows.ts'
+import { MaxNeighbourDepth } from '../../public/neighbours.ts'
 import { TAG_VOCABULARY } from '../../public/tags.ts'
 
 /** A JSON Schema for one tool's arguments. */
@@ -116,6 +118,26 @@ export const MapTools: readonly IMapTool[] = [
         description: 'Returns each file that changed after the last commit, with the number of changed lines. Outside git, the list is empty.',
     },
     {
+        name: 'health', method: 'GET', path: '/api/health', writes: false, parameters: NoArguments,
+        description: `Returns the shape of the codebase: its files, lines, and imports, the imports that go up the layers,
+the largest files, the files without a description, and values that look like keys in files that a browser can read.
+It decides nothing: each item is a place to look.`,
+    },
+    {
+        name: 'neighbours', method: 'GET', path: '/api/neighbours', writes: false,
+        description: `Returns one file and the files around it: the files that it imports and the files that import it.
+With depth 2, it also returns their neighbours. The answer is ordered by distance. Use it to see the small part of
+a repository that one file belongs to.`,
+        parameters: {
+            type: 'object',
+            properties: {
+                path: PathArgument('The file path, relative to the repository root.'),
+                depth: { type: 'integer', minimum: 1, maximum: MaxNeighbourDepth, description: `How many steps out to walk. The default is 1. The maximum is ${MaxNeighbourDepth}.` },
+            },
+            required: ['path'], additionalProperties: false,
+        },
+    },
+    {
         name: 'shown', method: 'GET', path: '/api/view', writes: false, parameters: NoArguments,
         description: 'Returns the files that the map shows now and the files that it isolates. If the map shows no files, shown is null. If it isolates no files, isolated is null.',
     },
@@ -193,6 +215,63 @@ Limits: ${MaxShown} files.`,
     {
         name: 'clear', method: 'POST', path: '/api/view', fixed: { action: 'clear' }, writes: true, parameters: NoArguments,
         description: 'Removes all files that the map shows.',
+    },
+    {
+        name: 'flows', method: 'GET', path: '/api/flows', writes: false, parameters: NoArguments,
+        description: 'Returns the flows that the repository keeps. A flow is a list of files in order, with a note on each, that the map can show again as a route.',
+    },
+    {
+        name: 'tour', method: 'GET', path: '/api/flows', writes: false,
+        description: `Drafts a tour to start with, from the descriptions that the architecture file already has.
+It starts at the files with the entry tag, then follows their imports out, one file at a time. The answer is a flow that is not saved.
+Save it with save_flow to keep it. The answer is null when too few files have a description.`,
+        parameters: {
+            type: 'object',
+            properties: { draft: { type: 'boolean', description: 'Set true to draft a tour instead of listing the saved flows.' } },
+            required: ['draft'], additionalProperties: false,
+        },
+    },
+    {
+        name: 'save_flow', method: 'POST', path: '/api/flows', fixed: { action: 'save' }, writes: true,
+        description: `Saves a flow under its name, and replaces a flow with the same name.
+Every path must be a file in the repository. Use show_flow to draw it on the map.`,
+        parameters: {
+            type: 'object',
+            properties: {
+                flow: {
+                    type: 'object',
+                    properties: {
+                        name: { type: 'string', maxLength: MaxFlowName, description: 'The name to save the flow under.' },
+                        title: { type: 'string', maxLength: MaxTitle, description: 'The heading the map shows above the steps.' },
+                        note: { type: 'string', maxLength: MaxNote, description: 'One or two sentences about the whole flow.' },
+                        trace: { type: 'boolean', description: 'Set true to show the steps as a numbered route.' },
+                        files: {
+                            type: 'array', minItems: 1, maxItems: MaxShown,
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    path: PathArgument('The file path, relative to the repository root.'),
+                                    note: { type: 'string', maxLength: MaxFileNote, description: 'What happens in this file at this step.' },
+                                },
+                                required: ['path'], additionalProperties: false,
+                            },
+                        },
+                    },
+                    required: ['name', 'files'], additionalProperties: false,
+                },
+            },
+            required: ['flow'], additionalProperties: false,
+        },
+    },
+    {
+        name: 'show_flow', method: 'POST', path: '/api/flows', fixed: { action: 'show' }, writes: true,
+        description: 'Draws one saved flow on the map, as a route or as a set of highlighted files. Every open page follows it.',
+        parameters: { type: 'object', properties: { name: { type: 'string', maxLength: MaxFlowName, description: 'The name of the flow.' } }, required: ['name'], additionalProperties: false },
+    },
+    {
+        name: 'delete_flow', method: 'POST', path: '/api/flows', fixed: { action: 'delete' }, writes: true,
+        description: 'Deletes one saved flow. The answer lists the flows that remain.',
+        parameters: { type: 'object', properties: { name: { type: 'string', maxLength: MaxFlowName, description: 'The name of the flow.' } }, required: ['name'], additionalProperties: false },
     },
     {
         name: 'ingest_status', method: 'GET', path: '/api/ingest/status', writes: false, parameters: NoArguments,

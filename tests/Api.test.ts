@@ -48,7 +48,7 @@ test('Changes are refused from another host, another site, or without JSON', asy
     try
     {
         const change = { files: { 'src/a.ts': { layer: 'ui' } } }
-        assert.equal((await request(port, 'POST', '/api/architecture', change, { Host: 'my-laptop.example:8443' })).status, 403)
+        assert.equal((await request(port, 'POST', '/api/architecture', change, { Host: 'my-laptop.tail1234.ts.net:8443' })).status, 403)
         assert.equal((await request(port, 'POST', '/api/architecture', change, { Origin: 'https://evil.example' })).status, 403)
         assert.equal((await request(port, 'POST', '/api/view', { action: 'clear' }, { 'Content-Type': 'text/plain' })).status, 403)
 
@@ -184,7 +184,7 @@ test('Deleting the architecture removes the folder, and is refused from another 
     try
     {
         const json = { 'Content-Type': 'application/json' }
-        assert.equal((await request(port, 'DELETE', '/api/architecture', undefined, { ...json, Host: 'my-laptop.example:8443' })).status, 403)
+        assert.equal((await request(port, 'DELETE', '/api/architecture', undefined, { ...json, Host: 'my-laptop.tail1234.ts.net:8443' })).status, 403)
 
         const result = await request(port, 'DELETE', '/api/architecture', undefined, { ...json, Host: `localhost:${port}` })
         assert.equal(result.status, 200)

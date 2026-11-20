@@ -32,6 +32,18 @@
     </div>
     <div id="showing-body"></div>
   </section>
+  <section class="panel" id="insight" hidden>
+    <div id="insight-head">
+      <h2 class="panel-title">Insights</h2>
+      <div id="insight-tabs" role="tablist" aria-label="Insight">
+        <button type="button" data-itab="recent" role="tab" aria-selected="true">Recent</button>
+        <button type="button" data-itab="flows" role="tab" aria-selected="false">Flows</button>
+        <button type="button" data-itab="health" role="tab" aria-selected="false">Health</button>
+      </div>
+      <button id="insight-close" type="button" title="Close the insights">Close</button>
+    </div>
+    <div id="insight-body"></div>
+  </section>
   <section class="panel empty" id="info">
     <h3>Click a block</h3>
     <p class="hint">Trace what a folder imports, and what imports it.</p>
@@ -92,6 +104,7 @@
   <div class="panel bar" id="tools">
     <button id="repo" type="button" title="Change the repository the map reads">Repo: …</button>
     <button id="chat-btn" type="button" title="Talk to the agent about this repository">Chat</button>
+    <button id="insight-btn" type="button" title="Recent changes, saved flows, and a health check">Insights</button>
     <button id="spin" class="on">Spin<span class="state">on</span></button>
     <button id="reset">Reset view</button>
     <button id="refresh">Refresh</button>
