@@ -39,6 +39,8 @@ function body(change: ViewChange): Record<string, unknown>
  */
 export async function changeView(change: ViewChange): Promise<void>
 {
+  // On a phone the button sits in a sheet over the map, so put the sheet away to show the change.
+  window.dispatchEvent(new Event("codespace:see-map"));
   // The server cannot take an empty selection, so clearing one is always this page's own change.
   const local = readOnly || (change.type === "select" && (change.files ?? []).length === 0);
   if (!local)

@@ -675,7 +675,7 @@
   #msheet, #mtabs, #mpeek { display: none; }
   body.phone #dock-bottom, body.phone #dock-left, body.phone #dock-right { display: none; }
 
-  body.phone #mtabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; position: fixed; z-index: 8; left: 0; right: 0; bottom: 0;
+  body.phone #mtabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; position: fixed; z-index: 8; left: 0; right: 0; bottom: 0;
     padding: 6px max(6px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
     background: rgba(13,17,23,.95); border-top: 1px solid #30363d; backdrop-filter: blur(10px); }
   #mtabs button { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
@@ -704,7 +704,7 @@
   #msheet-close svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   .mpane { display: none; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px 14px 16px; }
   #msheet[data-pane="files"] #mpane-files { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
-  #msheet[data-pane="filters"] #mpane-filters, #msheet[data-pane="details"] #mpane-details, #msheet[data-pane="view"] #mpane-view { display: block; }
+  #msheet[data-pane="filters"] #mpane-filters, #msheet[data-pane="details"] #mpane-details, #msheet[data-pane="insight"] #mpane-insight, #msheet[data-pane="view"] #mpane-view { display: block; }
 
   /* Panels inside a sheet lose their own card: the sheet is the card. */
   .mpane .panel { background: none; border: 0; border-radius: 0; box-shadow: none; backdrop-filter: none; padding: 0; max-height: none; overflow: visible; }
@@ -766,8 +766,20 @@
     color: #e6edf3; font-size: 14px; }
 
   /* Details: the chosen file or folder, in a size that reads at arm's length. */
-  #mpane-details #showing, #mpane-details #insight { position: static; width: auto; max-height: none; margin-bottom: 14px;
+  #mpane-details #showing { position: static; width: auto; max-height: none; margin-bottom: 14px;
     border: 1px solid #30363d; border-radius: 14px; }
+  /* Insights has a sheet of its own, so the panel fills it, and the sheet's own close replaces the panel's. */
+  #mpane-insight #insight { display: flex; min-height: 0; max-height: none; background: none; border: 0; box-shadow: none; backdrop-filter: none; }
+  #mpane-insight #insight-close, #mpane-insight #insight-head .panel-title { display: none; }
+  #mpane-insight #insight-head { padding: 0 0 10px; }
+  #mpane-insight #insight-tabs { gap: 6px; }
+  #mpane-insight #insight-tabs button { flex: 1 1 0; min-height: 40px; font-size: 14px; }
+  #mpane-insight #insight-body { padding: 10px 0 0; font-size: 14px; }
+  #mpane-insight .iact { min-height: 40px; padding: 6px 12px; font-size: 13.5px; }
+  #mpane-insight .iact.small { min-height: 32px; }
+  #mpane-insight .irow { padding: 10px 0; font-size: 13.5px; }
+  #mpane-insight #flow-name { min-height: 40px; font-size: 16px; }
+  #mpane-insight .hint { font-size: 13px; }
   #mpane-details #info { font-size: 15px; padding: 0; }
   #mpane-details #info h3 { font-size: 17px; }
   #mpane-details #info ul { font-size: 14px; }

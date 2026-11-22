@@ -229,6 +229,27 @@ test('Changes counts the lines a git checkout has changed, and is empty outside 
     finally { await removeTemp(plain, mismatch) }
 })
 
+test('Changes in a folder inside a larger checkout are that folder\'s own, by the map\'s paths', async (t) =>
+{
+    if (!(await hasGit())) { t.skip('git is not available'); return }
+    const checkout = await makeRepo({ 'app/a.ts': 'export const a = 1\n', 'other.ts': 'export const o = 1\n' }, 'codespace-changes-sub-')
+    const publicRoot = await makeTemp('codespace-changes-sub-public-')
+    try
+    {
+        await git(checkout, 'init', '-q')
+        await mkdir(join(checkout, '.git', 'no-hooks'), { recursive: true })
+        await git(checkout, 'add', '.')
+        await git(checkout, 'commit', '-q', '-m', 'initial')
+        await writeFile(join(checkout, 'app', 'a.ts'), 'export const a = 1\nexport const b = 2\n')
+        await writeFile(join(checkout, 'other.ts'), 'export const o = 2\n')
+
+        const { port, stop } = await startServer(join(checkout, 'app'), publicRoot)
+        try { assert.deepEqual((await send(port, '/api/changes')).body, { files: { 'a.ts': 1 } }) }
+        finally { await stop() }
+    }
+    finally { await removeTemp(checkout, publicRoot) }
+})
+
 test('Switching repositories takes down what was shown and tells watching pages', async () =>
 {
     const first = await makeRepo({ 'src/a.ts': 'export const a = 1\n' }, 'codespace-show-a-')

@@ -1,7 +1,7 @@
 // The phone layout. A narrow screen gives the map the whole screen and puts the panels behind a tab
 // bar along the bottom: Files (the outliner's search and tree), Filters (the system and layer tiles,
-// the tag filter, and the view options), Details (what is chosen), Chat (the built-in agent), and View
-// (the map's controls).
+// the tag filter, and the view options), Details (what is chosen), Insights (start here, recent changes,
+// flows, and health), Chat (the built-in agent), and View (the map's controls).
 // One sheet holds whichever tab is open. The panels are moved into it, not copied, so every handler
 // and every render keeps working on the same elements; leaving the narrow layout puts them back.
 import { S, filePath, fileColor, hasFilters } from "./state.js";
@@ -9,7 +9,7 @@ import { labelFor } from "./rules.js";
 import { select } from "./panels.js";
 
 /** The tabs that open a sheet; Map closes it. */
-type Pane = "files" | "filters" | "details" | "chat" | "view";
+type Pane = "files" | "filters" | "details" | "insight" | "chat" | "view";
 
 const narrow = window.matchMedia("(max-width: 720px)");
 
@@ -17,11 +17,12 @@ const narrow = window.matchMedia("(max-width: 720px)");
 const PANES: Record<Pane, string[]> = {
   files: ["outliner"],
   filters: ["outliner-filters", "outliner-chips", "outliner-options", "outliner-bulk"],
-  details: ["showing", "insight", "info"],
+  details: ["showing", "info"],
+  insight: ["insight"],
   chat: ["chat-panel"],
   view: ["tools", "controls"],
 };
-const TITLES: Record<Pane, string> = { files: "Files", filters: "Filters", details: "Details", chat: "Chat", view: "View" };
+const TITLES: Record<Pane, string> = { files: "Files", filters: "Filters", details: "Details", insight: "Insights", chat: "Chat", view: "View" };
 
 const sheet = document.getElementById("msheet") as HTMLElement;
 const sheetTitle = document.getElementById("msheet-title") as HTMLElement;
@@ -96,8 +97,8 @@ document.getElementById("msheet-close")!.addEventListener("click", () => setPane
 // A choice made in the outliner closes the sheet, so the map can glide to it.
 window.addEventListener("codespace:chosen", () => { if (narrow.matches && open === "files") setPane(null); });
 
-// The Insights button opens its panel, which the Details sheet holds on a phone.
-window.addEventListener("codespace:open-insight", () => { if (narrow.matches) setPane("details"); });
+// A button that opens the Insights panel brings its own sheet up on a phone.
+window.addEventListener("codespace:open-insight", () => { if (narrow.matches && open !== "insight") setPane("insight"); });
 
 // Another panel can open the chat, as Ingest Codebase does.
 window.addEventListener("codespace:open-chat", () => { if (narrow.matches) setPane("chat"); });
@@ -181,7 +182,7 @@ document.getElementById("mpeek-clear")!.addEventListener("click", () => select(-
 // The Filters tab counts the filters in force, and Details carries a dot while something is chosen.
 function syncBadges(): void
 {
-  const count = S.outliner.systems.size + S.outliner.layers.size + (S.tagFilter !== null ? 1 : 0);
+  const count = S.outliner.systems.size + S.outliner.layers.size + (S.tagFilter !== null ? 1 : 0) + (S.isolatedFiles !== null ? 1 : 0);
   const filters = tabs.querySelector<HTMLElement>('[data-tab="filters"] .mbadge')!;
   filters.hidden = !hasFilters();
   filters.textContent = String(count);

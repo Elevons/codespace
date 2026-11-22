@@ -537,7 +537,9 @@ export class Server
     }
 
     /**
-     * Counts the lines each file has changed since HEAD, for the map's changes colouring.
+     * Counts the lines each file has changed since HEAD, for the map's changes colouring. The paths
+     * are relative to the root, so a repository that is a folder inside a larger git checkout lists
+     * only its own files, by the paths the map uses.
      * A repository that is not under git, or a machine without git, reports no changes.
      * @param root the repository's root folder
      */
@@ -545,7 +547,7 @@ export class Server
     {
         try
         {
-            const { stdout } = await Run('git', ['-C', root, 'diff', '--numstat', 'HEAD'], { maxBuffer: 32 * 1024 * 1024 })
+            const { stdout } = await Run('git', ['-C', root, 'diff', '--numstat', '--relative', 'HEAD'], { maxBuffer: 32 * 1024 * 1024 })
             const files: Record<string, number> = {}
             for (const line of stdout.split('\n'))
             {

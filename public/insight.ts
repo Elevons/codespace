@@ -399,6 +399,8 @@ for (const opener of openers)
     openInsight(next);
   });
 }
+// On a phone the Insights tab opens the panel's sheet, so the panel shows whatever tab it was on.
+window.addEventListener("codespace:pane", (event) => { if ((event as CustomEvent).detail === "insight" && panel.hidden) openInsight(); });
 // The repository's first panel offers the tour too.
 window.addEventListener("codespace:tour", () => { openInsight("flows"); void showTour(); });
 closeButton.addEventListener("click", close);

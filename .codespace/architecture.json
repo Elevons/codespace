@@ -154,7 +154,7 @@
       "system": "browser",
       "layer": "shell",
       "tags": ["ui", "entry"],
-      "summary": "The page's HTML shell: the canvas, the panels, the outliner's collapse controls, the insights panel and the bottom bar's Start here, Changes, Flows, and Health buttons, and the bootstrap request for the repository."
+      "summary": "The page's HTML shell: the canvas, the panels, the outliner's collapse controls, the insights panel with its bottom-bar buttons and phone tab, and the bootstrap request for the repository."
     },
     "public/ingest.ts": {
       "system": "browser",
@@ -190,7 +190,7 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui"],
-      "summary": "The phone layout: a bottom tab bar whose sheets hold the same panels rather than copies of them, including the insights panel."
+      "summary": "The phone layout: a bottom tab bar whose sheets hold the same panels rather than copies of them, with the insights panel in a sheet of its own."
     },
     "public/neighbourhood.ts": {
       "system": "browser",
@@ -586,7 +586,7 @@
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests serving the page and assets, the bootstrap with stamps and import names, repository switching, changes, and the view stream."
+      "summary": "Tests serving the page and assets, the bootstrap with stamps and import names, repository switching, changes (including a folder inside a larger checkout), and the view stream."
     },
     "tests/Snapshot.test.ts": {
       "system": "meta",

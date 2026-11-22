@@ -159,7 +159,8 @@ are listed under it, with a cross to remove each one.
 ### Insights: recent work, flows, and a health check
 
 The bottom bar's **Start here**, **Changes**, **Flows**, and **Health** buttons open one panel with
-three tabs (Start here draws the tour and opens Flows), and each answer is also an endpoint:
+three tabs (Start here draws the tour and opens Flows); on a phone the panel has its own Insights tab
+in the tab bar. Each answer is also an endpoint:
 
 - **Recent** lists `/api/changes` — each file changed since `HEAD`, with its line count — and
   can show or isolate them. Nothing new is read for it.
