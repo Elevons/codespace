@@ -644,7 +644,8 @@ document.getElementById("labels")!.addEventListener("click", (event) =>
 {
   const row = (event.target as HTMLElement).closest("#layer-legend [data-layer]") as HTMLElement | null;
   if (!row) return;
-  const layer = row.dataset.layer!, now = performance.now();
+  // The event's own time, not the time it is handled: a busy page handles the second tap late.
+  const layer = row.dataset.layer!, now = event.timeStamp;
   if (lastLegendClick !== null && lastLegendClick.layer === layer && now - lastLegendClick.at < DOUBLE_CLICK_MS)
   {
     lastLegendClick = null;
@@ -661,17 +662,27 @@ function spotLayer(layer: string | null): void
   renderEdges();
 }
 
-// A double click or double tap on the map lets every layer back. A press that drags turns the camera and
-// does not count, and neither do two presses far apart.
+// A double click or double tap on the map lets every layer back. A finger wobbles and lands its second tap a
+// little off the first, so the pair is judged loosely: a press that moves under MAP_TAP_SLOP is still a tap,
+// and a second tap within MAP_TAP_REACH of the first, inside MAP_TAP_MS, makes the pair. A press that drags
+// the camera further does not count. The browser's own dblclick is taken too, for a mouse.
+const MAP_TAP_MS = 450, MAP_TAP_SLOP = 16, MAP_TAP_REACH = 60;
 let mapPress: { x: number; y: number } | null = null, lastMapTap: { x: number; y: number; at: number } | null = null;
-canvas.addEventListener("pointerdown", (event) => { mapPress = { x: event.clientX, y: event.clientY }; });
+canvas.addEventListener("pointerdown", (event) =>
+{
+  // A second finger is a pinch, not a tap.
+  mapPress = event.isPrimary ? { x: event.clientX, y: event.clientY } : null;
+});
+canvas.addEventListener("pointercancel", () => { mapPress = null; });
 canvas.addEventListener("pointerup", (event) =>
 {
   const press = mapPress;
   mapPress = null;
-  if (S.spotLayer === null || press === null || Math.hypot(event.clientX - press.x, event.clientY - press.y) > 6) return;
-  const now = performance.now(), last = lastMapTap;
-  if (last !== null && now - last.at < DOUBLE_CLICK_MS && Math.hypot(event.clientX - last.x, event.clientY - last.y) < 30)
+  if (S.spotLayer === null || press === null || Math.hypot(event.clientX - press.x, event.clientY - press.y) > MAP_TAP_SLOP) return;
+  // The event's own time, not the time it is handled: the first tap may select a folder and keep the page busy
+  // past the window, though the finger came back in time.
+  const now = event.timeStamp, last = lastMapTap;
+  if (last !== null && now - last.at < MAP_TAP_MS && Math.hypot(event.clientX - last.x, event.clientY - last.y) < MAP_TAP_REACH)
   {
     lastMapTap = null;
     spotLayer(null);
@@ -679,6 +690,7 @@ canvas.addEventListener("pointerup", (event) =>
   }
   lastMapTap = { x: event.clientX, y: event.clientY, at: now };
 });
+canvas.addEventListener("dblclick", () => { lastMapTap = null; spotLayer(null); });
 
 // The chips above the tree name filters that live outside the strip; their cross removes one.
 document.getElementById("outliner-chips")!.addEventListener("click", (event) =>
