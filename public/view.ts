@@ -8,6 +8,7 @@ import { routeTargets } from "./route.js";
 import type { FileRecord } from "./types.js";
 
 import type { IShown } from "./shown.js";
+import { LocalViewEvent, type ViewChange } from "./viewcall.js";
 
 const panel = document.getElementById("showing")!;
 const body = document.getElementById("showing-body")!;
@@ -159,6 +160,16 @@ events.onmessage = (message) =>
   else if (event.type === "repo") location.reload();
   else if (event.type === "chat") window.dispatchEvent(new CustomEvent("codespace:chat", { detail: event.chat }));
 };
+
+// A page whose host refuses view writes makes the change here alone (see viewcall.ts).
+window.addEventListener(LocalViewEvent, (event) =>
+{
+  const change = (event as CustomEvent<ViewChange>).detail;
+  if (change.type === "show") show(change.shown);
+  else if (change.type === "isolate") isolate(change.files);
+  else if (change.type === "select") selectMany(change.files);
+  else if (change.type === "clear") clear();
+});
 
 // The chat leads to a file the same way a tool does.
 export { focus as focusPath };

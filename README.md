@@ -25,4 +25,4 @@ When you choose a file, the map opens it into a stack of floors, with one floor 
 
 ![A file opened into its blocks, then its neighbourhood](docs/media/blocks.gif)
 
-An **Insights** panel in the bottom bar lists the files changed since HEAD, keeps saved views of the map (flows) and a start-here tour, and reports the codebase's size, layer breaks, largest files, undescribed files, and key-shaped values.
+The bottom bar has four more buttons. **Start here** draws a tour from the entry points. **Changes** lists the files changed since HEAD. **Flows** keeps saved views of the map. **Health** reports the codebase's size, layer breaks, largest files, undescribed files, and values that look like keys.

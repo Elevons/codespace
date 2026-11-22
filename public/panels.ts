@@ -3,6 +3,7 @@ import { folderColor, folderOf, labelFor } from "./rules.js";
 import { ancestorFolders, foldersToKeepOpen, matchesQueryTerms, queryTerms } from "./filter.js";
 import { displayName, readBlockSummaries, readBlocks, readSource } from "./repo.js";
 import { showNeighbourhood } from "./neighbourhood.js";
+import { changeView } from "./viewcall.js";
 import { blockColor, type BlockInfo, type IBlocksReport } from "./blocks.js";
 import type { FileSpot, GroupAxis } from "./types.js";
 /* --------------------------------------------------------------- panels ---- */
@@ -153,7 +154,10 @@ function selectionHtml(): string
       '<button type="button" class="seldrop" data-extradrop="' + escapeHtml(path) + '" title="Remove from the selection" aria-label="Remove from the selection">✕</button>' +
       (summary ? '<span class="selsum">' + escapeHtml(summary) + "</span>" : "") + "</li>";
   }).join("");
-  return '<div class="selhead">Also selected <span>' + S.extraFiles.size + '</span></div><ul class="sellist">' + rows + "</ul>";
+  return '<div class="selhead">Also selected <span>' + S.extraFiles.size + "</span>" +
+    '<button type="button" class="chosen-act selonly" data-only-selected title="Draw only the selected files, and hide every other file">Only these</button>' +
+    '<button type="button" class="chosen-act selonly" data-show-selected title="Light up the selected files as a set, listed in the Showing panel">Show as set</button>' +
+    '</div><ul class="sellist">' + rows + "</ul>";
 }
 
 export function renderSelection(): void
@@ -388,6 +392,14 @@ document.getElementById("info")!.addEventListener("click", (event) =>
   }
   const around = target.closest("[data-neighbourhood]") as HTMLElement | null;
   if (around) { void showNeighbourhood(around.dataset.neighbourhood!); return; }
+  if (target.closest("[data-only-selected]")) { void changeView({ type: "isolate", files: selectionPaths() }); return; }
+  if (target.closest("[data-show-selected]"))
+  {
+    const files = selectionPaths().map((path) => ({ path, note: S.FILE_SUMMARIES.get(path) ?? "" }));
+    void changeView({ type: "show", shown: { title: "Selected files", note: "", trace: false, files } });
+    return;
+  }
+  if (target.closest("[data-tour]")) { window.dispatchEvent(new Event("codespace:tour")); return; }
   const extra = target.closest("[data-extra]") as HTMLElement | null;
   if (extra)
   {
@@ -456,6 +468,7 @@ function statsHtml(): string
     '<div id="info-body">' +
     '<p class="hint how"><span class="key-only">Click a block to trace it, or press <kbd>/</kbd> to search.</span>' +
     '<span class="touch-only">Tap a block to trace it, or search above.</span></p>' +
+    '<p class="hint how"><button type="button" class="chosen-act" data-tour title="Walk through the repository from its entry points">Start here</button> New to this code? Take the tour.</p>' +
     (S.undescribed > 0 ? '<p class="hint note"><b>' + S.undescribed.toLocaleString() + "</b> file" +
       (S.undescribed === 1 ? " is" : "s are") + " not described yet.</p>" : "") +
     S.ARCH_NOTES.map((note) => '<p class="hint note">' + escapeHtml(note) + "</p>").join("") +

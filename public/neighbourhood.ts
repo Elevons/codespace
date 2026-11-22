@@ -4,6 +4,7 @@
 
 import { api } from "./endpoint.js";
 import { DefaultNeighbourDepth } from "./neighbours.js";
+import { changeView } from "./viewcall.js";
 
 /**
  * Narrows the map to one file and its neighbours, and chooses the file so its blocks open.
@@ -19,8 +20,8 @@ export async function showNeighbourhood(path: string): Promise<void>
     const paths: string[] = Array.isArray(data.paths) ? data.paths : [];
     if (paths.length === 0) return;
     // Isolation and selection are both view calls, so every open page follows them.
-    await fetch(api("view"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "isolate", files: paths }) });
-    await fetch(api("view"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "select", files: [path] }) });
+    await changeView({ type: "isolate", files: paths });
+    await changeView({ type: "select", files: [path] });
   }
   catch
   {

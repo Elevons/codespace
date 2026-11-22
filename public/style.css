@@ -88,8 +88,7 @@
   #showing-body hr { margin: 8px 0; border: 0; border-top: 1px solid #30363d; }
 
   /* Recent changes, saved flows, and the health check, on one panel with three tabs. */
-  #insight { position: fixed; z-index: 9; left: 14px; bottom: 124px; width: min(380px, calc(100vw - 28px));
-    max-height: min(560px, calc(100dvh - 160px)); padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+  #insight { flex: 0 1 auto; min-height: min(260px, 40%); max-height: 62%; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
   #insight[hidden] { display: none; }
   #insight-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px 8px 14px; border-bottom: 1px solid #30363d; }
   #insight-head .panel-title { margin: 0; flex: none; }
@@ -367,6 +366,14 @@
   #selection { margin: -4px 0 12px; }
   .selhead { font: 600 10px ui-sans-serif, system-ui, sans-serif; letter-spacing: .6px; text-transform: uppercase; color: #6e7681; }
   .selhead span { margin-left: 4px; color: #484f58; }
+  /* The actions on a chosen file, on a selection, and the tour on the repository's first panel. */
+  .chosen-acts { display: flex; gap: 6px; margin: 6px 0 2px; }
+  .chosen-act { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px;
+    padding: 3px 9px; font: 500 11px ui-sans-serif, system-ui, sans-serif; cursor: pointer; font-style: normal; }
+  .chosen-act:hover { background: #30363d; color: #e6edf3; border-color: #484f58; }
+  .selhead { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .selhead .selonly { margin-left: auto; text-transform: none; letter-spacing: 0; padding: 1px 7px; font-size: 10.5px; }
+  .selhead .selonly + .selonly { margin-left: 0; }
   .sellist { list-style: none; margin: 5px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
   .selrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 6px;
     background: #0d1117; border: 1px solid #21262d; border-radius: 6px; }

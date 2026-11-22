@@ -158,7 +158,8 @@ are listed under it, with a cross to remove each one.
 
 ### Insights: recent work, flows, and a health check
 
-The Insights button opens a panel with three tabs, and each answer is also an endpoint:
+The bottom bar's **Start here**, **Changes**, **Flows**, and **Health** buttons open one panel with
+three tabs (Start here draws the tour and opens Flows), and each answer is also an endpoint:
 
 - **Recent** lists `/api/changes` — each file changed since `HEAD`, with its line count — and
   can show or isolate them. Nothing new is read for it.
@@ -178,7 +179,14 @@ The Insights button opens a panel with three tabs, and each answer is also an en
 
 A **neighbourhood** is `GET /api/neighbours?path=…&depth=1|2`: the file, what it imports, and
 what imports it, ordered by distance. The file panel's Neighbourhood button isolates that set —
-the honest answer to "what does this part of the app touch" without guessing at frameworks.
+the honest answer to "what does this part of the app touch" without guessing at frameworks. With
+several files selected, the file panel's **Only these** isolates the selection and **Show as set**
+lights it up.
+
+The page's own buttons change the view through `public/viewcall.ts`: a `POST /api/view`, so every
+open page follows, or, when a host serves the map read only and refuses that write (Bartleby's
+framed board does), the same change made in that page alone. Saving or deleting a flow needs a
+write, so a read-only page says so instead.
 
 Reading, for finding the right files and steps before you show them:
 
@@ -267,7 +275,7 @@ machine as `chat` events on the view stream. Chats and pi's settings live in `~/
 - `src/agent/` — the built-in chat: its pi agent, what that agent is told, and which model it uses.
 - `public/` — the browser side: the 3D city, the Outliner with its system/layer filters,
   the panels and controls, the chat, and the phone sheet. `insight.ts` is the Insights panel
-  (recent work, flows, health), and `neighbourhood.ts` isolates the files around one file. `public/endpoint.ts` builds every API address. `public/filter.ts`, `public/rules.ts`, and
+  (recent work, flows, health), `viewcall.ts` makes the page's own view changes, and `neighbourhood.ts` isolates the files around one file. `public/endpoint.ts` builds every API address. `public/filter.ts`, `public/rules.ts`, and
   `public/symbols.ts` hold the pure filter, layout/visibility, and symbol rules; `public/blocks.ts` holds
   the block kinds, colours, and the rule that stacks blocks into floors, and `public/floors.ts` draws them;
   `public/flows.ts`, `public/health.ts`, and `public/neighbours.ts` hold the shapes and limits the page and

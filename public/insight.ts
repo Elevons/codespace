@@ -1,7 +1,8 @@
 // The insights panel: three answers to questions the map itself does not ask. Recent lists the
 // files that differ from the last commit. Flows keeps views of the map that can be shown again,
 // and drafts a start-here tour from the descriptions. Health checks the shape of the codebase.
-// None of it draws anything new: every action ends in a view call the whole page already follows.
+// None of it draws anything new: every action ends in a view call the whole page already follows,
+// made in this page alone when the host serves the map read only (see viewcall.ts).
 
 import { api } from "./endpoint.js";
 import { S, copyText, pathIndex } from "./state.js";
@@ -9,13 +10,14 @@ import { escapeHtml, selectFile } from "./panels.js";
 import { MaxFlowName, type IFlow } from "./flows.js";
 import type { IHealthAnswer } from "./health.js";
 import type { IShownFile } from "./shown.js";
+import { changeView } from "./viewcall.js";
 
 /** The three tabs the panel holds. */
 type Tab = "recent" | "flows" | "health";
 
 function byId<T extends HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 
-const button = byId<HTMLButtonElement>("insight-btn");
+const openers = [...document.querySelectorAll<HTMLButtonElement>(".insight-open")];
 const panel = byId<HTMLElement>("insight");
 const body = byId<HTMLElement>("insight-body");
 const closeButton = byId<HTMLButtonElement>("insight-close");
@@ -24,6 +26,8 @@ const tabs = byId<HTMLElement>("insight-tabs");
 let tab: Tab = "recent";
 let flowName = "";
 let healthReport: IHealthAnswer | null = null;
+/** The flows the Flows tab last listed, so one is drawn from what the page already holds. */
+let listedFlows: IFlow[] = [];
 
 /** The number of reads started, so a slow one cannot paint over a newer tab. */
 let wanted = 0;
@@ -42,22 +46,24 @@ async function post(path: string, payload: unknown): Promise<any>
 {
   const response = await fetch(api(path), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   const data = await response.json().catch(() => ({}));
+  // A host that serves the map read only refuses every write, or does not pass it on at all.
+  if (response.status === 404 || response.status === 405) throw new Error("This map is read only here, so flows cannot be saved or deleted. Open Codespace itself to change them.");
   if (!response.ok) throw new Error(data.error ?? "The server refused the change.");
   return data;
 }
 
-/** Draws a set of files on the map, as a route when asked, for every open page. */
+/** Draws a set of files on the map, as a route when asked. */
 async function draw(title: string, files: IShownFile[], trace = false, note = ""): Promise<void>
 {
   const known = files.filter((file) => pathIndex().files.has(file.path));
   if (known.length === 0) return;
-  await post("view", { action: "show", title, note, trace, files: known });
+  await changeView({ type: "show", shown: { title, note, trace, files: known } });
 }
 
 /** Narrows the map to a set of files, or clears the narrowing with an empty set. */
 async function only(files: string[]): Promise<void>
 {
-  await post("view", { action: "isolate", files });
+  await changeView({ type: "isolate", files });
 }
 
 /** Chooses one file in the page, so its blocks open beside the map. */
@@ -74,6 +80,7 @@ export function openInsight(next: Tab = tab): void
 {
   panel.hidden = false;
   tab = next;
+  paintOpeners();
   if (document.body.classList.contains("phone")) window.dispatchEvent(new Event("codespace:open-insight"));
   void render();
 }
@@ -81,10 +88,18 @@ export function openInsight(next: Tab = tab): void
 function close(): void
 {
   panel.hidden = true;
+  paintOpeners();
+}
+
+/** Marks the bottom bar's button for the open tab, so the bar says which one is showing. */
+function paintOpeners(): void
+{
+  for (const opener of openers) opener.classList.toggle("on", !panel.hidden && opener.dataset.openTab === tab);
 }
 
 function paintTabs(): void
 {
+  paintOpeners();
   tabs.querySelectorAll<HTMLButtonElement>("[data-itab]").forEach((element) =>
   {
     const on = element.dataset.itab === tab;
@@ -148,6 +163,7 @@ async function renderFlows(mine: number): Promise<void>
   const data = await getJson("flows");
   if (mine !== wanted) return;
   const flows: IFlow[] = Array.isArray(data.flows) ? data.flows : [];
+  listedFlows = flows;
   const rows = flows.length === 0
     ? '<p class="hint">No flows saved yet. Show something on the map, then save it here by name.</p>'
     : '<div class="ilist">' + flows.map((flow) =>
@@ -163,7 +179,7 @@ async function renderFlows(mine: number): Promise<void>
       '<input id="flow-name" type="text" maxlength="' + MaxFlowName + '" placeholder="Name this view" value="' + escapeHtml(flowName) + '" autocomplete="off" spellcheck="false">' +
       '<button type="button" class="iact" data-act="save-flow">Save showing</button>' +
     "</div>" +
-    '<p class="hint">A flow is saved in this repository, at .codespace/flows.json, and can be shown again from any page reading it.</p>' +
+    '<p class="hint">Start here draws a tour from the entry points. A flow is a saved view of the map, kept in this repository at .codespace/flows.json.</p>' +
     '<p class="hint bad" id="flow-msg" hidden></p>' + rows;
 }
 
@@ -248,20 +264,22 @@ async function saveShowing(): Promise<void>
 
 async function showTour(): Promise<void>
 {
+  // The panel is drawn again first, so a message has somewhere to go.
+  let problem = "";
   try
   {
     const data = await getJson("flows", { draft: "1" });
     const flow: IFlow | null = data.flow ?? null;
-    if (flow === null)
+    if (flow === null) problem = "Too few files have a description yet, so there is nothing to build a tour from.";
+    else
     {
-      message("Too few files have a description yet, so there is nothing to build a tour from.");
-      return;
+      flowName = flow.name;
+      await draw(flow.title, flow.files, flow.trace, flow.note);
     }
-    flowName = flow.name;
-    await draw(flow.title, flow.files, flow.trace, flow.note);
-    await render();
   }
-  catch (error) { message((error as Error).message); }
+  catch (error) { problem = (error as Error).message; }
+  await render();
+  if (problem) message(problem);
 }
 
 body.addEventListener("click", (event) =>
@@ -273,8 +291,8 @@ body.addEventListener("click", (event) =>
   const showFlow = target.closest("[data-flow-show]") as HTMLElement | null;
   if (showFlow)
   {
-    post("flows", { action: "show", name: showFlow.dataset.flowShow })
-      .catch((error) => message((error as Error).message));
+    const flow = listedFlows.find((each) => each.name === showFlow.dataset.flowShow);
+    if (flow) draw(flow.title, flow.files, flow.trace, flow.note).catch((error) => message((error as Error).message));
     return;
   }
 
@@ -367,13 +385,22 @@ async function onlyUndescribed(): Promise<void>
   await only(paths);
 }
 
-// The button in the bottom bar opens and closes the panel. On a phone it always brings the sheet
-// to the panel, since a panel moved into a closed sheet is out of sight but not hidden.
-button.addEventListener("click", () =>
+// Each of the bottom bar's buttons opens the panel on its own tab, and closes it when that tab is
+// already showing. On a phone a button always opens it, since a panel moved into a closed sheet is
+// out of sight but not hidden. Start here draws the tour and opens Flows, where it can be saved.
+for (const opener of openers)
 {
-  if (document.body.classList.contains("phone")) { openInsight(); return; }
-  if (panel.hidden) openInsight(); else close();
-});
+  opener.addEventListener("click", () =>
+  {
+    const want = opener.dataset.openTab;
+    if (want === "tour") { openInsight("flows"); void showTour(); return; }
+    const next = want as Tab;
+    if (!document.body.classList.contains("phone") && !panel.hidden && tab === next) { close(); return; }
+    openInsight(next);
+  });
+}
+// The repository's first panel offers the tour too.
+window.addEventListener("codespace:tour", () => { openInsight("flows"); void showTour(); });
 closeButton.addEventListener("click", close);
 tabs.addEventListener("click", (event) =>
 {

@@ -25,7 +25,7 @@
       "system": "meta",
       "layer": "docs",
       "tags": ["config"],
-      "summary": "The project's front page: what Codespace is, how to run it, and how a person or agent uses it."
+      "summary": "The project's front page: what Codespace is, how to start it, and short examples with recordings of the map."
     },
     "docs/FUTURE.md": {
       "system": "meta",
@@ -154,7 +154,7 @@
       "system": "browser",
       "layer": "shell",
       "tags": ["ui", "entry"],
-      "summary": "The page's HTML shell: the canvas, the panels, the outliner's collapse controls, the insights panel with its three tabs, and the bootstrap request for the repository."
+      "summary": "The page's HTML shell: the canvas, the panels, the outliner's collapse controls, the insights panel and the bottom bar's Start here, Changes, Flows, and Health buttons, and the bootstrap request for the repository."
     },
     "public/ingest.ts": {
       "system": "browser",
@@ -166,7 +166,7 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui"],
-      "summary": "The Insights panel: the files changed since HEAD, the saved flows with the start-here tour, and the health check, each ending in a view call every page follows."
+      "summary": "The Insights panel and its bottom-bar buttons: the files changed since HEAD, the saved flows with the start-here tour, and the health check."
     },
     "public/labels.ts": {
       "system": "browser",
@@ -214,7 +214,7 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "core"],
-      "summary": "The outliner, the info panel with its block rail, the neighbourhood action, and the selected files, and everything a person can click, select, fold, or search."
+      "summary": "The outliner, the info panel with its block rail and start-here link, the neighbourhood action, and the selected files with their actions, and everything a person can click, select, fold, or search."
     },
     "public/repo-switch.ts": {
       "system": "browser",
@@ -280,7 +280,13 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "io"],
-      "summary": "The Showing panel and tool events: shows a route and its import graph, selects and isolates files, frames the whole route or selection, and does not repeat a step's own summary."
+      "summary": "The Showing panel and view events from the server or this page: shows a route and its import graph, selects and isolates files, frames the whole route or selection, and does not repeat a step's own summary."
+    },
+    "public/viewcall.ts": {
+      "system": "browser",
+      "layer": "api",
+      "tags": ["io"],
+      "summary": "Changes the view for the page's own buttons: through the server so every page follows, or in this page alone when a read-only host refuses the write."
     },
     "src/agent/BlockSummaries.ts": {
       "system": "server",
