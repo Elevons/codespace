@@ -1,4 +1,4 @@
-import { S, camera, DEFAULT_ALPHA, filePath, frameBlock, frameFile, frameFolder, glow, hasFilters, isFileVisible, matchesTagFilter, render, renderEdges, fileIndex, pathIndex, sliceValue } from "./state.js";
+import { S, camera, canvas, DEFAULT_ALPHA, filePath, frameBlock, frameFile, frameFolder, glow, hasFilters, isFileVisible, matchesTagFilter, render, renderEdges, fileIndex, pathIndex, sliceValue } from "./state.js";
 import { api } from "./endpoint.js";
 import { build } from "./city.js";
 import { centerView, recenterTarget, pulseFile } from "./meshes.js";
@@ -636,8 +636,9 @@ document.getElementById("outliner-filters")!.addEventListener("click", (event) =
 });
 
 // A layer's name in the legend beside the map picks that layer at a double click (or double tap): every other
-// layer fades grey where it stands, so the picked one keeps its place in the stack. The picked layer's name
-// brings every layer back. The pair is timed here, as for the strip, so a tap counts too.
+// layer fades grey where it stands, so the picked one keeps its place in the stack. Another layer's name moves
+// the pick straight to it; the picked layer's name, or a double click anywhere on the map, brings every layer
+// back. The pairs are timed here, as for the strip, so a tap counts too.
 let lastLegendClick: { layer: string; at: number } | null = null;
 document.getElementById("labels")!.addEventListener("click", (event) =>
 {
@@ -647,11 +648,36 @@ document.getElementById("labels")!.addEventListener("click", (event) =>
   if (lastLegendClick !== null && lastLegendClick.layer === layer && now - lastLegendClick.at < DOUBLE_CLICK_MS)
   {
     lastLegendClick = null;
-    S.spotLayer = S.spotLayer === layer ? null : layer;
-    renderEdges();
+    spotLayer(S.spotLayer === layer ? null : layer);
     return;
   }
   lastLegendClick = { layer, at: now };
+});
+
+function spotLayer(layer: string | null): void
+{
+  if (S.spotLayer === layer) return;
+  S.spotLayer = layer;
+  renderEdges();
+}
+
+// A double click or double tap on the map lets every layer back. A press that drags turns the camera and
+// does not count, and neither do two presses far apart.
+let mapPress: { x: number; y: number } | null = null, lastMapTap: { x: number; y: number; at: number } | null = null;
+canvas.addEventListener("pointerdown", (event) => { mapPress = { x: event.clientX, y: event.clientY }; });
+canvas.addEventListener("pointerup", (event) =>
+{
+  const press = mapPress;
+  mapPress = null;
+  if (S.spotLayer === null || press === null || Math.hypot(event.clientX - press.x, event.clientY - press.y) > 6) return;
+  const now = performance.now(), last = lastMapTap;
+  if (last !== null && now - last.at < DOUBLE_CLICK_MS && Math.hypot(event.clientX - last.x, event.clientY - last.y) < 30)
+  {
+    lastMapTap = null;
+    spotLayer(null);
+    return;
+  }
+  lastMapTap = { x: event.clientX, y: event.clientY, at: now };
 });
 
 // The chips above the tree name filters that live outside the strip; their cross removes one.
