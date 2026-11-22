@@ -75,27 +75,6 @@ function collectLabels(): LabelItem[]
       priority: hovered ? 0 : chosenFile ? 1 : 4,
       cls: hovered ? "file hover" : "file", color: "", opacity: 1 });
   }
-  // Layer band names at the corner of each plane nearest the camera, so they stay on screen. Where room
-  // is tight, as on a phone, the name goes without its "layer ·" prefix.
-  const roomy = canvas.clientWidth > 720 && canvas.clientHeight > 500;
-  for (const plane of S.layerPlanes)
-  {
-    const info = plane.getBoundingInfo().boundingBox;
-    const meta = plane.metadata as { layer: string; rank: number };
-    const corners = [
-      new V3(info.minimumWorld.x, plane.position.y, info.minimumWorld.z),
-      new V3(info.minimumWorld.x, plane.position.y, info.maximumWorld.z),
-      new V3(info.maximumWorld.x, plane.position.y, info.minimumWorld.z),
-      new V3(info.maximumWorld.x, plane.position.y, info.maximumWorld.z),
-    ];
-    const corner = corners.reduce((best, at) => V3.DistanceSquared(at, camera.position) < V3.DistanceSquared(best, camera.position) ? at : best);
-    // Lift the name a little above its plane and in from the corner, so it never sits under a dock.
-    const cx = (info.minimumWorld.x + info.maximumWorld.x) / 2;
-    const cz = (info.minimumWorld.z + info.maximumWorld.z) / 2;
-    wanted.push({ key: "L" + meta.rank, text: roomy ? "layer · " + meta.layer : meta.layer,
-      pos: new V3(corner.x + (cx - corner.x) * 0.16, plane.position.y + 1.6, corner.z + (cz - corner.z) * 0.16),
-      cls: "layer", caption: "", color: "", opacity: 1, priority: 0 });
-  }
   return wanted.sort((a, b) => a.priority - b.priority);
 }
 
@@ -283,6 +262,150 @@ function updateRail(width: number, height: number, transform: BABYLON.Matrix, vi
   return [{ left: railX, right: railX + railWidth, top: railY, bottom: railY + railHeight }];
 }
 
+/* ---------------------------------------------------------- layer legend ---- */
+
+// The layers' names sit in a column at one side of the free screen, top plane first, each tied to its
+// plane by a leader line, as the step rail is tied to its files. A double click on a name shows only
+// that layer, and a double click on the layer shown alone brings them all back (controls.ts).
+let legend: HTMLDivElement | null = null, legendSvg: SVGSVGElement | null = null, legendSignature = "";
+const legendFeet: SVGCircleElement[] = [];
+const LEGEND_ROW = 22, LEGEND_STUB = 14;
+
+function ensureLegend(): void
+{
+  if (legend) return;
+  legendSvg = document.createElementNS(SVG, "svg") as SVGSVGElement;
+  legendSvg.id = "layer-lines";
+  labelLayer.appendChild(legendSvg);
+  legend = document.createElement("div");
+  legend.id = "layer-legend";
+  labelLayer.appendChild(legend);
+}
+
+// Where a plane meets its leader line on screen: the point of its outline closest to the row's spot that
+// lies in the open screen past the legend's inner edge. Only the two front sides, those meeting at the
+// corner nearest the camera, are walked: every plane has the same front, so the lines keep the planes'
+// order and never cross.
+function planeAnchor(plane: BABYLON.Mesh, onRight: boolean, edgeX: number, rowY: number, span: [number, number], height: number,
+  transform: BABYLON.Matrix, viewport: BABYLON.Viewport): { x: number; y: number } | null
+{
+  const info = plane.getBoundingInfo().boundingBox;
+  const y = plane.position.y;
+  const x0 = info.minimumWorld.x, x1 = info.maximumWorld.x, z0 = info.minimumWorld.z, z1 = info.maximumWorld.z;
+  const corners = [new V3(x0, y, z0), new V3(x1, y, z0), new V3(x1, y, z1), new V3(x0, y, z1)];
+  const near = onRight ? edgeX - LEGEND_STUB * 2 : edgeX + LEGEND_STUB * 2;
+  let best: { x: number; y: number } | null = null, bestDistance = Infinity;
+  const at = new V3();
+  const front = corners.reduce((best, corner, i) => V3.DistanceSquared(corner, camera.position) < V3.DistanceSquared(corners[best], camera.position) ? i : best, 0);
+  for (const side of [(front + 3) % 4, front])
+  {
+    const from = corners[side], to = corners[(side + 1) % 4];
+    for (let step = 0; step <= 24; step++)
+    {
+      V3.LerpToRef(from, to, step / 24, at);
+      const p = V3.Project(at, BABYLON.Matrix.IdentityReadOnly, transform, viewport);
+      if (p.z < 0 || p.z > 1 || p.y < 0 || p.y > height || p.x < span[0] || p.x > span[1]) continue;
+      if (onRight ? p.x > near : p.x < near) continue;
+      const distance = (p.x - near) ** 2 + (p.y - rowY) ** 2;
+      if (distance < bestDistance) { bestDistance = distance; best = { x: p.x, y: p.y }; }
+    }
+  }
+  return best;
+}
+
+// Places the legend and its leader lines for this frame, and returns the screen box it takes.
+function updateLegend(width: number, height: number, transform: BABYLON.Matrix, viewport: BABYLON.Viewport): ScreenBox[]
+{
+  const planes = [...S.layerPlanes].sort((a, b) => (b.metadata as { rank: number }).rank - (a.metadata as { rank: number }).rank);
+  if (planes.length === 0)
+  {
+    if (legend) legend.style.display = "none";
+    if (legendSvg) legendSvg.style.display = "none";
+    return [];
+  }
+  ensureLegend();
+  const box = legend!, svgEl = legendSvg!;
+  box.style.display = "";
+  svgEl.style.display = "";
+
+  const names = planes.map((plane) => (plane.metadata as { layer: string }).layer);
+  const alone = S.outliner.layers.size === 1 ? [...S.outliner.layers][0] : null;
+  const signature = names.join("\n") + "|" + (alone ?? "");
+  if (signature !== legendSignature)
+  {
+    legendSignature = signature;
+    box.textContent = "";
+    for (const name of names)
+    {
+      const row = document.createElement("div");
+      row.className = "lrow" + (name === alone ? " alone" : "");
+      row.dataset.layer = name;
+      row.textContent = name;
+      row.style.borderColor = colorFor(name);
+      row.title = name === alone ? "Double-click to show every layer" : "Double-click to show only this layer";
+      box.appendChild(row);
+    }
+  }
+
+  // The legend goes on the left of the free screen, or on the right while the step rail is on the left.
+  const [open0, open1] = openSpan(width);
+  const onRight = Boolean(rail && rail.style.display !== "none" && rail.classList.contains("left"));
+  box.classList.toggle("right", onRight);
+  const rows = Array.from(box.children) as HTMLElement[];
+  const legendWidth = Math.max(...rows.map((row) => row.offsetWidth));
+  const legendX = onRight ? open1 - 12 - legendWidth : open0 + 12;
+  box.style.transform = "translate(" + legendX.toFixed(1) + "px,0)";
+
+  const edgeX = onRight ? legendX : legendX + legendWidth, dir = onRight ? -1 : 1;
+
+  // The rows are an even list, top plane first, centred on the planes it names and kept inside the band
+  // above the bottom bars; the leader lines fan out from it, as from the step rail.
+  const bars = document.getElementById("dock-bottom");
+  const barsTop = bars && bars.offsetHeight > 0 && !onPhone() ? bars.getBoundingClientRect().top - 10 : height;
+  const bandTop = 24, bandBottom = Math.min(height - bottomReserve(), barsTop);
+  const centres = planes.map((plane) => V3.Project(plane.position, BABYLON.Matrix.IdentityReadOnly, transform, viewport)).filter((p) => p.z >= 0 && p.z <= 1);
+  const middle = centres.length ? centres.reduce((sum, p) => sum + p.y, 0) / centres.length : height / 2;
+  const tall = rows.length * LEGEND_ROW;
+  const top = Math.max(bandTop, Math.min(bandBottom - tall, middle - tall / 2));
+  const ys = rows.map((_, i) => top + i * LEGEND_ROW);
+  const anchors = planes.map((plane, i) => planeAnchor(plane, onRight, edgeX, ys[i] + LEGEND_ROW / 2, [open0, open1], bandBottom, transform, viewport));
+
+  svgEl.setAttribute("width", String(width));
+  svgEl.setAttribute("height", String(height));
+  let feet = 0;
+  const paths: string[] = rows.map(() => "");
+  rows.forEach((row, i) =>
+  {
+    row.style.transform = "translate(" + (onRight ? legendWidth - row.offsetWidth : 0).toFixed(1) + "px," + ys[i].toFixed(1) + "px)";
+    const anchor = anchors[i];
+    // A line only where the plane lies past the legend's inner edge, so it never doubles back over the names.
+    if (!anchor || (anchor.x - edgeX) * dir < LEGEND_STUB) return;
+    const rowEdge = onRight ? legendX + legendWidth - row.offsetWidth : legendX + row.offsetWidth;
+    const y0 = ys[i] + row.offsetHeight / 2, stubX = edgeX + dir * LEGEND_STUB;
+    paths[i] = "M" + rowEdge.toFixed(1) + " " + y0.toFixed(1) + "L" + stubX.toFixed(1) + " " + y0.toFixed(1) +
+      "L" + anchor.x.toFixed(1) + " " + anchor.y.toFixed(1);
+    let foot = legendFeet[feet];
+    if (!foot) { foot = document.createElementNS(SVG, "circle"); foot.setAttribute("r", "2.5"); svgEl.appendChild(foot); legendFeet.push(foot); }
+    feet++;
+    foot.setAttribute("cx", anchor.x.toFixed(1));
+    foot.setAttribute("cy", anchor.y.toFixed(1));
+    foot.style.fill = colorFor(names[i]);
+    foot.style.display = "";
+  });
+  for (let i = feet; i < legendFeet.length; i++) legendFeet[i].style.display = "none";
+  // One line per row, in its layer's colour, kept behind the feet.
+  const lines = Array.from(svgEl.querySelectorAll("path"));
+  paths.forEach((d, i) =>
+  {
+    let line = lines[i];
+    if (!line) { line = document.createElementNS(SVG, "path"); svgEl.insertBefore(line, svgEl.querySelector("circle")); lines.push(line); }
+    line.setAttribute("d", d);
+    line.style.stroke = colorFor(names[i]);
+  });
+  for (let i = paths.length; i < lines.length; i++) lines[i].setAttribute("d", "");
+  return [{ left: legendX, right: legendX + legendWidth, top, bottom: top + tall }];
+}
+
 // Places the HTML labels over the scene for this frame.
 function updateLabels(): void
 {
@@ -292,20 +415,12 @@ function updateLabels(): void
   let used = 0;
   // The screen boxes already claimed this frame, so names never pile up; the step rail goes first.
   const taken = updateRail(width, height, transform, viewport);
+  taken.push(...updateLegend(width, height, transform, viewport));
   for (const item of collectLabels())
   {
     const p = V3.Project(item.pos, BABYLON.Matrix.IdentityReadOnly, transform, viewport);
     const onScreen = p.z >= 0 && p.z <= 1 && p.x >= -80 && p.x <= width + 80 && p.y >= -30 && p.y <= height + 30;
-    if (item.cls !== "layer" && !onScreen) continue;
-    // A layer's name is a legend, so it stays in view and out from under the docks even when
-    // the corner it names has swung off the side of the screen.
-    if (item.cls === "layer")
-    {
-      const [left, right] = openSpan(width);
-      const half = item.text.length * 3.5 + 12;
-      p.x = Math.max(left + half, Math.min(right - half, p.x));
-      p.y = Math.max(24, Math.min(height - bottomReserve(), p.y));
-    }
+    if (!onScreen) continue;
     // Try the label with its caption, nudged a little up or down if its spot is crowded;
     // failing that, the name alone; failing that, it is left off this frame.
     const nameHalf = item.text.length * (item.cls.startsWith("file") ? 3.1 : 3.5) + 6;

@@ -15,8 +15,16 @@
   .label.folder.sel { background: rgba(31,111,235,.94); color: #fff; font-weight: 600; }
   .label.file { padding: 1px 4px; font-size: 9.5px; color: #aab6c4; background: rgba(13,17,23,.7); }
   .label.file.hover { color: #fff; background: rgba(48,54,61,.92); font-size: 10.5px; }
-  .label.layer { padding: 2px 8px; font: 10px ui-sans-serif, system-ui, sans-serif; letter-spacing: .8px;
-    text-transform: uppercase; color: #9aa4b2; background: rgba(13,17,23,.6); }
+  /* The layers' names, in a column at one side of the screen, each tied to its plane by a leader line. */
+  #layer-lines { position: absolute; left: 0; top: 0; overflow: visible; }
+  #layer-lines path { fill: none; stroke-opacity: .7; stroke-width: 1; }
+  #layer-legend { position: absolute; left: 0; top: 0; will-change: transform; }
+  #layer-legend .lrow { position: absolute; left: 0; top: 0; white-space: nowrap; padding: 2px 8px; border-radius: 5px;
+    border-left: 3px solid; font: 10px ui-sans-serif, system-ui, sans-serif; letter-spacing: .8px; text-transform: uppercase;
+    color: #9aa4b2; background: rgba(13,17,23,.72); pointer-events: auto; cursor: pointer; user-select: none; will-change: transform; }
+  #layer-legend .lrow:hover { color: #e6edf3; background: rgba(33,38,45,.95); }
+  #layer-legend .lrow.alone { color: #e6edf3; background: rgba(31,111,235,.3); }
+  #layer-legend.right .lrow { border-left: none; border-right: 3px solid; }
   /* The code panel: the source of a symbol picked from a file's list, docked beside the left column. */
   #codeblock { position: fixed; top: 14px; left: calc(14px + clamp(260px, 25vw, 360px) + 12px); z-index: 5;
     width: clamp(360px, 42vw, 720px); max-height: 60vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; }

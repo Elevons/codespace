@@ -634,6 +634,23 @@ document.getElementById("outliner-filters")!.addEventListener("click", (event) =
   if (chip) { clickSlice(chip.dataset.slice as GroupAxis, chip.dataset.value!); return; }
 });
 
+// A layer's name in the legend beside the map shows only that layer at a double click (or double tap), and
+// the layer shown alone brings every layer back. The pair is timed here, as for the strip, so a tap counts too.
+let lastLegendClick: { layer: string; at: number } | null = null;
+document.getElementById("labels")!.addEventListener("click", (event) =>
+{
+  const row = (event.target as HTMLElement).closest("#layer-legend [data-layer]") as HTMLElement | null;
+  if (!row) return;
+  const layer = row.dataset.layer!, now = performance.now();
+  if (lastLegendClick !== null && lastLegendClick.layer === layer && now - lastLegendClick.at < DOUBLE_CLICK_MS)
+  {
+    lastLegendClick = null;
+    isolateSlice("layer", layer);
+    return;
+  }
+  lastLegendClick = { layer, at: now };
+});
+
 // The chips above the tree name filters that live outside the strip; their cross removes one.
 document.getElementById("outliner-chips")!.addEventListener("click", (event) =>
 {
