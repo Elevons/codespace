@@ -103,7 +103,6 @@ function buildLayerPlanes(): void
     plane.material = materialFor(colorFor(name), 0.04, 0.06);
     (plane.material as BABYLON.StandardMaterial).backFaceCulling = false;
     plane.isPickable = false;
-    plane.metadata = { layer: name, rank: index };
 
     const hx = width / 2, hz = depth / 2;
     const border = BABYLON.MeshBuilder.CreateLines("layer-border:" + name, {
@@ -113,6 +112,7 @@ function buildLayerPlanes(): void
     border.alpha = 0.38;
     border.parent = plane;
     border.isPickable = false;
+    plane.metadata = { layer: name, rank: index, border };
     S.layerPlanes.push(plane);
   });
 }

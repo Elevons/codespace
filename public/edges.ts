@@ -1,4 +1,4 @@
-import { S, V3, scene, glowMaterial, materialFor, filePath, matchesFilters, hasFilters, inScene } from "./state.js";
+import { S, V3, scene, glowMaterial, materialFor, filePath, matchesFilters, hasFilters, inScene, inSpotLayer } from "./state.js";
 import { routeFolderHues, routeRuns, runLine } from "./route.js";
 import type { FileRecord } from "./types.js";
 
@@ -334,7 +334,7 @@ function collectBreaks(): Break[]
     if (folderChosen && user.node !== used.node && (user.node === S.selected || used.node === S.selected)) continue;
     const a = footOf(user), b = footOf(used);
     if (!a || !b) continue;
-    const lit = (matchesFilters(from) || matchesFilters(to)) && S.trace === null &&
+    const lit = ((matchesFilters(from) && inSpotLayer(from)) || (matchesFilters(to) && inSpotLayer(to))) && S.trace === null &&
       (S.focusSet === null || S.focusSet.has(user.node) || S.focusSet.has(used.node));
     result.push({ user: a, used: b, lit, from: user.node, to: used.node });
   }
@@ -363,12 +363,12 @@ function collectTethers(): Tether[]
 {
   const tethers: Tether[] = [];
   const hues = routeFolderHues();
-  const active = S.trace !== null || S.focusSet !== null || hasFilters();
+  const active = S.trace !== null || S.focusSet !== null || S.spotLayer !== null || hasFilters();
   for (const rec of S.fileRecords.values())
   {
     const folder = S.NODES[rec.node];
     if (!folder || folder.topY === undefined) continue;
-    const lit = matchesFilters(rec.path) && (S.trace === null || S.trace.set.has(rec.path)) && (S.focusSet === null || S.focusSet.has(rec.node));
+    const lit = matchesFilters(rec.path) && inSpotLayer(rec.path) && (S.trace === null || S.trace.set.has(rec.path)) && (S.focusSet === null || S.focusSet.has(rec.node));
     const pos = rec.shape.position;
     const bottomY = pos.y - rec.shape.scaling.y / 2;
     const routed = S.trace !== null && S.trace.trace && S.trace.set.has(rec.path);

@@ -100,6 +100,7 @@ declare namespace BABYLON
         edgesWidth: number;
         color: Color3;
         alpha: number;
+        visibility: number;
         static DOUBLESIDE: number;
         static MergeMeshes(meshes: Mesh[], disposeSource?: boolean, allow32BitsIndices?: boolean): Mesh | null;
         enableEdgesRendering(): void;

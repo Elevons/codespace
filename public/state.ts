@@ -76,6 +76,7 @@ export const S = {
   extrasShown: false,                          // whether the extras (tests, docs, library code) are shown
   colorBy: "tag" as ColorBy,                   // what the boxes are coloured by
   tagFilter: null as string | null,            // the tag the tag filter is set to, or null for none
+  spotLayer: null as string | null,           // the layer picked from the legend: it stays bright and every other layer fades in place
   isolatedFiles: null as Set<string> | null,   // an ad-hoc filter: only these files are drawn, or null for none
   fingerprint: "",                             // the repository's change stamp from the last full read
   repoName: "Codespace",                       // the repository being shown, as the server names it
@@ -204,11 +205,18 @@ export function matchesFilters(path: string): boolean
   return matchesTagFilter(path) && passesSlice(path);
 }
 
+// Whether a file is on the layer picked from the legend, or no layer is picked. A file off it is
+// faded and grey, but stays where it stands, so the picked layer keeps its place in the stack.
+export function inSpotLayer(path: string): boolean
+{
+  return S.spotLayer === null || S.FILE_LAYERS.get(path) === S.spotLayer;
+}
+
 // Whether a file stays bright under the current choice: the files being shown (S.trace) when there
 // are some, the chosen folder and its neighbours otherwise, and always the filters when any are on.
 export function isLitRecord(rec: FileRecord): boolean
 {
-  if (!matchesFilters(rec.path)) return false;
+  if (!matchesFilters(rec.path) || !inSpotLayer(rec.path)) return false;
   if (S.trace) return S.trace.set.has(rec.path);
   if (S.focusSet) return S.focusSet.has(rec.node);
   return true;

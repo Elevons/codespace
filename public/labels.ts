@@ -1,4 +1,4 @@
-import { S, V3, scene, camera, canvas, labelLayer, colorFor, filePath, matchesFilters, nodeMatchesFilters } from "./state.js";
+import { S, V3, scene, camera, canvas, labelLayer, colorFor, filePath, matchesFilters, nodeMatchesFilters, renderEdges } from "./state.js";
 import { labelOf, plateLabel } from "./repo.js";
 import { routeFolderHues, routeRuns, runLine } from "./route.js";
 
@@ -282,35 +282,44 @@ function ensureLegend(): void
   labelLayer.appendChild(legend);
 }
 
-// Where a plane meets its leader line on screen: the point of its outline closest to the row's spot that
-// lies in the open screen past the legend's inner edge. Only the two front sides, those meeting at the
-// corner nearest the camera, are walked: every plane has the same front, so the lines keep the planes'
-// order and never cross.
-function planeAnchor(plane: BABYLON.Mesh, onRight: boolean, edgeX: number, rowY: number, span: [number, number], height: number,
-  transform: BABYLON.Matrix, viewport: BABYLON.Viewport): { x: number; y: number } | null
+// Which corner of the planes the leader lines end on. Every plane uses the same one, so the lines keep the
+// planes' order, and it is kept while it stays in view, so a line rides on its corner as the map turns rather
+// than sliding along the outline. Only when it leaves the free screen do the lines move, to the corner in
+// view nearest the legend.
+let legendCorner = -1;
+
+/** One plane's four corners on screen, in the same order for every plane. */
+function planeCorners(plane: BABYLON.Mesh, transform: BABYLON.Matrix, viewport: BABYLON.Viewport): BABYLON.Vector3[]
 {
   const info = plane.getBoundingInfo().boundingBox;
   const y = plane.position.y;
   const x0 = info.minimumWorld.x, x1 = info.maximumWorld.x, z0 = info.minimumWorld.z, z1 = info.maximumWorld.z;
-  const corners = [new V3(x0, y, z0), new V3(x1, y, z0), new V3(x1, y, z1), new V3(x0, y, z1)];
-  const near = onRight ? edgeX - LEGEND_STUB * 2 : edgeX + LEGEND_STUB * 2;
-  let best: { x: number; y: number } | null = null, bestDistance = Infinity;
-  const at = new V3();
-  const front = corners.reduce((best, corner, i) => V3.DistanceSquared(corner, camera.position) < V3.DistanceSquared(corners[best], camera.position) ? i : best, 0);
-  for (const side of [(front + 3) % 4, front])
+  return [new V3(x0, y, z0), new V3(x1, y, z0), new V3(x1, y, z1), new V3(x0, y, z1)]
+    .map((corner) => V3.Project(corner, BABYLON.Matrix.IdentityReadOnly, transform, viewport));
+}
+
+// Where each plane's leader line ends on screen, or null for a plane whose corner is out of view.
+function planeAnchors(planes: BABYLON.Mesh[], onRight: boolean, edgeX: number, span: [number, number], height: number,
+  transform: BABYLON.Matrix, viewport: BABYLON.Viewport): ({ x: number; y: number } | null)[]
+{
+  const corners = planes.map((plane) => planeCorners(plane, transform, viewport));
+  const inView = (p: BABYLON.Vector3) => p.z >= 0 && p.z <= 1 && p.y >= 0 && p.y <= height && p.x >= span[0] && p.x <= span[1] &&
+    (p.x - edgeX) * (onRight ? -1 : 1) >= LEGEND_STUB;
+  const seen = (corner: number) => corners.filter((four) => inView(four[corner])).length;
+  if (legendCorner < 0 || seen(legendCorner) * 2 < planes.length)
   {
-    const from = corners[side], to = corners[(side + 1) % 4];
-    for (let step = 0; step <= 24; step++)
+    // The corner most planes show, and of those the one nearest the legend.
+    let best = -1, bestSeen = 0, bestGap = Infinity;
+    for (let corner = 0; corner < 4; corner++)
     {
-      V3.LerpToRef(from, to, step / 24, at);
-      const p = V3.Project(at, BABYLON.Matrix.IdentityReadOnly, transform, viewport);
-      if (p.z < 0 || p.z > 1 || p.y < 0 || p.y > height || p.x < span[0] || p.x > span[1]) continue;
-      if (onRight ? p.x > near : p.x < near) continue;
-      const distance = (p.x - near) ** 2 + (p.y - rowY) ** 2;
-      if (distance < bestDistance) { bestDistance = distance; best = { x: p.x, y: p.y }; }
+      const count = seen(corner);
+      const gap = corners.reduce((sum, four) => sum + Math.abs(four[corner].x - edgeX), 0);
+      if (count > bestSeen || (count === bestSeen && count > 0 && gap < bestGap)) { best = corner; bestSeen = count; bestGap = gap; }
     }
+    if (best >= 0) legendCorner = best;
   }
-  return best;
+  if (legendCorner < 0) return planes.map(() => null);
+  return corners.map((four) => inView(four[legendCorner]) ? { x: four[legendCorner].x, y: four[legendCorner].y } : null);
 }
 
 // Places the legend and its leader lines for this frame, and returns the screen box it takes.
@@ -329,7 +338,9 @@ function updateLegend(width: number, height: number, transform: BABYLON.Matrix, 
   svgEl.style.display = "";
 
   const names = planes.map((plane) => (plane.metadata as { layer: string }).layer);
-  const alone = S.outliner.layers.size === 1 ? [...S.outliner.layers][0] : null;
+  // A picked layer that is no longer drawn lets the others back.
+  if (S.spotLayer !== null && !names.includes(S.spotLayer)) { S.spotLayer = null; renderEdges(); }
+  const alone = S.spotLayer;
   const signature = names.join("\n") + "|" + (alone ?? "");
   if (signature !== legendSignature)
   {
@@ -338,11 +349,11 @@ function updateLegend(width: number, height: number, transform: BABYLON.Matrix, 
     for (const name of names)
     {
       const row = document.createElement("div");
-      row.className = "lrow" + (name === alone ? " alone" : "");
+      row.className = "lrow" + (name === alone ? " alone" : alone !== null ? " faded" : "");
       row.dataset.layer = name;
       row.textContent = name;
       row.style.borderColor = colorFor(name);
-      row.title = name === alone ? "Double-click to show every layer" : "Double-click to show only this layer";
+      row.title = name === alone ? "Double-click to bring every layer back" : "Double-click to pick out this layer";
       box.appendChild(row);
     }
   }
@@ -358,17 +369,15 @@ function updateLegend(width: number, height: number, transform: BABYLON.Matrix, 
 
   const edgeX = onRight ? legendX : legendX + legendWidth, dir = onRight ? -1 : 1;
 
-  // The rows are an even list, top plane first, centred on the planes it names and kept inside the band
-  // above the bottom bars; the leader lines fan out from it, as from the step rail.
+  // The rows are an even list, top plane first, fixed in the middle of the band above the bottom bars, so
+  // it stays still as the map turns; the leader lines fan out from it, as from the step rail.
   const bars = document.getElementById("dock-bottom");
   const barsTop = bars && bars.offsetHeight > 0 && !onPhone() ? bars.getBoundingClientRect().top - 10 : height;
   const bandTop = 24, bandBottom = Math.min(height - bottomReserve(), barsTop);
-  const centres = planes.map((plane) => V3.Project(plane.position, BABYLON.Matrix.IdentityReadOnly, transform, viewport)).filter((p) => p.z >= 0 && p.z <= 1);
-  const middle = centres.length ? centres.reduce((sum, p) => sum + p.y, 0) / centres.length : height / 2;
   const tall = rows.length * LEGEND_ROW;
-  const top = Math.max(bandTop, Math.min(bandBottom - tall, middle - tall / 2));
+  const top = Math.max(bandTop, (bandTop + bandBottom - tall) / 2);
   const ys = rows.map((_, i) => top + i * LEGEND_ROW);
-  const anchors = planes.map((plane, i) => planeAnchor(plane, onRight, edgeX, ys[i] + LEGEND_ROW / 2, [open0, open1], bandBottom, transform, viewport));
+  const anchors = planeAnchors(planes, onRight, edgeX, [open0, open1], bandBottom, transform, viewport);
 
   svgEl.setAttribute("width", String(width));
   svgEl.setAttribute("height", String(height));
@@ -390,6 +399,7 @@ function updateLegend(width: number, height: number, transform: BABYLON.Matrix, 
     foot.setAttribute("cx", anchor.x.toFixed(1));
     foot.setAttribute("cy", anchor.y.toFixed(1));
     foot.style.fill = colorFor(names[i]);
+    foot.style.opacity = S.spotLayer !== null && names[i] !== S.spotLayer ? "0.3" : "";
     foot.style.display = "";
   });
   for (let i = feet; i < legendFeet.length; i++) legendFeet[i].style.display = "none";
@@ -401,6 +411,7 @@ function updateLegend(width: number, height: number, transform: BABYLON.Matrix, 
     if (!line) { line = document.createElementNS(SVG, "path"); svgEl.insertBefore(line, svgEl.querySelector("circle")); lines.push(line); }
     line.setAttribute("d", d);
     line.style.stroke = colorFor(names[i]);
+    line.style.strokeOpacity = S.spotLayer !== null && names[i] !== S.spotLayer ? "0.2" : "";
   });
   for (let i = paths.length; i < lines.length; i++) lines[i].setAttribute("d", "");
   return [{ left: legendX, right: legendX + legendWidth, top, bottom: top + tall }];

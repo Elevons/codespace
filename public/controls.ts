@@ -209,6 +209,7 @@ function clearOutliner(folds = true): void
   S.outliner.layers.clear();
   if (folds) S.outliner.collapsed.clear();
   S.tagFilter = null;
+  S.spotLayer = null;
   searchInput.value = "";
   if (filtered) redrawScene();
   else { renderOutliner(); renderEdges(); }
@@ -634,8 +635,9 @@ document.getElementById("outliner-filters")!.addEventListener("click", (event) =
   if (chip) { clickSlice(chip.dataset.slice as GroupAxis, chip.dataset.value!); return; }
 });
 
-// A layer's name in the legend beside the map shows only that layer at a double click (or double tap), and
-// the layer shown alone brings every layer back. The pair is timed here, as for the strip, so a tap counts too.
+// A layer's name in the legend beside the map picks that layer at a double click (or double tap): every other
+// layer fades grey where it stands, so the picked one keeps its place in the stack. The picked layer's name
+// brings every layer back. The pair is timed here, as for the strip, so a tap counts too.
 let lastLegendClick: { layer: string; at: number } | null = null;
 document.getElementById("labels")!.addEventListener("click", (event) =>
 {
@@ -645,7 +647,8 @@ document.getElementById("labels")!.addEventListener("click", (event) =>
   if (lastLegendClick !== null && lastLegendClick.layer === layer && now - lastLegendClick.at < DOUBLE_CLICK_MS)
   {
     lastLegendClick = null;
-    isolateSlice("layer", layer);
+    S.spotLayer = S.spotLayer === layer ? null : layer;
+    renderEdges();
     return;
   }
   lastLegendClick = { layer, at: now };

@@ -106,7 +106,7 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "core"],
-      "summary": "The map's controls and options: framing the chosen block, file, or folder; colouring, grouping, filters (including isolating a layer from its legend name), shift-click selection, collapsing the outliner, and refreshing the graph."
+      "summary": "The map's controls and options: framing the chosen block, file, or folder; colouring, grouping, filters (including picking out a layer from its legend name), shift-click selection, collapsing the outliner, and refreshing the graph."
     },
     "public/edges.ts": {
       "system": "browser",
@@ -148,7 +148,7 @@
       "system": "browser",
       "layer": "render",
       "tags": ["core"],
-      "summary": "Paints each file for the current choice, tinting the batched crowd, lighting every selected file, and fading a file that was just edited."
+      "summary": "Paints each file for the current choice, tinting the batched crowd, lighting every selected file, fading a file that was just edited, and greying the layers left out when one is picked from the legend."
     },
     "public/index.html": {
       "system": "browser",
@@ -250,7 +250,7 @@
       "system": "browser",
       "layer": "model",
       "tags": ["core"],
-      "summary": "The page's mutable world and constants: the graph, the chosen file and block, the selection, import names, filters, edit flashes, wire anchors, scene handles, and camera framing for a file's block stack or a chosen floor."
+      "summary": "The page's mutable world and constants: the graph, the chosen file and block, the selection, import names, filters, the layer picked from the legend, edit flashes, wire anchors, scene handles, and camera framing for a file's block stack or a chosen floor."
     },
     "public/style.css": {
       "system": "browser",

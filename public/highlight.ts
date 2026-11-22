@@ -1,4 +1,4 @@
-import { S, isLitRecord, materialFor, fileColor } from "./state.js";
+import { S, isLitRecord, inSpotLayer, materialFor, fileColor } from "./state.js";
 import { placeBox, paintBox, releaseAccents, accent, retireAccents } from "./boxes.js";
 import { colorOf } from "./batch.js";
 
@@ -18,7 +18,8 @@ function applyHighlight(): void
     const emphasise = start !== null && rec.path === start;
     // A file edited on disk flashes at full brightness, then fades back to how it sat.
     const flash = S.flashes.get(rec.path) ?? 0;
-    const hex = fileColor(rec.path);
+    // A file off the layer picked from the legend goes grey as well as faint.
+    const hex = inSpotLayer(rec.path) ? fileColor(rec.path) : FADED_GREY;
     rec.lit = lit;
     if (chosen || emphasise || shown || hovered || flash > 0)
     {
@@ -30,6 +31,20 @@ function applyHighlight(): void
     placeBox(rec);
   }
   retireAccents();
+  fadeLayerPlanes();
+}
+
+const FADED_GREY = "#6e7681";
+
+// While a layer is picked from the legend, every other plane and its outline fade to a trace.
+function fadeLayerPlanes(): void
+{
+  for (const plane of S.layerPlanes)
+  {
+    const faded = S.spotLayer !== null && (plane.metadata as { layer: string }).layer !== S.spotLayer;
+    plane.visibility = faded ? 0.2 : 1;
+    (plane.metadata as { border: BABYLON.Mesh }).border.visibility = faded ? 0.3 : 1;
+  }
 }
 
 export { applyHighlight };

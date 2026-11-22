@@ -24,6 +24,7 @@
     color: #9aa4b2; background: rgba(13,17,23,.72); pointer-events: auto; cursor: pointer; user-select: none; will-change: transform; }
   #layer-legend .lrow:hover { color: #e6edf3; background: rgba(33,38,45,.95); }
   #layer-legend .lrow.alone { color: #e6edf3; background: rgba(31,111,235,.3); }
+  #layer-legend .lrow.faded { opacity: .45; }
   #layer-legend.right .lrow { border-left: none; border-right: 3px solid; }
   /* The code panel: the source of a symbol picked from a file's list, docked beside the left column. */
   #codeblock { position: fixed; top: 14px; left: calc(14px + clamp(260px, 25vw, 360px) + 12px); z-index: 5;
