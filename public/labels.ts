@@ -270,6 +270,8 @@ function updateRail(width: number, height: number, transform: BABYLON.Matrix, vi
 let legend: HTMLDivElement | null = null, legendSvg: SVGSVGElement | null = null, legendSignature = "";
 const legendFeet: SVGCircleElement[] = [];
 const LEGEND_ROW = 22, LEGEND_STUB = 14;
+// How much nearer another corner must be, in pixels, before the lines move to it.
+const LEGEND_HOLD = 40;
 
 function ensureLegend(): void
 {
@@ -282,10 +284,11 @@ function ensureLegend(): void
   labelLayer.appendChild(legend);
 }
 
-// Which corner of the planes the leader lines end on. Every plane uses the same one, so the lines keep the
-// planes' order, and it is kept while it stays in view, so a line rides on its corner as the map turns rather
-// than sliding along the outline. Only when it leaves the free screen do the lines move, to the corner in
-// view nearest the legend.
+// Which corner of the planes the leader lines end on: the corner nearest the legend, so the lines run a
+// short way across the map and not over it. Every plane uses the same one, so the lines keep the planes'
+// order. It is kept until another corner is clearly nearer, so a line rides on its corner as the map turns
+// rather than hopping between them. A corner that is off the screen, as a phone's often are, is reached
+// where its outline comes into view beside the legend.
 let legendCorner = -1;
 
 /** One plane's four corners on screen, in the same order for every plane. */
@@ -298,28 +301,50 @@ function planeCorners(plane: BABYLON.Mesh, transform: BABYLON.Matrix, viewport: 
     .map((corner) => V3.Project(corner, BABYLON.Matrix.IdentityReadOnly, transform, viewport));
 }
 
-// Where each plane's leader line ends on screen, or null for a plane whose corner is out of view.
+// Where each plane's leader line ends on screen, or null for a plane with no usable end.
 function planeAnchors(planes: BABYLON.Mesh[], onRight: boolean, edgeX: number, span: [number, number], height: number,
   transform: BABYLON.Matrix, viewport: BABYLON.Viewport): ({ x: number; y: number } | null)[]
 {
   const corners = planes.map((plane) => planeCorners(plane, transform, viewport));
-  const inView = (p: BABYLON.Vector3) => p.z >= 0 && p.z <= 1 && p.y >= 0 && p.y <= height && p.x >= span[0] && p.x <= span[1] &&
-    (p.x - edgeX) * (onRight ? -1 : 1) >= LEGEND_STUB;
-  const seen = (corner: number) => corners.filter((four) => inView(four[corner])).length;
-  if (legendCorner < 0 || seen(legendCorner) * 2 < planes.length)
+  const dir = onRight ? -1 : 1;
+  // Distance past the legend's edge, going away from it.
+  const past = (p: BABYLON.Vector3) => (p.x - edgeX) * dir;
+  const reach = LEGEND_STUB * 2;
+  const usable = (p: BABYLON.Vector3) => p.z >= 0 && p.z <= 1 && p.y >= 0 && p.y <= height && p.x >= span[0] && p.x <= span[1];
+  // The corner's own place when it is beside the legend, else where the outline to a neighbour crosses
+  // `reach` past the legend's edge.
+  const endOf = (four: BABYLON.Vector3[], corner: number): { x: number; y: number } | null =>
   {
-    // The corner most planes show, and of those the one nearest the legend.
-    let best = -1, bestSeen = 0, bestGap = Infinity;
-    for (let corner = 0; corner < 4; corner++)
+    const c = four[corner];
+    if (c.z < 0 || c.z > 1) return null;
+    if (past(c) >= reach) return usable(c) ? { x: c.x, y: c.y } : null;
+    let best: { x: number; y: number } | null = null;
+    for (const next of [(corner + 1) % 4, (corner + 3) % 4])
     {
-      const count = seen(corner);
-      const gap = corners.reduce((sum, four) => sum + Math.abs(four[corner].x - edgeX), 0);
-      if (count > bestSeen || (count === bestSeen && count > 0 && gap < bestGap)) { best = corner; bestSeen = count; bestGap = gap; }
+      const n = four[next];
+      if (n.z < 0 || n.z > 1 || past(n) <= past(c)) continue;
+      const t = (reach - past(c)) / (past(n) - past(c));
+      if (t < 0 || t > 1) continue;
+      const point = { x: c.x + (n.x - c.x) * t, y: c.y + (n.y - c.y) * t };
+      // Of the two edges, the one that meets the line nearer the corner.
+      if (usable(new V3(point.x, point.y, 0)) && (best === null || t < 0.5)) best = point;
     }
-    if (best >= 0) legendCorner = best;
+    return best;
+  };
+  const reached = (corner: number) => corners.filter((four) => endOf(four, corner) !== null).length;
+  // How far, on average, one corner of every plane is past the legend: the nearest is the one most to its side.
+  const gapOf = (corner: number) => corners.reduce((sum, four) => sum + past(four[corner]), 0) / corners.length;
+  let best = -1, bestGap = Infinity;
+  for (let corner = 0; corner < 4; corner++)
+  {
+    if (reached(corner) * 2 < planes.length) continue;
+    const gap = gapOf(corner);
+    if (gap < bestGap) { best = corner; bestGap = gap; }
   }
+  const keep = legendCorner >= 0 && reached(legendCorner) * 2 >= planes.length && gapOf(legendCorner) <= bestGap + LEGEND_HOLD;
+  if (best >= 0 && !keep) legendCorner = best;
   if (legendCorner < 0) return planes.map(() => null);
-  return corners.map((four) => inView(four[legendCorner]) ? { x: four[legendCorner].x, y: four[legendCorner].y } : null);
+  return corners.map((four) => endOf(four, legendCorner));
 }
 
 // Places the legend and its leader lines for this frame, and returns the screen box it takes.
