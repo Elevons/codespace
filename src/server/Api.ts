@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Chat } from '../agent/Chat.ts'
 import { Architecture, type IArchitecturePatch } from '../repo/Architecture.ts'
+import { CreateFileAsync } from '../repo/Create.ts'
 import { DescribeGuide } from '../repo/DescribeGuide.ts'
 import { DraftTour, NormaliseFlow, ReadFlowsAsync, WriteFlowsAsync } from '../repo/Flows.ts'
 import { Graph } from '../repo/Graph.ts'
@@ -154,7 +155,7 @@ export class Api
             try { await this.ChangeChatAsync(chat, await ReadJsonAsync(request)); SendJson(response, 200, { ok: true }) }
             catch (error) { SendJson(response, 400, { error: (error as Error).message }) }
         }
-        else if ((path === '/api/architecture' || path === '/api/view' || path === '/api/flows' || path === '/api/ingest/next') && request.method === 'POST')
+        else if ((path === '/api/architecture' || path === '/api/view' || path === '/api/flows' || path === '/api/ingest/next' || path === '/api/files') && request.method === 'POST')
         {
             const refusal = RefuseWrite(request, this.allowWrites)
             if (refusal !== null) { SendJson(response, 403, { error: refusal }); return true }
@@ -166,6 +167,7 @@ export class Api
                 if (path === '/api/architecture') await this.UpdateArchitectureAsync(response, body, workspace)
                 else if (path === '/api/flows') await this.ChangeFlowsAsync(response, body, workspace)
                 else if (path === '/api/ingest/next') await this.SendNextAsync(response, body, workspace)
+                else if (path === '/api/files') await this.CreateFileAsync(response, body, workspace)
                 else await this.ChangeViewAsync(response, body, workspace)
             }
             catch (error) { SendJson(response, 400, { error: (error as Error).message }) }
@@ -200,6 +202,24 @@ export class Api
         await Ledger.RecordAsync(repo, Object.keys((body as IArchitecturePatch).files ?? {}))
         workspace.view.ArchitectureChanged()
         SendJson(response, 200, updated)
+    }
+
+    /**
+     * Creates a new file in the repository with its architecture entry, and tells the pages to read both again.
+     * @param response the response to write
+     * @param body the new file: path, summary, layer, and optionally system and tags
+     * @param workspace the repository it goes in
+     */
+    private async CreateFileAsync(response: ServerResponse, body: Record<string, unknown>, workspace: Workspace): Promise<void>
+    {
+        const text = (value: unknown): string => typeof value === 'string' ? value : ''
+        const tags = Array.isArray(body.tags) ? body.tags.filter((tag): tag is string => typeof tag === 'string') : []
+        const created = await CreateFileAsync(workspace.repo, {
+            path: text(body.path), summary: text(body.summary), layer: text(body.layer),
+            ...(text(body.system) !== '' ? { system: text(body.system) } : {}), tags,
+        })
+        workspace.view.ArchitectureChanged()
+        SendJson(response, 200, { ok: true, path: created.path, notes: created.notes })
     }
 
     /**

@@ -108,6 +108,7 @@
     <button type="button" class="insight-open" data-open-tab="recent" title="The files changed since the last commit">Changes</button>
     <button type="button" class="insight-open" data-open-tab="flows" title="Saved views of the map, to show again">Flows</button>
     <button type="button" class="insight-open" data-open-tab="health" title="The codebase's size, layer breaks, largest files, and key-shaped values">Health</button>
+    <button id="build-btn" type="button" data-build title="Build: drag shapes onto the map to make layers, files, and concepts">Build</button>
     <button id="spin" class="on">Spin<span class="state">on</span></button>
     <button id="reset">Reset view</button>
     <button id="refresh">Refresh</button>
@@ -155,6 +156,7 @@
   <button type="button" data-tab="details" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg><span>Details</span><i class="mbadge dot" hidden></i></button>
   <button type="button" data-tab="insight" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg><span>Insights</span></button>
   <button type="button" data-tab="chat" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg><span>Chat</span><i class="mbadge dot" hidden></i></button>
+  <button type="button" data-build aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></svg><span>Build</span></button>
   <button type="button" data-tab="view" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg><span>View</span></button>
 </nav>
 
@@ -233,7 +235,7 @@
     <dt><kbd>Esc</kbd></dt><dd>clear the choice and filters</dd>
     <dt>drag</dt><dd>orbit · right-drag to pan · wheel to zoom</dd>
   </dl>
-  <p class="hint key-only">Filter the map from the Outliner's strip (<kbd>Alt</kbd>-click solos a chip); an eye hides a row in the scene. Double-click a layer's name beside the map to pick it out (the other layers fade grey in place), another layer's name to move straight to it, and the same name again, or a double-click on the map, to bring them all back. In search, <kbd>↑</kbd> <kbd>↓</kbd> pick a match, <kbd>Enter</kbd> chooses it, <kbd>Esc</kbd> empties it. In the tree, arrows move and fold, <kbd>Enter</kbd> chooses, <kbd>Shift</kbd><kbd>Enter</kbd> or a double-click opens the source, <kbd>Space</kbd> flips the eye.</p>
+  <p class="hint key-only">Filter the map from the Outliner's strip (<kbd>Alt</kbd>-click solos a chip); an eye hides a row in the scene. Double-click a layer's name beside the map to pick it out (the other layers fade grey in place), another layer's name to move straight to it, and the same name again, or a double-click on the map, to bring them all back. The <b>+</b> beside a layer's name makes a new file on that layer. <b>Build</b> hides the controls and shows a bar of shapes: drag a plane for a layer, a cube onto a layer for a file, or a cloud around files for a concept. <b>New codebase</b> clears the board. In search, <kbd>↑</kbd> <kbd>↓</kbd> pick a match, <kbd>Enter</kbd> chooses it, <kbd>Esc</kbd> empties it. In the tree, arrows move and fold, <kbd>Enter</kbd> chooses, <kbd>Shift</kbd><kbd>Enter</kbd> or a double-click opens the source, <kbd>Space</kbd> flips the eye.</p>
 </div>
 
 <script src="vendor/babylon.js"></script>

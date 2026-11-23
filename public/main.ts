@@ -16,6 +16,7 @@ import "./repo-switch.js";
 import "./chat.js";
 import "./insight.js";
 import "./mobile.js";
+import "./build.js";
 
 /* -------------------------------------------------------- interaction ---- */
 

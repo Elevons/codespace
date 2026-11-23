@@ -205,6 +205,7 @@ Reading, for finding the right files and steps before you show them:
 | `GET /api/health` | the codebase's size, largest files, layer breaks, undescribed files, and key-shaped values |
 | `GET /api/flows` | the saved flows; `?draft=1` drafts a start-here tour instead |
 | `POST /api/flows` | `{"action":"save","flow"}`, `{"action":"show","name"}`, or `{"action":"delete","name"}` |
+| `POST /api/files` | `{"path", "summary", "layer", "system"?, "tags"?}`: makes a new file, opening with its summary as a comment, and its entry together; it never overwrites one |
 | `GET /api/ingest/status` | how much is left to describe and to refine |
 | `POST /api/ingest/next` | `{"size": n}`: the CLI's `next` over HTTP (it can settle generated files, so it is a write) |
 | `GET /api/ingest/refine?size=n` | the CLI's `refine` over HTTP |
@@ -246,7 +247,7 @@ own that forwards the call (a GET sends the arguments as query values, a POST se
 endpoint an agent should use, add or change its entry in `MapTools` in the same change**; `tests/Tools.test.ts`
 calls every listed tool through the real server.
 
-Writes (`POST /api/view`, `POST /api/repo`, `POST /api/flows`, `POST /api/ingest/next`, `POST`/`DELETE /api/architecture`) are accepted from
+Writes (`POST /api/view`, `POST /api/repo`, `POST /api/flows`, `POST /api/files`, `POST /api/ingest/next`, `POST`/`DELETE /api/architecture`) are accepted from
 this machine through `localhost` only, unless the server was started with `--allow-writes`; a
 refused write answers 403 with the reason.
 
@@ -269,14 +270,14 @@ machine as `chat` events on the view stream. Chats and pi's settings live in `~/
   what to ingest next (`Next.ts` is the one `next`, shared by the CLI and the API), and its files'
   blocks on demand (`Blocks.ts`). `Flows.ts` keeps saved views and drafts the tour, `Health.ts` makes
   the health report and the secret scan, and `Neighbours.ts` walks the files around one file. No HTTP in here.
-  `DescribeGuide.ts`, `JsonStore.ts`, and `ShowLimits.ts` hold the first-pass instructions, the
+  `Create.ts` makes a new file with its entry. `DescribeGuide.ts`, `JsonStore.ts`, and `ShowLimits.ts` hold the first-pass instructions, the
   repository-scoped JSON access, and the show limits.
 - `src/server/` — the HTTP server, the endpoints, the tool list (`Tools.ts`), the view stream,
   the write guard, and the switchable workspace.
 - `src/agent/` — the built-in chat: its pi agent, what that agent is told, and which model it uses.
 - `public/` — the browser side: the 3D city, the Outliner with its system/layer filters,
   the panels and controls, the chat, and the phone sheet. `insight.ts` is the Insights panel
-  (recent work, flows, health), `viewcall.ts` makes the page's own view changes, and `neighbourhood.ts` isolates the files around one file. `public/endpoint.ts` builds every API address. `public/filter.ts`, `public/rules.ts`, and
+  (recent work, flows, health), `viewcall.ts` makes the page's own view changes, `neighbourhood.ts` isolates the files around one file, and `newfile.ts` is the form that makes a new file on a layer, opened from the + beside the layer's name in the legend. `build.ts` is build mode, a phone-first mode that hides the other controls and stands a bar of shapes down the left edge: drag a plane onto the map for a layer, a cube onto a layer for a file, or draw a loop with the cloud around files for a concept (saved as a flow with no route); New codebase clears the board by hiding every file and dropping the filters, deleting nothing. All three end in the one prompt in `prompt.ts`: a default name, all selected, Continue or Cancel. `public/endpoint.ts` builds every API address. `public/filter.ts`, `public/rules.ts`, and
   `public/symbols.ts` hold the pure filter, layout/visibility, and symbol rules; `public/blocks.ts` holds
   the block kinds, colours, and the rule that stacks blocks into floors, and `public/floors.ts` draws them;
   `public/flows.ts`, `public/health.ts`, and `public/neighbours.ts` hold the shapes and limits the page and

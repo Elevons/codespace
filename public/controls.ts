@@ -1,5 +1,6 @@
 import { S, camera, canvas, DEFAULT_ALPHA, filePath, frameBlock, frameFile, frameFolder, glow, hasFilters, isFileVisible, matchesTagFilter, render, renderEdges, fileIndex, pathIndex, sliceValue } from "./state.js";
 import { api } from "./endpoint.js";
+import { openNewFile } from "./newfile.js";
 import { build } from "./city.js";
 import { centerView, recenterTarget, pulseFile } from "./meshes.js";
 import { collapseAllOutliner, folderNode, select, selectFile, setOutlinerFocus, openSymbol, openFile, renderOutliner, renderSelection, revealOutliner, sliceSet, toggleFileSelection, toggleFold } from "./panels.js";
@@ -390,7 +391,7 @@ function allFilePaths(): string[]
 }
 
 // Hides every file box at once; the rows stay, so any single file can still be brought back by its eye.
-document.getElementById("outliner-hide-all")!.addEventListener("click", () =>
+function hideAllFiles(): void
 {
   S.outliner.shownFiles.clear();
   for (const path of allFilePaths()) S.outliner.hiddenFiles.add(path);
@@ -399,7 +400,26 @@ document.getElementById("outliner-hide-all")!.addEventListener("click", () =>
   recenterTarget();
   renderOutliner();
   renderEdges();
-});
+}
+document.getElementById("outliner-hide-all")!.addEventListener("click", hideAllFiles);
+
+/**
+ * Clears the board for a new codebase: every file is hidden and every filter, isolation, and picked layer is
+ * dropped, so the map is empty to build on. Nothing is deleted; Show all in the Outliner brings it all back.
+ */
+function clearBoard(): void
+{
+  dropIsolation();
+  S.outliner.systems.clear();
+  S.outliner.layers.clear();
+  S.tagFilter = null;
+  S.spotLayer = null;
+  S.selected = -1;
+  S.selectedFile = -1;
+  S.focusSet = null;
+  S.extraFiles.clear();
+  hideAllFiles();
+}
 
 // Shows every file box at once: no hidden groups or files, and Extras on so nothing stays behind.
 document.getElementById("outliner-show-all-files")!.addEventListener("click", () =>
@@ -642,6 +662,8 @@ document.getElementById("outliner-filters")!.addEventListener("click", (event) =
 let lastLegendClick: { layer: string; at: number } | null = null;
 document.getElementById("labels")!.addEventListener("click", (event) =>
 {
+  const add = (event.target as HTMLElement).closest("#layer-legend [data-new-file]") as HTMLElement | null;
+  if (add) { lastLegendClick = null; openNewFile(add.dataset.newFile!); return; }
   const row = (event.target as HTMLElement).closest("#layer-legend [data-layer]") as HTMLElement | null;
   if (!row) return;
   // The event's own time, not the time it is handled: a busy page handles the second tap late.
@@ -852,4 +874,4 @@ window.addEventListener("hashchange", () =>
   if (path !== null) openPath(path);
 });
 
-export { setSpin, refreshGraph };
+export { setSpin, refreshGraph, clearBoard };

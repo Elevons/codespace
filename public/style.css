@@ -26,6 +26,77 @@
   #layer-legend .lrow.alone { color: #e6edf3; background: rgba(31,111,235,.3); }
   #layer-legend .lrow.faded { opacity: .45; }
   #layer-legend.right .lrow { border-left: none; border-right: 3px solid; }
+  #layer-legend .lrow { display: flex; align-items: center; gap: 6px; }
+  #layer-legend .ladd { padding: 0 5px; border: 1px solid #30363d; border-radius: 4px; background: #21262d; color: #c9d1d9;
+    font: 600 11px/14px ui-sans-serif, system-ui, sans-serif; cursor: pointer; opacity: .55; }
+  #layer-legend .lrow:hover .ladd, #layer-legend .ladd:focus-visible { opacity: 1; }
+  #layer-legend .ladd:hover { background: #238636; border-color: #2ea043; color: #fff; }
+  #layer-legend.right .lrow { flex-direction: row-reverse; }
+  body.phone #layer-legend .ladd { opacity: 1; padding: 2px 8px; font-size: 13px; }
+  /* Build mode (build.ts): the page's controls step aside, and a bar of shapes stands down the left edge. */
+  body.building #dock-left, body.building #dock-right, body.building #dock-bottom, body.building #outliner-show,
+  body.building #msheet, body.building #mpeek, body.building #mtabs, body.building #codeblock, body.building #repo-panel,
+  body.building #chat-panel, body.building #help, body.building #newfile, body.building #trace-rail, body.building #trace-lines,
+  body.building #layer-legend .ladd { display: none !important; }
+  #buildbar { position: fixed; z-index: 7; left: max(8px, env(safe-area-inset-left)); top: 50%; transform: translateY(-50%);
+    display: flex; flex-direction: column; gap: 8px; padding: 8px; border-radius: 16px; background: rgba(22,27,34,.9);
+    border: 1px solid #30363d; backdrop-filter: blur(6px); touch-action: none; user-select: none; -webkit-user-select: none; }
+  #buildbar[hidden] { display: none; }
+  #buildbar .btool { width: 60px; height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    padding: 0; border-radius: 12px; border: 1px solid #30363d; background: #161b22; color: #c9d1d9; cursor: grab;
+    font: 600 10px ui-sans-serif, system-ui, sans-serif; touch-action: none; -webkit-tap-highlight-color: transparent; }
+  #buildbar .btool:hover, #buildbar .btool:active { background: #21262d; color: #fff; }
+  #buildbar .btool svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; stroke-linecap: round; pointer-events: none; }
+  #buildbar .btool span { pointer-events: none; }
+  #buildbar .btool[data-tool="plane"] { color: #d2a8ff; }
+  #buildbar .btool[data-tool="cube"] { color: #58a6ff; }
+  #buildbar .btool[data-tool="cloud"] { color: #7ee787; }
+  #buildbar .bnew { height: 44px; border-radius: 10px; border: 1px solid #30363d; background: #161b22; color: #ff7b72; font: 600 10px/1.2 ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+  #buildbar .bdone { margin-top: 4px; height: 40px; border-radius: 10px; border: 1px solid #30363d; background: #21262d; color: #e6edf3; font-size: 12px; cursor: pointer; }
+  .bghost { position: fixed; left: 0; top: 0; z-index: 12; width: 56px; height: 56px; pointer-events: none; opacity: .92; filter: drop-shadow(0 4px 10px rgba(0,0,0,.6)); }
+  .bghost svg { width: 100%; height: 100%; fill: rgba(88,166,255,.25); stroke: #e6edf3; stroke-width: 1.7; stroke-linejoin: round; }
+  #lasso { position: fixed; inset: 0; width: 100vw; height: 100dvh; z-index: 11; pointer-events: none; }
+  #lasso path { fill: rgba(126,231,135,.14); stroke: #7ee787; stroke-width: 2; stroke-dasharray: 7 5; stroke-linejoin: round; }
+  #buildtoast { position: fixed; z-index: 13; left: 50%; bottom: 28px; transform: translate(-50%, 12px); padding: 9px 16px; border-radius: 20px;
+    background: rgba(22,27,34,.95); border: 1px solid #30363d; color: #e6edf3; font-size: 13px; pointer-events: none; opacity: 0; transition: opacity .2s, transform .2s; }
+  #buildtoast.on { opacity: 1; transform: translate(-50%, 0); }
+  /* The prompt every creation step uses (prompt.ts), held near the top so a phone's keyboard does not cover it. */
+  #askbox { position: fixed; inset: 0; z-index: 14; display: flex; justify-content: center; align-items: flex-start; padding: 12vh 16px 0; background: rgba(1,4,9,.55); }
+  #askbox[hidden] { display: none; }
+  #askbox .ask-card { width: min(380px, 100%); padding: 16px; border-radius: 16px; background: #161b22; border: 1px solid #30363d;
+    box-shadow: 0 12px 40px rgba(0,0,0,.6); display: flex; flex-direction: column; gap: 10px; }
+  #askbox h2 { margin: 0; font-size: 16px; color: #e6edf3; }
+  #askbox p { margin: 0; font-size: 13px; color: #9aa4b2; overflow-wrap: anywhere; }
+  #askbox input { width: 100%; box-sizing: border-box; padding: 11px 12px; border-radius: 10px; border: 1px solid #1f6feb; background: #0d1117;
+    color: #e6edf3; font: 16px ui-monospace, Menlo, monospace; }
+  #askbox input:focus { outline: none; box-shadow: 0 0 0 3px rgba(31,111,235,.35); }
+  #askbox p[data-ask="error"] { color: #ff7b72; }
+  #askbox .ask-actions { display: flex; gap: 10px; }
+  #askbox .ask-actions button { flex: 1; min-height: 44px; border-radius: 10px; font-size: 15px; cursor: pointer; border: 1px solid #30363d; background: #21262d; color: #e6edf3; }
+  #askbox .ask-actions button[type="submit"] { background: #238636; border-color: #2ea043; color: #fff; font-weight: 600; }
+  #askbox .ask-actions button:disabled { opacity: .6; cursor: default; }
+  /* The form that makes a new file on a layer (newfile.ts). */
+  #newfile { position: fixed; z-index: 9; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: min(420px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 10px; }
+  #newfile[hidden] { display: none; }
+  #newfile .nf-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  #newfile .panel-title { margin: 0; }
+  #newfile label, #newfile legend { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #9aa4b2; text-transform: uppercase; letter-spacing: .6px; }
+  #newfile fieldset { border: 0; margin: 0; padding: 0; }
+  #newfile legend { margin-bottom: 4px; }
+  #newfile input, #newfile select { background: #0d1117; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px;
+    padding: 6px 8px; font: 12px ui-monospace, Menlo, monospace; text-transform: none; letter-spacing: 0; }
+  #newfile input:focus, #newfile select:focus { outline: none; border-color: #1f6feb; }
+  #newfile [data-field="tags"] { display: flex; flex-wrap: wrap; gap: 5px; }
+  #newfile .nf-tag { padding: 2px 8px; border-radius: 10px; border: 1px solid #30363d; background: #161b22; color: #9aa4b2; font-size: 11px; cursor: pointer; }
+  #newfile .nf-tag[aria-pressed="true"] { background: rgba(31,111,235,.3); border-color: #1f6feb; color: #e6edf3; }
+  #newfile button[data-field="close"] { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 7px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
+  #newfile .nf-actions { display: flex; justify-content: flex-end; }
+  #newfile button[type="submit"] { background: #238636; color: #fff; border: 1px solid #2ea043; border-radius: 7px; padding: 5px 16px; font-size: 12px; cursor: pointer; }
+  #newfile button[type="submit"]:disabled { opacity: .6; cursor: default; }
+  #newfile [data-field="error"] { margin: 0; color: #ff7b72; }
+  body.phone #newfile { z-index: 10; top: 12px; transform: translate(-50%, 0); max-height: calc(100dvh - 120px); }
+  body.phone #newfile input, body.phone #newfile select { font-size: 16px; padding: 9px 10px; }
   /* The code panel: the source of a symbol picked from a file's list, docked beside the left column. */
   #codeblock { position: fixed; top: 14px; left: calc(14px + clamp(260px, 25vw, 360px) + 12px); z-index: 5;
     width: clamp(360px, 42vw, 720px); max-height: 60vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; }

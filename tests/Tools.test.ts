@@ -35,6 +35,7 @@ function argumentsFor(tool: IMapTool, other: string): Record<string, unknown>
         case 'select': return { files: ['src/a.ts', 'src/b.ts'] }
         case 'focus': return { path: 'src' }
         case 'next': case 'refine': return { size: 2 }
+        case 'create_file': return { path: 'src/c.ts', summary: 'A third value.', layer: 'base', system: 'core', tags: ['core'] }
         case 'apply': return { files: { 'src/b.ts': { summary: 'The value.', system: 'core', layer: 'base', tags: ['core'] } } }
         default: return {}
     }

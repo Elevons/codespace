@@ -308,6 +308,25 @@ The answer has the full architecture file and a list of notes.`,
         },
     },
     {
+        name: 'create_file', method: 'POST', path: '/api/files', writes: true,
+        description: `Makes a new file in the repository and writes its entry to the architecture file in the same step.
+The file starts with its summary as a comment. It does not change a file that exists.
+The layer and the system must be declared before. Declare them with apply.
+The answer has the path of the new file and a list of notes.`,
+        parameters: {
+            type: 'object',
+            properties: {
+                path: PathArgument('The repository-relative path of the new file, with its name and extension. Folders that do not exist are made.'),
+                summary: { type: 'string', description: 'One plain sentence that tells the purpose of the file. Do not tell how it works.' },
+                layer: { type: 'string', description: 'A layer that the layers list declares. A layer is the level or role of the file in the stack.' },
+                system: { type: 'string', description: 'A system that the systems list declares.' },
+                tags: { type: 'array', items: { type: 'string' }, description: `Tags from this list: ${TAG_VOCABULARY.join(', ')}.` },
+            },
+            required: ['path', 'summary', 'layer'],
+            additionalProperties: false,
+        },
+    },
+    {
         name: 'refine', method: 'GET', path: '/api/ingest/refine', writes: false,
         description: `The second pass. Use it after next returns 0 remaining. It returns the imports that go up the layers, grouped by pair of layers.
 It also returns files that can go on a better layer, files that can go in a better system, and layer problems.

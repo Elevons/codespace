@@ -84,6 +84,12 @@
       "tags": ["core"],
       "summary": "Draws and places every file box, batching the crowd and answering which box sits under the pointer."
     },
+    "public/build.ts": {
+      "system": "browser",
+      "layer": "panels",
+      "tags": ["ui", "orchestrate"],
+      "summary": "Build mode: hides the other controls and makes layers, files, and concepts by dragging a plane, cube, or cloud from a bar of shapes onto the map, and clears the board for a new codebase."
+    },
     "public/chat.ts": {
       "system": "browser",
       "layer": "panels",
@@ -204,6 +210,12 @@
       "tags": ["core"],
       "summary": "The depth rule and the neighbour shape, shared by the server that walks the graph and the page that asks for one."
     },
+    "public/newfile.ts": {
+      "system": "browser",
+      "layer": "panels",
+      "tags": ["ui"],
+      "summary": "The form that makes a new file on a layer, opened from the + beside the layer's name in the legend, and the call that makes a file and has the map choose it."
+    },
     "public/pads.ts": {
       "system": "browser",
       "layer": "render",
@@ -215,6 +227,12 @@
       "layer": "panels",
       "tags": ["ui", "core"],
       "summary": "The outliner, the info panel with its block rail and start-here link, the neighbourhood action, and the selected files with their actions, and everything a person can click, select, fold, or search."
+    },
+    "public/prompt.ts": {
+      "system": "browser",
+      "layer": "panels",
+      "tags": ["ui"],
+      "summary": "The one prompt every creation step uses: a default name already selected, with Continue and Cancel."
     },
     "public/repo-switch.ts": {
       "system": "browser",
@@ -336,6 +354,12 @@
       "tags": ["core"],
       "summary": "Reads the blocks a file is made of, with a summary, their references, exported names, and the files their own text imports."
     },
+    "src/repo/Create.ts": {
+      "system": "server",
+      "layer": "repo",
+      "tags": ["core", "io"],
+      "summary": "Makes a new file in a repository, opening with its summary as a comment, and writes its architecture entry in the same step."
+    },
     "src/repo/DescribeGuide.ts": {
       "system": "server",
       "layer": "repo",
@@ -436,7 +460,7 @@
       "system": "server",
       "layer": "api",
       "tags": ["orchestrate", "io"],
-      "summary": "The endpoints for the architecture, the import graph, a file's neighbours, the tool list, the view stream, flows, the health check, ingest status, next and refine, the selection, and the chat."
+      "summary": "The endpoints for the architecture, new files, the import graph, a file's neighbours, the tool list, the view stream, flows, the health check, ingest status, next and refine, the selection, and the chat."
     },
     "src/server/Guard.ts": {
       "system": "server",
@@ -454,7 +478,7 @@
       "system": "server",
       "layer": "api",
       "tags": ["data"],
-      "summary": "The one list of what an agent can do with the map, including its neighbours, health check, saved flows and tour, each as an HTTP call for hosts and the built-in chat."
+      "summary": "The one list of what an agent can do with the map, including making a new file, its neighbours, health check, saved flows and tour, each as an HTTP call for hosts and the built-in chat."
     },
     "src/server/View.ts": {
       "system": "server",
@@ -503,6 +527,12 @@
       "layer": "tests",
       "tags": ["test"],
       "summary": "Tests the describe CLI's commands against temporary repositories, including size limits, generated files, malformed batches, the ledger, and next's move and delete housekeeping."
+    },
+    "tests/Create.test.ts": {
+      "system": "meta",
+      "layer": "tests",
+      "tags": ["test"],
+      "summary": "Tests that a new file opens with its summary, is written with its entry, and is never overwritten, placed outside the tree, or kept when its entry is refused."
     },
     "tests/Filter.test.ts": {
       "system": "meta",
@@ -604,7 +634,7 @@
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests that the tool list is well formed, is served, reaches the chat, and that every listed tool, including flows and health, answers through the real server."
+      "summary": "Tests that the tool list is well formed, is served, reaches the chat, and that every listed tool, including new files, flows, and health, answers through the real server."
     },
     "tests/Update.test.ts": {
       "system": "meta",

@@ -1,4 +1,4 @@
-import { S, V3, FILE_SIZE, FILE_H, TILE_GAP, MARGIN, PLATE_H, FLOOR_STEP, AREA_PER_WEIGHT, isCode, inScene, layerRank, linesOf, renderEdges, filePath, hiddenByExtras } from "./state.js";
+import { S, V3, hasFilters, FILE_SIZE, FILE_H, TILE_GAP, MARGIN, PLATE_H, FLOOR_STEP, AREA_PER_WEIGHT, isCode, inScene, layerRank, linesOf, renderEdges, filePath, hiddenByExtras } from "./state.js";
 import { ancestorFolders } from "./filter.js";
 import { syncMeshes } from "./meshes.js";
 import type { Entry, GraphNode } from "./types.js";
@@ -24,7 +24,10 @@ function build(): void
   markHidden(root, false);
   liveLayers.clear();
   weighNode(root);
-  S.shownLayers = S.LAYERS.filter((layer) => liveLayers.has(layer));
+  // A layer is drawn while it holds a drawn file. Build mode also draws the declared layers no file is on yet,
+  // so a layer just made can be seen and dropped onto, unless a filter is narrowing what is drawn.
+  const used = new Set(S.FILE_LAYERS.values());
+  S.shownLayers = S.LAYERS.filter((layer) => liveLayers.has(layer) || (S.building && !used.has(layer) && !hasFilters()));
   const area = Math.max(root.weight ?? 0, 1) * AREA_PER_WEIGHT;
   const width = Math.sqrt(area * 1.5);
   placeNode(root, { x: -width / 2, z: -area / width / 2, w: width, d: area / width }, 0);

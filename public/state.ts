@@ -76,6 +76,7 @@ export const S = {
   extrasShown: false,                          // whether the extras (tests, docs, library code) are shown
   colorBy: "tag" as ColorBy,                   // what the boxes are coloured by
   tagFilter: null as string | null,            // the tag the tag filter is set to, or null for none
+  building: false,                            // build mode: the other controls step aside and a bar of shapes makes layers, files, and concepts (build.ts)
   spotLayer: null as string | null,           // the layer picked from the legend: it stays bright and every other layer fades in place
   isolatedFiles: null as Set<string> | null,   // an ad-hoc filter: only these files are drawn, or null for none
   fingerprint: "",                             // the repository's change stamp from the last full read
