@@ -1,5 +1,5 @@
 import { S, V3, scene, camera, engine, DEFAULT_BETA, colorFor, materialFor, fileColor, layerRank } from "./state.js";
-import { subtreeIndices } from "./rules.js";
+import { columnColor, subtreeIndices } from "./rules.js";
 import { resizeBoxes, paintBox, flushBoxes } from "./boxes.js";
 import { colorOf } from "./batch.js";
 import { resizePads } from "./pads.js";
@@ -136,7 +136,7 @@ function addColumn(n: GraphNode): boolean
   // The glass: a faint box and its vertical edges, so the column reads without hiding its files.
   const base = n.topY ?? 0;
   const height = Math.max(0.2, top - base);
-  const hue = colorFor(n.layer);
+  const hue = columnColor(n.id);
   const wall = BABYLON.MeshBuilder.CreateBox("column", { width: n.tileW, height, depth: n.tileD }, scene);
   wall.position.set(n.cx, base + height / 2, n.cz);
   const wallMaterial = materialFor(hue, 0.035, 0.02);
@@ -146,21 +146,27 @@ function addColumn(n: GraphNode): boolean
   wall.metadata = { kind: "wall", index };
   S.columnMeshes.push(wall);
 
+  // The edges: the four upright corners and the four top rims, each its own line so the ones on the
+  // far side can fade as the camera turns (fadeBackEdges). Drawn whole, the back edges show through
+  // the glass and tangle with the columns in front.
   const hw = n.tileW / 2, hd = n.tileD / 2;
-  const corners = [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd], [-hw, -hd]];
-  const edges: BABYLON.Vector3[][] = [];
+  const corners = [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(([x, z]) => new V3(n.cx! + x, base, n.cz! + z));
+  const edgeColor = BABYLON.Color3.FromHexString(hue);
+  const addEdge = (from: BABYLON.Vector3, to: BABYLON.Vector3, ends: number[]): void =>
+  {
+    const line = BABYLON.MeshBuilder.CreateLines("column-edge", { points: [from, to] }, scene);
+    line.color = edgeColor;
+    line.alpha = EDGE_ALPHA;
+    line.isPickable = false;
+    line.metadata = { kind: "edge", index, ends, corners };
+    S.columnMeshes.push(line);
+  };
   for (let i = 0; i < 4; i++)
   {
-    const [x0, z0] = corners[i], [x1, z1] = corners[i + 1];
-    edges.push([new V3(n.cx + x0, base, n.cz + z0), new V3(n.cx + x0, top, n.cz + z0)]);
-    edges.push([new V3(n.cx + x0, top, n.cz + z0), new V3(n.cx + x1, top, n.cz + z1)]);
+    const corner = corners[i], next = corners[(i + 1) % 4];
+    addEdge(corner, new V3(corner.x, top, corner.z), [i]);
+    addEdge(new V3(corner.x, top, corner.z), new V3(next.x, top, next.z), [i, (i + 1) % 4]);
   }
-  const edgeMesh = BABYLON.MeshBuilder.CreateLineSystem("column-edges", { lines: edges }, scene);
-  edgeMesh.color = BABYLON.Color3.FromHexString(hue);
-  edgeMesh.alpha = 0.28;
-  edgeMesh.isPickable = false;
-  edgeMesh.metadata = { kind: "wall", index };
-  S.columnMeshes.push(edgeMesh);
 
   // A thin plate at each layer the column holds, in that layer's colour.
   for (const rank of [...ranks].sort((a, b) => a - b))
@@ -197,6 +203,31 @@ function buildColumns(): void
   let drawn = 0;
   for (const n of parent.children) if (addColumn(n)) drawn++;
   if (drawn === 0) addColumn(parent);
+}
+
+/** How strong a column's edges are, and how far the ones on its far side fade. */
+const EDGE_ALPHA = 0.42, BACK_EDGE_ALPHA = 0.06;
+
+// Fades each column's edges on the side away from the camera: the upright at its farthest corner
+// and the two rims that meet there. Cheap enough for every frame, as there are only a few columns.
+function fadeBackEdges(): void
+{
+  const eye = camera.position;
+  const far = new Map<number, number>();
+  for (const mesh of S.columnMeshes)
+  {
+    const meta = mesh.metadata as { kind?: string; index?: number; corners?: BABYLON.Vector3[] } | undefined;
+    if (meta?.kind !== "edge" || meta.index === undefined || far.has(meta.index) || !meta.corners) continue;
+    let best = 0, bestDistance = -1;
+    meta.corners.forEach((corner, i) => { const d = (corner.x - eye.x) ** 2 + (corner.z - eye.z) ** 2; if (d > bestDistance) { bestDistance = d; best = i; } });
+    far.set(meta.index, best);
+  }
+  for (const mesh of S.columnMeshes)
+  {
+    const meta = mesh.metadata as { kind?: string; index?: number; ends?: number[] } | undefined;
+    if (meta?.kind !== "edge" || meta.index === undefined || !meta.ends) continue;
+    mesh.alpha = meta.ends.includes(far.get(meta.index) ?? -1) ? BACK_EDGE_ALPHA : EDGE_ALPHA;
+  }
 }
 
 // Redraws the folder columns after a choice changes which folder is inside, without rebuilding the
@@ -353,4 +384,4 @@ export function updatePulses(now: number): void
   if (painted) flushBoxes();
 }
 
-export { syncMeshes, centerView, recenterTarget, settleCamera, refreshColumns };
+export { syncMeshes, centerView, recenterTarget, settleCamera, refreshColumns, fadeBackEdges };

@@ -185,10 +185,13 @@ declare namespace BABYLON
         fogMode: number;
         fogColor: Color3;
         fogDensity: number;
+        fogStart: number;
+        fogEnd: number;
         pointerX: number;
         pointerY: number;
         onPointerObservable: { add(callback: (info: PointerInfo) => void): void };
         static FOGMODE_EXP2: number;
+        static FOGMODE_LINEAR: number;
         pick(x: number, y: number, predicate?: (mesh: Mesh) => boolean): PickingInfo;
         createPickingRay(x: number, y: number, world: Matrix, camera: Camera): Ray;
         render(): void;

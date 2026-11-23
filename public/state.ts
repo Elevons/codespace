@@ -26,6 +26,7 @@ export const S = {
   FILE_SYMBOLS: new Map<string, string[]>(),   // path -> the names it declares, for search
   FILE_STAMPS: new Map<string, string>(),      // path -> its size and modified time, to tell an edited file
   FILE_IMPORT_NAMES: new Map<string, Map<string, string[]>>(), // importer -> imported -> names it takes
+  newFiles: new Set<string>(),                 // files that appeared while this page was open, whose threads stay drawn
   flashes: new Map<string, number>(),          // path -> how much of its edit flash is left, from 1 to 0
   BLOCKS: new Map<string, IBlocksReport>(),    // path -> the blocks its text is made of, read when the file is opened
   selectedBlock: -1,                           // which block of the opened file the rail picked, or -1
@@ -446,9 +447,19 @@ if (softwareRenderer) engine.setHardwareScalingLevel(1.5);
 else if (window.devicePixelRatio > 2) engine.setHardwareScalingLevel(1 / 2);
 const BACKGROUND = BABYLON.Color3.FromHexString("#04070d");
 scene.clearColor = BACKGROUND.toColor4(1);
-scene.fogMode = BABYLON.Scene.FOGMODE_EXP2;
-scene.fogColor = BABYLON.Color3.FromHexString("#0e3350");
-scene.fogDensity = 0.007;
+// A depth fade: what lies past the camera's target sinks toward the background, so near columns read
+// in front of far ones. It follows the camera's distance (depthFade), so it is as light close up as far out.
+scene.fogMode = BABYLON.Scene.FOGMODE_LINEAR;
+scene.fogColor = BABYLON.Color3.FromHexString("#07111c");
+scene.fogStart = 40;
+scene.fogEnd = 120;
+
+/** Moves the depth fade with the camera: nothing nearer than its target fades, and the far side of the map reaches about half. */
+export function depthFade(): void
+{
+  scene.fogStart = camera.radius * 0.9;
+  scene.fogEnd = camera.radius * 3.2;
+}
 
 // Quiet bloom, so what matters (the chosen file, a traced route, a layer break) lights up
 // against a matte city instead of every box glowing alike. The buffers stay small and the

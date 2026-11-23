@@ -27,6 +27,8 @@ interface Tether
   routed: boolean;
   faded?: boolean;
   lit?: boolean;
+  /** Whether the thread itself is drawn, not only its ring: for a chosen file, or one that is new. */
+  thread?: boolean;
 }
 
 let edgeLines: BABYLON.Mesh | null = null;
@@ -367,6 +369,8 @@ function collectTethers(): Tether[]
   const tethers: Tether[] = [];
   const hues = routeFolderHues();
   const active = S.trace !== null || S.focusSet !== null || S.spotLayer !== null || hasFilters();
+  const chosen = new Set(S.extraFiles);
+  if (S.selected >= 0 && S.selectedFile >= 0) chosen.add(filePath(S.selected, S.selectedFile));
   for (const rec of S.fileRecords.values())
   {
     const folder = S.NODES[rec.node];
@@ -387,7 +391,7 @@ function collectTethers(): Tether[]
     }
     if (bottomY - folder.topY < 0.05) continue;
     tethers.push({ points: [new V3(pos.x, bottomY, pos.z), new V3(pos.x, folder.topY, pos.z)], hue: "#8b98a8",
-      routed: false, faded: S.trace !== null && S.trace.trace, lit: active && lit });
+      routed: false, faded: S.trace !== null && S.trace.trace, lit: active && lit, thread: chosen.has(rec.path) || S.newFiles.has(rec.path) });
   }
   return tethers;
 }
@@ -455,7 +459,7 @@ function rebuildEdges(): void
   tetherShapes = [];
   const pillarLines: BABYLON.Vector3[][] = [], pillarColors: BABYLON.Color4[][] = [];
   const FOOT_SEGMENTS = 10;
-  for (const { points, hue, routed, faded, lit } of collectTethers())
+  for (const { points, hue, routed, faded, lit, thread } of collectTethers())
   {
     if (routed)
     {
@@ -474,23 +478,23 @@ function rebuildEdges(): void
       continue;
     }
 
-    const alpha = faded ? 0.06 : lit ? 0.3 : 0.05;
-    const shade = new BABYLON.Color4(0.55, 0.64, 0.75, alpha);
-    pillarLines.push(points);
-    pillarColors.push(points.map(() => shade));
-    // A thin ring where the pillar meets the floor, only for the files bright enough to read.
-    if (lit && !faded)
+    // A file's thread is drawn only while it is chosen or new to the map, as the folder column already
+    // says where the rest belong. Its ring on the floor always is, brighter for the files the choice keeps lit.
+    if (thread)
     {
-      const foot = points[points.length - 1];
-      const ring: BABYLON.Vector3[] = [];
-      for (let i = 0; i <= FOOT_SEGMENTS; i++)
-      {
-        const angle = (i / FOOT_SEGMENTS) * Math.PI * 2;
-        ring.push(new V3(foot.x + Math.cos(angle) * 0.11, foot.y + 0.006, foot.z + Math.sin(angle) * 0.11));
-      }
-      pillarLines.push(ring);
-      pillarColors.push(ring.map(() => new BABYLON.Color4(0.55, 0.64, 0.75, Math.min(1, alpha * 1.6))));
+      pillarLines.push(points);
+      pillarColors.push(points.map(() => new BABYLON.Color4(0.55, 0.64, 0.75, 0.55)));
     }
+    const ring: BABYLON.Vector3[] = [];
+    const foot = points[points.length - 1];
+    for (let i = 0; i <= FOOT_SEGMENTS; i++)
+    {
+      const angle = (i / FOOT_SEGMENTS) * Math.PI * 2;
+      ring.push(new V3(foot.x + Math.cos(angle) * 0.11, foot.y + 0.006, foot.z + Math.sin(angle) * 0.11));
+    }
+    const alpha = faded ? 0.25 : lit ? 0.6 : 0.4;
+    pillarLines.push(ring);
+    pillarColors.push(ring.map(() => new BABYLON.Color4(0.55, 0.64, 0.75, alpha)));
   }
   if (pillarLines.length > 0)
   {

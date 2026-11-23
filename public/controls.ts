@@ -76,6 +76,7 @@ async function refreshGraph(force = false): Promise<void>
       for (const [path, count] of graph.lines)
       {
         const before = previousLines.get(path);
+        if (before === undefined) S.newFiles.add(path);
         if (before === undefined || before !== count) pulseFile(path);
       }
     }

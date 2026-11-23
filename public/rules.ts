@@ -38,6 +38,14 @@ export function folderColor(path: string): string
   return FOLDER_HUES[hash % FOLDER_HUES.length];
 }
 
+/** A steady colour for one folder column, from the folder's own path, so columns side by side differ. */
+export function columnColor(id: string): string
+{
+  let hash = 0;
+  for (const ch of id) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return FOLDER_HUES[hash % FOLDER_HUES.length];
+}
+
 /** A layer's place among the layers that still hold a drawn file, or -1 when it holds none. */
 export function layerRank(layer: string, shownLayers: readonly string[]): number
 {

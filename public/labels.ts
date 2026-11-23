@@ -1,6 +1,7 @@
 import { S, V3, scene, camera, canvas, labelLayer, colorFor, filePath, matchesFilters, nodeMatchesFilters, renderEdges } from "./state.js";
 import { labelOf, plateLabel } from "./repo.js";
 import { routeFolderHues, routeRuns, runLine } from "./route.js";
+import { columnColor } from "./rules.js";
 
 /** One name, tag, or step the page wants on screen this frame. */
 interface LabelItem
@@ -41,7 +42,7 @@ function collectLabels(): LabelItem[]
     wanted.push({ key: "d" + i, text: plateLabel(n), pos, cls: i === S.selected ? "folder sel" : columnTop !== undefined ? "folder column" : hue && !filtered ? "folder routed" : "folder",
       caption: "",
       priority: i === S.selected || (hue && !filtered) ? 2 : dim ? 5 : 3,
-      color: i === S.selected ? "" : filtered ? "#6e7681" : hue || colorFor(n.layer), opacity: dim ? 0.25 : 1 });
+      color: i === S.selected ? "" : filtered ? "#6e7681" : hue || (columnTop !== undefined ? columnColor(n.id) : colorFor(n.layer)), opacity: dim ? 0.25 : 1 });
   });
 
   // Each floor strip under the route's lane is named for its folder at its leading end.

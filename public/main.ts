@@ -1,5 +1,5 @@
-import { S, V3, scene, camera, canvas, engine, loadingNote, render } from "./state.js";
-import { settleCamera, updatePulses } from "./meshes.js";
+import { S, V3, scene, camera, canvas, engine, loadingNote, render, depthFade } from "./state.js";
+import { settleCamera, updatePulses, fadeBackEdges } from "./meshes.js";
 import { pickFile, pickFolder, placeBox, flushBoxes } from "./boxes.js";
 import { applyHighlight } from "./highlight.js";
 import { pickFloor, syncFloors } from "./floors.js";
@@ -80,6 +80,9 @@ engine.runRenderLoop(() =>
   if (S.autoSpin) camera.alpha += seconds * 0.12;
   const share = 1 - Math.pow(0.002, seconds);
   settleCamera(share);
+  // The far edges of each column and the depth fade follow the camera as it turns and zooms.
+  fadeBackEdges();
+  depthFade();
 
   // A shown route lifts its files onto an arch; everyone else heads back to their terrace.
   routeTargets();
