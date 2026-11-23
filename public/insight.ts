@@ -79,6 +79,7 @@ function choose(path: string): void
 export function openInsight(next: Tab = tab): void
 {
   panel.hidden = false;
+  window.dispatchEvent(new CustomEvent("codespace:panel-open", { detail: "insight" }));
   tab = next;
   paintOpeners();
   if (document.body.classList.contains("phone")) window.dispatchEvent(new Event("codespace:open-insight"));
@@ -89,12 +90,13 @@ function close(): void
 {
   panel.hidden = true;
   paintOpeners();
+  window.dispatchEvent(new CustomEvent("codespace:panel-closed", { detail: "insight" }));
 }
 
 /** Marks the bottom bar's button for the open tab, so the bar says which one is showing. */
 function paintOpeners(): void
 {
-  for (const opener of openers) opener.classList.toggle("on", !panel.hidden && opener.dataset.openTab === tab);
+  for (const opener of openers) opener.classList.toggle("on", !panel.hidden && !panel.classList.contains("collapsed") && opener.dataset.openTab === tab);
 }
 
 function paintTabs(): void
@@ -395,12 +397,13 @@ for (const opener of openers)
     const want = opener.dataset.openTab;
     if (want === "tour") { openInsight("flows"); void showTour(); return; }
     const next = want as Tab;
-    if (!document.body.classList.contains("phone") && !panel.hidden && tab === next) { close(); return; }
+    if (!document.body.classList.contains("phone") && !panel.hidden && !panel.classList.contains("collapsed") && tab === next) { close(); return; }
     openInsight(next);
   });
 }
 // On a phone the Insights tab opens the panel's sheet, so the panel shows whatever tab it was on.
 window.addEventListener("codespace:pane", (event) => { if ((event as CustomEvent).detail === "insight" && panel.hidden) openInsight(); });
+window.addEventListener("codespace:panels-changed", () => paintOpeners());
 // The repository's first panel offers the tour too.
 window.addEventListener("codespace:tour", () => { openInsight("flows"); void showTour(); });
 closeButton.addEventListener("click", close);

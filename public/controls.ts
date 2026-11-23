@@ -280,18 +280,55 @@ document.addEventListener("pointerdown", (event) =>
   if (!helpPanel.hidden && !helpPanel.contains(target) && !document.getElementById("help-btn")!.contains(target)) setHelp(false);
 });
 
-// A fold button hides its panel's body, so a dock stays readable when several panels are open.
-for (const fold of document.querySelectorAll<HTMLButtonElement>(".panel-fold"))
+// The left column keeps one fixed order; opening a panel folds the others to their headers, so a
+// window never pushes another one down.
+const FoldedPanels = ["info", "showing", "insight"];
+function setFolded(id: string, folded: boolean): void
 {
-  const panel = document.getElementById(fold.dataset.fold ?? "");
+  const panel = document.getElementById(id);
+  if (!panel) return;
+  panel.classList.toggle("collapsed", folded);
+  const fold = document.querySelector<HTMLButtonElement>('.panel-fold[data-fold="' + id + '"]');
+  if (!fold) return;
+  fold.setAttribute("aria-expanded", String(!folded));
+  fold.title = folded ? "Expand" : "Collapse";
+}
+function announcePanels(): void { window.dispatchEvent(new Event("codespace:panels-changed")); }
+function openOnly(id: string): void
+{
+  for (const other of FoldedPanels) if (other !== id) setFolded(other, true);
+  setFolded(id, false);
+  announcePanels();
+}
+for (const fold of document.querySelectorAll<HTMLButtonElement>(".panel-fold[data-fold]"))
+{
+  const id = fold.dataset.fold!;
+  const panel = document.getElementById(id);
   if (!panel) continue;
+  if (!FoldedPanels.includes(id))
+  {
+    fold.addEventListener("click", () =>
+    {
+      const folded = panel.classList.toggle("collapsed");
+      fold.setAttribute("aria-expanded", String(!folded));
+      fold.title = folded ? "Expand" : "Collapse";
+    });
+    continue;
+  }
   fold.addEventListener("click", () =>
   {
-    const collapsed = panel.classList.toggle("collapsed");
-    fold.setAttribute("aria-expanded", String(!collapsed));
-    fold.title = collapsed ? "Expand" : "Collapse";
+    if (panel.classList.contains("collapsed")) openOnly(id);
+    else { setFolded(id, true); announcePanels(); }
   });
 }
+window.addEventListener("codespace:panel-open", (event) => openOnly((event as CustomEvent<string>).detail));
+// When a window closes, bring back the other one still visible, or the details by default.
+window.addEventListener("codespace:panel-closed", (event) =>
+{
+  const other = (event as CustomEvent<string>).detail === "showing" ? "insight" : "showing";
+  const panel = document.getElementById(other);
+  openOnly(panel && !panel.hidden ? other : "info");
+});
 
 document.addEventListener("keydown", (event) =>
 {

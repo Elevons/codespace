@@ -79,6 +79,7 @@ document.getElementById("labels")!.addEventListener("click", (event) =>
 // Lights up what a tool asked for, and brings the camera's aim to it.
 function show(shown: IShown): void
 {
+  window.dispatchEvent(new CustomEvent("codespace:panel-open", { detail: "showing" }));
   S.trace = {
     paths: shown.files.map((file) => file.path), set: new Set(shown.files.map((file) => file.path)),
     notes: shown.files.map((file) => file.note),
@@ -102,6 +103,7 @@ function clear(): void
   routeTargets();
   renderShowing();
   renderEdges();
+  window.dispatchEvent(new CustomEvent("codespace:panel-closed", { detail: "showing" }));
 }
 
 // Chooses several files at once, as a tool asks, and brings the whole selection into view. A

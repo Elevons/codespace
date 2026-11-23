@@ -511,6 +511,7 @@ function select(i: number, outline = true): void
       (tags ? ' <span class="tags">' + escapeHtml(tags.join(" · ")) + "</span>" : "") +
       (summary ? '<div class="sum">' + escapeHtml(summary) + "</div>" : "") + "</li>";
   };
+  window.dispatchEvent(new CustomEvent("codespace:panel-open", { detail: "info" }));
   document.getElementById("info-body")!.innerHTML =
     crumbsHtml(n.id, false) +
     "<h3>" + escapeHtml(displayName(n.id)) + "</h3>" +
