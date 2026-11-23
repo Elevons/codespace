@@ -267,15 +267,33 @@ function stepFile(direction: number): void
 }
 
 const helpPanel = document.getElementById("help") as HTMLElement;
-function toggleHelp(): void { helpPanel.hidden = !helpPanel.hidden; }
+function setHelp(open: boolean): void
+{
+  helpPanel.hidden = !open;
+  document.body.classList.toggle("help-open", open);
+}
+function toggleHelp(): void { setHelp(helpPanel.hidden); }
 document.getElementById("help-btn")!.addEventListener("click", toggleHelp);
 // The card closes from its own button, or a tap or click anywhere outside it, since a phone has no Escape key.
-document.getElementById("help-close")!.addEventListener("click", () => { helpPanel.hidden = true; });
+document.getElementById("help-close")!.addEventListener("click", () => setHelp(false));
 document.addEventListener("pointerdown", (event) =>
 {
   const target = event.target as Node;
-  if (!helpPanel.hidden && !helpPanel.contains(target) && !document.getElementById("help-btn")!.contains(target)) helpPanel.hidden = true;
+  if (!helpPanel.hidden && !helpPanel.contains(target) && !document.getElementById("help-btn")!.contains(target)) setHelp(false);
 });
+
+// A fold button hides its panel's body, so a dock stays readable when several panels are open.
+for (const fold of document.querySelectorAll<HTMLButtonElement>(".panel-fold"))
+{
+  const panel = document.getElementById(fold.dataset.fold ?? "");
+  if (!panel) continue;
+  fold.addEventListener("click", () =>
+  {
+    const collapsed = panel.classList.toggle("collapsed");
+    fold.setAttribute("aria-expanded", String(!collapsed));
+    fold.title = collapsed ? "Expand" : "Collapse";
+  });
+}
 
 document.addEventListener("keydown", (event) =>
 {
@@ -299,7 +317,7 @@ document.addEventListener("keydown", (event) =>
   if (event.key === "?") { event.preventDefault(); toggleHelp(); return; }
   if (event.key === "Escape")
   {
-    helpPanel.hidden = true;
+    setHelp(false);
     if (hasFilters()) { clearOutliner(false); return; }
     select(-1);
   }

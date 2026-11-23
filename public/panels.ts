@@ -186,7 +186,7 @@ function selectFile(nodeIndex: number, fileIndex: number): void
   const lines = S.FILE_LINES.get(path);
   const tags = S.FILE_TAGS.get(path);
   const summary = S.FILE_SUMMARIES.get(path);
-  document.getElementById("info")!.innerHTML =
+  document.getElementById("info-body")!.innerHTML =
     crumbsHtml(path, true) +
     '<div class="chosen-file">' +
       '<div class="chosen-name open" data-openpath="' + escapeHtml(path) + '">' + escapeHtml(path.split("/").pop()!) + "</div>" +
@@ -361,6 +361,7 @@ export function openBlockAt(index: number): void
 // block's own line, so the fragment reads in the file's numbering.
 function showCode(name: string, code: string, langName?: string, first = 1): void
 {
+  window.dispatchEvent(new Event("codespace:close-repo"));
   document.getElementById("codeblock-name")!.textContent = name;
   document.getElementById("symbol-code")!.innerHTML = renderCode(code, langName ?? shownPath, first);
   document.getElementById("codeblock")!.hidden = false;
@@ -391,15 +392,6 @@ async function openFile(path: string): Promise<void>
 document.getElementById("info")!.addEventListener("click", (event) =>
 {
   const target = event.target as HTMLElement;
-  const toggle = target.closest("[data-info-toggle]") as HTMLElement | null;
-  if (toggle)
-  {
-    statsCollapsed = !statsCollapsed;
-    document.getElementById("info")!.classList.toggle("collapsed", statsCollapsed);
-    toggle.textContent = statsCollapsed ? "Show" : "Hide";
-    toggle.setAttribute("aria-expanded", String(!statsCollapsed));
-    return;
-  }
   const around = target.closest("[data-neighbourhood]") as HTMLElement | null;
   if (around) { void showNeighbourhood(around.dataset.neighbourhood!); return; }
   if (target.closest("[data-only-selected]")) { void changeView({ type: "isolate", files: selectionPaths() }); return; }
@@ -447,9 +439,6 @@ async function copyRepoPath(): Promise<void>
 
 document.getElementById("codeblock-close")!.addEventListener("click", hideCode);
 
-// Whether the repository's numbers are folded away, leaving just its name and path.
-let statsCollapsed = false;
-
 // The repository at a glance, shown until something is chosen, with the keys worth knowing.
 function statsHtml(): string
 {
@@ -457,12 +446,9 @@ function statsHtml(): string
   const files = S.NODES.reduce((sum, n) => sum + n.files.length, 0);
   const lines = [...S.FILE_LINES.values()].reduce((sum, count) => sum + count, 0);
   const stat = (value: string, label: string) => '<div class="stat"><b>' + value + "</b><span>" + label + "</span></div>";
-  const toggle = '<button type="button" class="info-toggle" data-info-toggle aria-controls="info-body" aria-expanded="' +
-    String(!statsCollapsed) + '">' + (statsCollapsed ? "Show" : "Hide") + "</button>";
   return '<div class="empty-head"><h3 class="empty-title">' + escapeHtml(S.repoName) + "</h3>" +
     '<p class="hint repo-path" title="Click to copy the path, to tell your agent">' + escapeHtml(S.repoRoot || "reading…") + "</p>" +
-    toggle + "</div>" +
-    '<div id="info-body">' +
+    "</div>" +
     '<p class="hint how"><span class="key-only">Click a block to trace it, or press <kbd>/</kbd> to search.</span>' +
     '<span class="touch-only">Tap a block to trace it, or search above.</span></p>' +
     '<p class="hint how"><button type="button" class="chosen-act" data-tour title="Walk through the repository from its entry points">Start here</button> New to this code? Take the tour.</p>' +
@@ -473,7 +459,7 @@ function statsHtml(): string
     stat(String(S.FILE_LINES.size), "code files") + stat(lines.toLocaleString(), "lines") +
     stat(String(S.FILE_EDGES.length), "imports") + "</div>" +
     '<div class="keys key-only"><span><kbd>Space</kbd> spin</span><span><kbd>/</kbd> search</span>' +
-    "<span><kbd>F</kbd> frame</span><span><kbd>R</kbd> reset</span><span><kbd>?</kbd> keys</span></div></div>";
+    "<span><kbd>F</kbd> frame</span><span><kbd>R</kbd> reset</span><span><kbd>?</kbd> keys</span></div>";
 }
 
 function select(i: number, outline = true, descend = true): void
@@ -499,11 +485,10 @@ function select(i: number, outline = true, descend = true): void
   S.focusSet = litRoot >= 0 ? subtreeIndices(S.NODES[litRoot]) : null;
   const info = document.getElementById("info")!;
   info.classList.toggle("empty", i < 0);
-  info.classList.toggle("collapsed", i < 0 && statsCollapsed);
   if (i < 0)
   {
     syncHash(null);
-    info.innerHTML = statsHtml();
+    document.getElementById("info-body")!.innerHTML = statsHtml();
     renderEdges();
     renderOutliner();
     return;
@@ -524,7 +509,7 @@ function select(i: number, outline = true, descend = true): void
       (tags ? ' <span class="tags">' + escapeHtml(tags.join(" · ")) + "</span>" : "") +
       (summary ? '<div class="sum">' + escapeHtml(summary) + "</div>" : "") + "</li>";
   };
-  info.innerHTML =
+  document.getElementById("info-body")!.innerHTML =
     crumbsHtml(n.id, false) +
     "<h3>" + escapeHtml(displayName(n.id)) + "</h3>" +
     '<div class="layer" style="color:' + colorFor(n.layer) + '">' + labelFor(n.layer) + "</div>" +

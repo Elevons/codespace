@@ -248,6 +248,7 @@ async function deleteArchitecture(): Promise<void>
 /** Shows the panel over the map, ready to take a path. */
 function showPanel(): void
 {
+  document.getElementById("codeblock")!.hidden = true;
   panel.hidden = false;
   button.classList.add("on");
   if (info !== null) pathInput.value = info.root;
@@ -274,6 +275,9 @@ button.addEventListener("click", (event) =>
   if (panel.hidden) showPanel();
   else hidePanel();
 });
+
+// The code panel and the repository picker share the middle of the screen, so one closes the other.
+window.addEventListener("codespace:close-repo", () => { if (!panel.hidden) hidePanel(); });
 
 form.addEventListener("submit", (event) =>
 {
