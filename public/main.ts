@@ -31,7 +31,9 @@ function pickFolder(x: number, y: number): number
   {
     const n = S.NODES[i];
     if (n.hidden || n.cx === undefined || n.tileW === undefined || n.tileD === undefined) continue;
-    const t = rayBox(o, d, n.cx - n.tileW / 2, n.cx + n.tileW / 2, n.baseY!, n.topY!, n.cz! - n.tileD / 2, n.cz! + n.tileD / 2);
+    // A folder column is tall, so a click high on it still lands on the folder it stands for.
+    const top = S.columnTops.get(i) ?? n.topY!;
+    const t = rayBox(o, d, n.cx - n.tileW / 2, n.cx + n.tileW / 2, n.baseY!, top, n.cz! - n.tileD / 2, n.cz! + n.tileD / 2);
     if (t === null) continue;
     const area = n.tileW * n.tileD;
     if (area < bestArea) { bestArea = area; best = i; }

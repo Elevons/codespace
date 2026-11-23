@@ -13,6 +13,8 @@
   .label small { display: block; font: 10px ui-sans-serif, system-ui, sans-serif; color: #c9d1d9; }
   .label.folder.sel small { color: #e6edf3; }
   .label.folder.sel { background: rgba(31,111,235,.94); color: #fff; font-weight: 600; }
+  /* A folder column's name sits on its top, a shade stronger than a folder label on the ground. */
+  .label.folder.column { background: rgba(20,26,34,.9); border-bottom: 2px solid currentColor; font-weight: 600; }
   .label.file { padding: 1px 4px; font-size: 9.5px; color: #aab6c4; background: rgba(13,17,23,.7); }
   .label.file.hover { color: #fff; background: rgba(48,54,61,.92); font-size: 10.5px; }
   /* The layers' names, in a column at one side of the screen, each tied to its plane by a leader line. */

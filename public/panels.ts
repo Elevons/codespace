@@ -1,6 +1,7 @@
-import { S, camera, colorFor, colorForSystem, copyText, frameFile, frameFolder, hasFilters, inScene as isInScene, isFileVisible, matchesFilters, matchesTagFilter, passesSlice, sliceValue, systemLabel, filePath, pathIndex, render, renderEdges } from "./state.js";
-import { folderColor, folderOf, labelFor } from "./rules.js";
+import { S, colorFor, colorForSystem, copyText, frameFile, frameFolder, hasFilters, inScene as isInScene, isFileVisible, matchesFilters, matchesTagFilter, passesSlice, sliceValue, systemLabel, filePath, pathIndex, render, renderEdges } from "./state.js";
+import { folderColor, folderOf, labelFor, subtreeIndices } from "./rules.js";
 import { ancestorFolders, foldersToKeepOpen, matchesQueryTerms, queryTerms } from "./filter.js";
+import { refreshColumns } from "./meshes.js";
 import { displayName, readBlockSummaries, readBlocks, readSource } from "./repo.js";
 import { showNeighbourhood } from "./neighbourhood.js";
 import { changeView } from "./viewcall.js";
@@ -446,19 +447,6 @@ async function copyRepoPath(): Promise<void>
 
 document.getElementById("codeblock-close")!.addEventListener("click", hideCode);
 
-// The chosen folder and every folder it imports or is imported by.
-function neighboursOf(i: number): Set<number>
-{
-  const id = S.NODES[i].id;
-  const set = new Set([i]);
-  S.EDGES.forEach(([from, to]) =>
-  {
-    if (from === id) { const j = S.NODES.findIndex((n) => n.id === to); if (j >= 0) set.add(j); }
-    if (to === id) { const j = S.NODES.findIndex((n) => n.id === from); if (j >= 0) set.add(j); }
-  });
-  return set;
-}
-
 // Whether the repository's numbers are folded away, leaving just its name and path.
 let statsCollapsed = false;
 
@@ -496,9 +484,12 @@ function select(i: number, outline = true): void
   S.extraFiles.clear();
   S.selectedBlock = -1;
   hideCode();
-  // A folder dims everything outside it and its import neighbours. The root holds everything,
-  // so choosing it (which a click on the empty ground does) must not fade the whole map.
-  S.focusSet = i >= 0 && S.NODES[i]?.id !== "" ? neighboursOf(i) : null;
+  // A chosen folder is what you are inside, so only its own subtree stays lit; the root holds
+  // everything, so choosing it (a click on the empty ground) does not fade the whole map.
+  S.focusSet = i >= 0 && S.NODES[i]?.id !== "" ? subtreeIndices(S.NODES[i]) : null;
+  // The columns are the chosen folder's children, so choosing a folder, file, or breadcrumb
+  // redraws them one level down. The layout itself is unchanged.
+  refreshColumns();
   const info = document.getElementById("info")!;
   info.classList.toggle("empty", i < 0);
   info.classList.toggle("collapsed", i < 0 && statsCollapsed);
@@ -513,7 +504,7 @@ function select(i: number, outline = true): void
   const n = S.NODES[i];
   syncHash(n.id);
   // Glide the camera to the chosen folder, close enough that its files read.
-  frameFolder(n, camera.radius);
+  frameFolder(n);
   const outs = S.EDGES.filter((e) => e[0] === n.id).sort((a, b) => b[2] - a[2]);
   const ins = S.EDGES.filter((e) => e[1] === n.id).sort((a, b) => b[2] - a[2]);
   const line = (e: [string, string, number], target: string) => "<li>" + escapeHtml(target) + '<span class="n">' + e[2] + "</span></li>";

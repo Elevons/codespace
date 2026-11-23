@@ -36,14 +36,15 @@ function applyHighlight(): void
 
 const FADED_GREY = "#6e7681";
 
-// While a layer is picked from the legend, every other plane and its outline fade to a trace.
+// While a layer is picked from the legend, every floor on another layer fades to a trace, so the
+// picked layer keeps its place in the stack.
 function fadeLayerPlanes(): void
 {
-  for (const plane of S.layerPlanes)
+  for (const mesh of S.columnMeshes)
   {
-    const faded = S.spotLayer !== null && (plane.metadata as { layer: string }).layer !== S.spotLayer;
-    plane.visibility = faded ? 0.2 : 1;
-    (plane.metadata as { border: BABYLON.Mesh }).border.visibility = faded ? 0.3 : 1;
+    const meta = mesh.metadata as { kind?: string; layer?: string } | undefined;
+    if (meta?.kind !== "floor") continue;
+    mesh.visibility = S.spotLayer !== null && meta.layer !== S.spotLayer ? 0.3 : 1;
   }
 }
 

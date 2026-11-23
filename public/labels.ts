@@ -32,11 +32,13 @@ function collectLabels(): LabelItem[]
     if (n.hidden || n.cx === undefined) return;
     const hue = hues.get(i);
     const filtered = !nodeMatchesFilters(i);
-    const labelled = hue !== undefined || i === S.selected || (S.focusSet !== null && S.focusSet.has(i)) || (n.level ?? 0) <= 1;
+    // A folder column is named on its own top, however deep it sits.
+    const columnTop = S.columnTops.get(i);
+    const labelled = hue !== undefined || i === S.selected || (S.focusSet !== null && S.focusSet.has(i)) || columnTop !== undefined || (n.level ?? 0) <= 1;
     if (!labelled) return;
-    const pos = new V3(n.cx, n.topY! + 0.5, n.cz!);
+    const pos = new V3(n.cx, (columnTop ?? n.topY!) + 0.5, n.cz!);
     const dim = filtered || (S.focusSet !== null && !S.focusSet.has(i) && hue === undefined);
-    wanted.push({ key: "d" + i, text: plateLabel(n), pos, cls: i === S.selected ? "folder sel" : hue && !filtered ? "folder routed" : "folder",
+    wanted.push({ key: "d" + i, text: plateLabel(n), pos, cls: i === S.selected ? "folder sel" : columnTop !== undefined ? "folder column" : hue && !filtered ? "folder routed" : "folder",
       caption: "",
       priority: i === S.selected || (hue && !filtered) ? 2 : dim ? 5 : 3,
       color: i === S.selected ? "" : filtered ? "#6e7681" : hue || colorFor(n.layer), opacity: dim ? 0.25 : 1 });
@@ -264,14 +266,13 @@ function updateRail(width: number, height: number, transform: BABYLON.Matrix, vi
 
 /* ---------------------------------------------------------- layer legend ---- */
 
-// The layers' names sit in a column at one side of the free screen, top plane first, each tied to its
-// plane by a leader line, as the step rail is tied to its files. A double click on a name shows only
-// that layer, and a double click on the layer shown alone brings them all back (controls.ts).
+// The layers' names sit in a column at one side of the free screen, top layer first, each tied to the
+// nearest floor of its layer by a leader line, as the step rail is tied to its files. A double click
+// on a name shows only that layer, and a double click on the layer shown alone brings them all back
+// (controls.ts).
 let legend: HTMLDivElement | null = null, legendSvg: SVGSVGElement | null = null, legendSignature = "";
 const legendFeet: SVGCircleElement[] = [];
-const LEGEND_ROW = 22, LEGEND_STUB = 14;
-// How much nearer another corner must be, in pixels, before the lines move to it.
-const LEGEND_HOLD = 40;
+const LEGEND_ROW = 22, LEGEND_STUB = 14, FLOOR_LEAD = 48;
 
 function ensureLegend(): void
 {
@@ -284,74 +285,41 @@ function ensureLegend(): void
   labelLayer.appendChild(legend);
 }
 
-// Which corner of the planes the leader lines end on: the corner nearest the legend, so the lines run a
-// short way across the map and not over it. Every plane uses the same one, so the lines keep the planes'
-// order. It is kept until another corner is clearly nearer, so a line rides on its corner as the map turns
-// rather than hopping between them. A corner that is off the screen, as a phone's often are, is reached
-// where its outline comes into view beside the legend.
-let legendCorner = -1;
-
-/** One plane's four corners on screen, in the same order for every plane. */
-function planeCorners(plane: BABYLON.Mesh, transform: BABYLON.Matrix, viewport: BABYLON.Viewport): BABYLON.Vector3[]
-{
-  const info = plane.getBoundingInfo().boundingBox;
-  const y = plane.position.y;
-  const x0 = info.minimumWorld.x, x1 = info.maximumWorld.x, z0 = info.minimumWorld.z, z1 = info.maximumWorld.z;
-  return [new V3(x0, y, z0), new V3(x1, y, z0), new V3(x1, y, z1), new V3(x0, y, z1)]
-    .map((corner) => V3.Project(corner, BABYLON.Matrix.IdentityReadOnly, transform, viewport));
-}
-
-// Where each plane's leader line ends on screen, or null for a plane with no usable end.
-function planeAnchors(planes: BABYLON.Mesh[], onRight: boolean, edgeX: number, span: [number, number], height: number,
+// In the folder columns, each layer's line ends on the corner of one of its floors nearest the
+// legend, whichever floor still has a corner on screen, so the legend says where that layer sits
+// even when the lowest floors are behind the bars.
+function columnAnchors(names: string[], onRight: boolean, edgeX: number, span: [number, number], bandBottom: number,
   transform: BABYLON.Matrix, viewport: BABYLON.Viewport): ({ x: number; y: number } | null)[]
 {
-  const corners = planes.map((plane) => planeCorners(plane, transform, viewport));
-  const dir = onRight ? -1 : 1;
-  // Distance past the legend's edge, going away from it.
-  const past = (p: BABYLON.Vector3) => (p.x - edgeX) * dir;
-  const reach = LEGEND_STUB * 2;
-  const usable = (p: BABYLON.Vector3) => p.z >= 0 && p.z <= 1 && p.y >= 0 && p.y <= height && p.x >= span[0] && p.x <= span[1];
-  // The corner's own place when it is beside the legend, else where the outline to a neighbour crosses
-  // `reach` past the legend's edge.
-  const endOf = (four: BABYLON.Vector3[], corner: number): { x: number; y: number } | null =>
+  const dir = onRight ? -1 : 1, reach = LEGEND_STUB * 1.5;
+  const best = new Map<string, { x: number; y: number }>(), bestPast = new Map<string, number>();
+  for (const floor of S.columnMeshes)
   {
-    const c = four[corner];
-    if (c.z < 0 || c.z > 1) return null;
-    if (past(c) >= reach) return usable(c) ? { x: c.x, y: c.y } : null;
-    let best: { x: number; y: number } | null = null;
-    for (const next of [(corner + 1) % 4, (corner + 3) % 4])
+    const meta = floor.metadata as { kind?: string; layer?: string } | undefined;
+    const name = meta?.layer;
+    if (meta?.kind !== "floor" || name === undefined || !names.includes(name)) continue;
+    const info = floor.getBoundingInfo().boundingBox, y = floor.position.y;
+    for (const x of [info.minimumWorld.x, info.maximumWorld.x])
     {
-      const n = four[next];
-      if (n.z < 0 || n.z > 1 || past(n) <= past(c)) continue;
-      const t = (reach - past(c)) / (past(n) - past(c));
-      if (t < 0 || t > 1) continue;
-      const point = { x: c.x + (n.x - c.x) * t, y: c.y + (n.y - c.y) * t };
-      // Of the two edges, the one that meets the line nearer the corner.
-      if (usable(new V3(point.x, point.y, 0)) && (best === null || t < 0.5)) best = point;
+      for (const z of [info.minimumWorld.z, info.maximumWorld.z])
+      {
+        const p = V3.Project(new V3(x, y, z), BABYLON.Matrix.IdentityReadOnly, transform, viewport);
+        if (p.z < 0 || p.z > 1 || p.y < 0 || p.y > bandBottom || p.x < span[0] || p.x > span[1]) continue;
+        const past = (p.x - edgeX) * dir;
+        if (past < reach) continue;
+        const held = bestPast.get(name);
+        if (held === undefined || past < held) { bestPast.set(name, past); best.set(name, { x: p.x, y: p.y }); }
+      }
     }
-    return best;
-  };
-  const reached = (corner: number) => corners.filter((four) => endOf(four, corner) !== null).length;
-  // How far, on average, one corner of every plane is past the legend: the nearest is the one most to its side.
-  const gapOf = (corner: number) => corners.reduce((sum, four) => sum + past(four[corner]), 0) / corners.length;
-  let best = -1, bestGap = Infinity;
-  for (let corner = 0; corner < 4; corner++)
-  {
-    if (reached(corner) * 2 < planes.length) continue;
-    const gap = gapOf(corner);
-    if (gap < bestGap) { best = corner; bestGap = gap; }
   }
-  const keep = legendCorner >= 0 && reached(legendCorner) * 2 >= planes.length && gapOf(legendCorner) <= bestGap + LEGEND_HOLD;
-  if (best >= 0 && !keep) legendCorner = best;
-  if (legendCorner < 0) return planes.map(() => null);
-  return corners.map((four) => endOf(four, legendCorner));
+  return names.map((name) => best.get(name) ?? null);
 }
 
 // Places the legend and its leader lines for this frame, and returns the screen box it takes.
 function updateLegend(width: number, height: number, transform: BABYLON.Matrix, viewport: BABYLON.Viewport): ScreenBox[]
 {
-  const planes = [...S.layerPlanes].sort((a, b) => (b.metadata as { rank: number }).rank - (a.metadata as { rank: number }).rank);
-  if (planes.length === 0)
+  const names = [...S.shownLayers].reverse();
+  if (names.length === 0)
   {
     if (legend) legend.style.display = "none";
     if (legendSvg) legendSvg.style.display = "none";
@@ -362,7 +330,6 @@ function updateLegend(width: number, height: number, transform: BABYLON.Matrix, 
   box.style.display = "";
   svgEl.style.display = "";
 
-  const names = planes.map((plane) => (plane.metadata as { layer: string }).layer);
   // A picked layer that is no longer drawn lets the others back.
   if (S.spotLayer !== null && !names.includes(S.spotLayer)) { S.spotLayer = null; renderEdges(); }
   const alone = S.spotLayer;
@@ -394,7 +361,7 @@ function updateLegend(width: number, height: number, transform: BABYLON.Matrix, 
 
   const edgeX = onRight ? legendX : legendX + legendWidth, dir = onRight ? -1 : 1;
 
-  // The rows are an even list, top plane first, fixed in the middle of the band above the bottom bars, so
+  // The rows are an even list, top layer first, fixed in the middle of the band above the bottom bars, so
   // it stays still as the map turns; the leader lines fan out from it, as from the step rail.
   const bars = document.getElementById("dock-bottom");
   const barsTop = bars && bars.offsetHeight > 0 && !onPhone() ? bars.getBoundingClientRect().top - 10 : height;
@@ -402,7 +369,10 @@ function updateLegend(width: number, height: number, transform: BABYLON.Matrix, 
   const tall = rows.length * LEGEND_ROW;
   const top = Math.max(bandTop, (bandTop + bandBottom - tall) / 2);
   const ys = rows.map((_, i) => top + i * LEGEND_ROW);
-  const anchors = planeAnchors(planes, onRight, edgeX, [open0, open1], bandBottom, transform, viewport);
+  const anchors = columnAnchors(names, onRight, edgeX, [open0, open1], bandBottom, transform, viewport);
+  // The last stretch of each line runs level out of its floor, so lines meeting close floors do not
+  // stack on top of one another where they land.
+  const leadMax = Math.max(0, Math.min(FLOOR_LEAD, (open1 - open0) * 0.09));
 
   svgEl.setAttribute("width", String(width));
   svgEl.setAttribute("height", String(height));
@@ -412,12 +382,17 @@ function updateLegend(width: number, height: number, transform: BABYLON.Matrix, 
   {
     row.style.transform = "translate(" + (onRight ? legendWidth - row.offsetWidth : 0).toFixed(1) + "px," + ys[i].toFixed(1) + "px)";
     const anchor = anchors[i];
-    // A line only where the plane lies past the legend's inner edge, so it never doubles back over the names.
-    if (!anchor || (anchor.x - edgeX) * dir < LEGEND_STUB) return;
+    if (!anchor) return;
+    const past = (anchor.x - edgeX) * dir;
+    // A line only where the floor lies past the legend's inner edge, so it never doubles back over the names.
+    if (past < LEGEND_STUB) return;
     const rowEdge = onRight ? legendX + legendWidth - row.offsetWidth : legendX + row.offsetWidth;
     const y0 = ys[i] + row.offsetHeight / 2, stubX = edgeX + dir * LEGEND_STUB;
+    // The level run stops where the angled part would begin to double back over the legend.
+    const lead = Math.min(leadMax, Math.max(0, past - LEGEND_STUB - 4));
+    const kneeX = anchor.x - dir * lead;
     paths[i] = "M" + rowEdge.toFixed(1) + " " + y0.toFixed(1) + "L" + stubX.toFixed(1) + " " + y0.toFixed(1) +
-      "L" + anchor.x.toFixed(1) + " " + anchor.y.toFixed(1);
+      "L" + kneeX.toFixed(1) + " " + anchor.y.toFixed(1) + "L" + anchor.x.toFixed(1) + " " + anchor.y.toFixed(1);
     let foot = legendFeet[feet];
     if (!foot) { foot = document.createElementNS(SVG, "circle"); foot.setAttribute("r", "2.5"); svgEl.appendChild(foot); legendFeet.push(foot); }
     feet++;

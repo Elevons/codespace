@@ -81,6 +81,21 @@ export function nodeMatchesFilters(filePaths: readonly string[], matches: (path:
   return filePaths.some(matches);
 }
 
+/** A folder node with just what the subtree walk needs, so the pure rules need no scene types. */
+interface FolderLike
+{
+  index?: number
+  children: readonly FolderLike[]
+}
+
+/** Every node index in a folder's subtree, the folder itself included, gathered for the column view. */
+export function subtreeIndices(node: FolderLike, into = new Set<number>()): Set<number>
+{
+  if (node.index !== undefined) into.add(node.index);
+  for (const child of node.children) subtreeIndices(child, into);
+  return into;
+}
+
 /**
  * Where a ray enters an axis-aligned box, or null if it misses. The slab method, three slabs.
  * @param o the ray's origin

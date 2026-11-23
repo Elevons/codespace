@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { folderColor, folderOf, isFileVisible, labelFor, layerRank, nodeMatchesFilters, rayBox } from '../public/rules.ts'
+import { folderColor, folderOf, isFileVisible, labelFor, layerRank, nodeMatchesFilters, rayBox, subtreeIndices } from '../public/rules.ts'
 
 test('folderOf names the folder a path lives in, and nothing for the root', () =>
 {
@@ -128,4 +128,17 @@ test('An extras folder re-shown by its eye is hidden again when Extras is turned
     reShown.clear()
     assert.equal(isFileVisible('tests/a.test.ts', state), false)
     assert.equal(isFileVisible('docs/a.md', state), true, 'a folder that is not an extra stays visible')
+})
+
+test('subtreeIndices gathers a folder and every folder under it', () =>
+{
+    const leaf = { index: 2, children: [] }
+    const branch = { index: 1, children: [leaf] }
+    const other = { index: 3, children: [] }
+    const root = { index: 0, children: [branch, other] }
+    assert.deepEqual([...subtreeIndices(root)].sort(), [0, 1, 2, 3])
+    assert.deepEqual([...subtreeIndices(branch)].sort(), [1, 2])
+    // A node without an index is walked but never added.
+    const bare = { children: [{ index: 5, children: [] }] }
+    assert.deepEqual([...subtreeIndices(bare)], [5])
 })

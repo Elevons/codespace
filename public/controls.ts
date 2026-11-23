@@ -251,7 +251,7 @@ function frameSelection(): void
     if (rec && (S.selectedBlock < 0 || !frameBlock(rec))) frameFile(rec);
     return;
   }
-  frameFolder(S.NODES[S.selected], camera.radius);
+  frameFolder(S.NODES[S.selected]);
 }
 
 // Steps through the chosen folder's files, wrapping at either end.

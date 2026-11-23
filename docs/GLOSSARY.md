@@ -8,7 +8,9 @@ interface, in the code, and in a description of the map; they name one thing eac
 - **file box** — the standing box that stands for one file on the map. It is a cube, and it is
   the only thing a file is drawn as until it is chosen.
 - **folder tile** — the flat, nested plate that holds a folder's file boxes and subfolders.
-- **layer plane** — the translucent plane that gathers the files of one layer.
+- **folder column** — the translucent column a folder rises as, through the layers its files use.
+  Its subfolders are the columns inside it when the folder is chosen.
+- **layer floor** — the thin plate inside a folder column that holds the files of one layer.
 
 ## The parts of a file
 

@@ -25,7 +25,7 @@ move, rename, or repurpose a file, update its entry in the same change**, by edi
 file or with `src/cli/Cli.ts apply` (all or nothing; it validates and reports problems).
 The file has:
 
-- `layers` — bottom plane first (`config`, `docs`, `model`, `repo`, `api`, `render`,
+- `layers` — bottom layer first (`config`, `docs`, `model`, `repo`, `api`, `render`,
   `panels`, `shell`, `entry`, `tests` here). Layers are shared, so one layer can hold files from several systems.
 - `systems` — keyed by name (`browser`, `server`, `meta` here), each with an optional `summary`.
   A system groups files; it does not own a private layer list.

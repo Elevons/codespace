@@ -51,12 +51,12 @@ panel can delete this folder whole, so a repository can be described again from 
 
 | Field | Means |
 | --- | --- |
-| `layers` | The layer names, bottom plane first. Each is drawn as a plane. Layers are shared. |
+| `layers` | The layer names, bottom floor first. Each is drawn as a floor inside the folder columns. Layers are shared. |
 | `systems` | An object keyed by system name, each with a `summary`. A system groups files; it does not own layers. Optional. |
 | `files` | An object keyed by repository-relative path, with forward slashes. |
 | `folders` | An object keyed by folder path, each with a `summary`. The repository root is not one. Optional. |
 | `system` | The system the file belongs to. One system can use any number of shared layers. |
-| `layer` | The file's level or role in the stack — its job, not its system or folder. Its box rises to that layer's plane. |
+| `layer` | The file's level or role in the stack — its job, not its system or folder. Its box rises to that layer's floor. |
 | `tags` | The file's roles, primary first. The first tag sets its colour. |
 | `summary` | One plain sentence on what the file is *for*: what it does and why it exists, not how. At most 2000 characters. |
 | `notes` | What the file's declarations are for, by name: `Name`, `Class.member`, and a function's steps as `Name:1`, `Name:2`. The block rail shows them. Explanations live here rather than as comments in the code; `lift-notes` moves existing JSDoc and `//>` comments here. Each note is at most 2000 characters. |
@@ -116,9 +116,11 @@ the two trees cannot drift.
 
 - Boxes are coloured by their first tag by default; the Colour menu can colour them by system,
   layer, folder, size, or recent changes.
-- Each layer is a translucent plane with a coloured outline; files rise to their layer, and a
-  vertical line ties each lifted file to its folder. Because layers are shared, one plane can
-  hold files from several systems.
+- Each layer is a floor inside the **folder columns**: every folder rises as a translucent column
+  through the layers its files use, with a thin plate at each of them, and clicking a column goes
+  inside it, so its subfolders become the columns. A folder with no visible children is drawn as
+  one column itself. The layers' names sit in the legend at the side, their lines ending on the
+  nearest floor of each layer.
 - The Outliner is a filter strip over one tree. The strip lists every system and layer with a
   live count; clicking a chip hides or shows that value (double-click or double-tap shows only it,
   and again brings every value back), and the selected systems
@@ -127,7 +129,7 @@ the two trees cannot drift.
   and its systems, so one strip never locks the other out; such a chip is dotted until clicked. A
   chip with nothing to draw at all (the eyes or the tag filter hide every file in it) is dimmed and
   cannot be switched on, though a selected one can always be switched off. Non-matching files, then the folders and
-  layer planes left empty, are not drawn. The tree lists each folder once, or flattens files under
+  layer floors left empty, are not drawn. The tree lists each folder once, or flattens files under
   system or layer groups with the *List by* switch. A group's caret folds it (Alt folds everything
   inside); clicking a folder row chooses that folder, and clicking it again folds it. A folder's eye
   hides or shows every file beneath it, whatever hid them, and shows a half state when only some are

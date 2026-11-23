@@ -37,13 +37,13 @@
       "system": "meta",
       "layer": "docs",
       "tags": ["config"],
-      "summary": "The words the map uses for a file and its parts, the selection, the block rail, the flows and the health check, and the wires a block names."
+      "summary": "The words the map uses for a file and its parts, the folder columns and their layer floors, the selection, the block rail, the flows and the health check, and the wires a block names."
     },
     "docs/architecture.md": {
       "system": "meta",
       "layer": "docs",
       "tags": ["config"],
-      "summary": "The full explanation of the architecture file: its fields, the tag vocabulary, and what the map does with it, including a trace's import graph and where wires meet blocks."
+      "summary": "The full explanation of the architecture file: its fields, the tag vocabulary, what the map does with it including the folder columns, a trace's import graph, and where wires meet blocks."
     },
     "docs/review-rubric.md": {
       "system": "meta",
@@ -148,13 +148,13 @@
       "system": "browser",
       "layer": "render",
       "tags": ["core"],
-      "summary": "Paints each file for the current choice, tinting the batched crowd, lighting every selected file, fading a file that was just edited, and greying the layers left out when one is picked from the legend."
+      "summary": "Paints each file for the current choice, tinting the batched crowd, lighting every selected file, fading a file that was just edited, and greying the floors left out when a layer is picked from the legend."
     },
     "public/index.html": {
       "system": "browser",
       "layer": "shell",
       "tags": ["ui", "entry"],
-      "summary": "The page's HTML shell: the canvas, the panels, the outliner's collapse controls, the insights panel with its bottom-bar buttons and phone tab, and the bootstrap request for the repository."
+      "summary": "The page's HTML shell: the canvas, the panels, the outliner's collapse controls, the insights panel with its bottom-bar buttons and phone tab, the view controls, and the bootstrap request for the repository."
     },
     "public/ingest.ts": {
       "system": "browser",
@@ -172,19 +172,19 @@
       "system": "browser",
       "layer": "render",
       "tags": ["ui"],
-      "summary": "Places names, tags, step captions, and the layer legend with its leader lines on screen without letting them pile up or overlap."
+      "summary": "Places names, tags, step captions, folder column names on their tops, and the layer legend with its leader lines, each ending in a level run at its floor, without letting them pile up or overlap."
     },
     "public/main.ts": {
       "system": "browser",
       "layer": "entry",
       "tags": ["entry"],
-      "summary": "Boots the page: pointer interaction that picks files, folders, and floors, shift-click selection, the render loop with the edit flash, and the first load."
+      "summary": "Boots the page: pointer interaction that picks files, folders, floors, and the tall folder columns, shift-click selection, the render loop with the edit flash, and the first load."
     },
     "public/meshes.ts": {
       "system": "browser",
       "layer": "render",
       "tags": ["core"],
-      "summary": "Builds, reuses, and retires each file's mesh so its box sits on its folder's tile and animates into place."
+      "summary": "Builds, reuses, and retires each file's mesh so its box sits on its folder's tile and animates into place, and draws each folder as a glass column with a floor at every layer it uses."
     },
     "public/mobile.ts": {
       "system": "browser",
@@ -214,7 +214,7 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "core"],
-      "summary": "The outliner, the info panel with its block rail and start-here link, the neighbourhood action, and the selected files with their actions, and everything a person can click, select, fold, or search."
+      "summary": "The outliner, the info panel with its block rail and start-here link, the neighbourhood action, and the selected files with their actions, and everything a person can click, select, fold, or search, with the chosen folder's subtree kept lit as its folder columns are drawn."
     },
     "public/repo-switch.ts": {
       "system": "browser",
@@ -238,7 +238,7 @@
       "system": "browser",
       "layer": "model",
       "tags": ["core"],
-      "summary": "The map's pure folder, colour, layer-rank, visibility, and ray-picking rules, kept testable away from the scene."
+      "summary": "The map's pure folder, colour, layer-rank, visibility, subtree, and ray-picking rules, kept testable away from the scene."
     },
     "public/shown.ts": {
       "system": "browser",
@@ -250,13 +250,13 @@
       "system": "browser",
       "layer": "model",
       "tags": ["core"],
-      "summary": "The page's mutable world and constants: the graph, the chosen file and block, the selection, import names, filters, the layer picked from the legend, edit flashes, wire anchors, scene handles, and camera framing for a file's block stack or a chosen floor."
+      "summary": "The page's mutable world and constants: the graph, the chosen file and block, the selection, import names, filters, the layer picked from the legend, the folder columns and their tops, edit flashes, wire anchors, scene handles, and camera framing for a file's block stack, a chosen floor, or a folder's columns."
     },
     "public/style.css": {
       "system": "browser",
       "layer": "shell",
       "tags": ["ui"],
-      "summary": "The styles for the page, its panels, the outliner and its edge tab, the block rail, the insights panel, and the phone sheets."
+      "summary": "The styles for the page, its panels, the outliner and its edge tab, the block rail, the insights panel, the phone sheets, and the folder column names."
     },
     "public/symbols.ts": {
       "system": "browser",
@@ -592,7 +592,7 @@
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Tests the pure folder, colour, layer-rank, visibility, and ray-and-box rules the map shares."
+      "summary": "Tests the pure folder, colour, layer-rank, visibility, subtree, and ray-and-box rules the map shares."
     },
     "tests/Server.test.ts": {
       "system": "meta",

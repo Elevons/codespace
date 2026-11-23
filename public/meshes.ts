@@ -1,7 +1,9 @@
-import { S, V3, scene, camera, engine, DEFAULT_BETA, colorFor, materialFor, fileColor } from "./state.js";
+import { S, V3, scene, camera, engine, DEFAULT_BETA, colorFor, materialFor, fileColor, layerRank } from "./state.js";
+import { subtreeIndices } from "./rules.js";
 import { resizeBoxes, paintBox, flushBoxes } from "./boxes.js";
 import { colorOf } from "./batch.js";
 import { resizePads } from "./pads.js";
+import type { GraphNode } from "./types.js";
 
 let gridMesh: BABYLON.Mesh | null = null;
 let plateMesh: BABYLON.Mesh | null = null;
@@ -81,40 +83,123 @@ function syncMeshes(): void
   }
 
   buildGrid();
-  buildLayerPlanes();
+  buildColumns();
 }
 
-// One translucent plane per layer, stacked so each layer's files can rise to it.
-function buildLayerPlanes(): void
+// The chosen folder's visible children are drawn as glass columns, each with a floor at every
+// layer its files use. A folder with no visible children is drawn as one column itself, so a
+// leaf still shows the layers its files sit on.
+function columnParent(): GraphNode | null
 {
-  for (const plane of S.layerPlanes) plane.dispose();
-  S.layerPlanes = [];
-  if (S.LAYERS.length === 0) return;
-  const bounds = sceneBounds();
-  const width = bounds ? bounds.max.x - bounds.min.x + 6 : 12;
-  const depth = bounds ? bounds.max.z - bounds.min.z + 6 : 12;
-  const cx = bounds ? (bounds.min.x + bounds.max.x) / 2 : 0;
-  const cz = bounds ? (bounds.min.z + bounds.max.z) / 2 : 0;
-  S.shownLayers.forEach((name, index) =>
-  {
-    const plane = BABYLON.MeshBuilder.CreateGround("layer:" + name, { width, height: depth }, scene);
-    plane.position.set(cx, index * S.layerGap, cz);
-    // The sheet is barely there; its coloured outline and the file rings do the reading.
-    plane.material = materialFor(colorFor(name), 0.04, 0.06);
-    (plane.material as BABYLON.StandardMaterial).backFaceCulling = false;
-    plane.isPickable = false;
+  const root = S.NODES.find((n) => n.id === "");
+  if (!root) return null;
+  if (S.selected < 0) return root;
+  return S.NODES[S.selected] ?? root;
+}
 
-    const hx = width / 2, hz = depth / 2;
-    const border = BABYLON.MeshBuilder.CreateLines("layer-border:" + name, {
-      points: [new V3(-hx, 0, -hz), new V3(hx, 0, -hz), new V3(hx, 0, hz), new V3(-hx, 0, hz), new V3(-hx, 0, -hz)],
+function clearColumnMeshes(): void
+{
+  for (const mesh of S.columnMeshes) mesh.dispose();
+  S.columnMeshes = [];
+  S.columnTops.clear();
+}
+
+// The glass walls and the per-layer floor plates of one column. The top and the floors come from
+// the files actually drawn in its subtree, so a filter or an eye that empties a layer takes its
+// floor with it. Returns whether there was anything to draw.
+function addColumn(n: GraphNode): boolean
+{
+  if (n.hidden || n.cx === undefined || n.cz === undefined || n.tileW === undefined || n.tileD === undefined) return false;
+  const index = n.index;
+  if (index === undefined) return false;
+  const inside = subtreeIndices(n);
+  const ranks = new Set<number>();
+  let top = n.topY ?? 0, holdsFile = false;
+  for (const rec of S.fileRecords.values())
+  {
+    if (!inside.has(rec.node)) continue;
+    holdsFile = true;
+    top = Math.max(top, rec.target.y + rec.targetSize.y / 2);
+    const layer = S.LAYERS.length > 0 ? S.FILE_LAYERS.get(rec.path) : undefined;
+    if (layer === undefined) continue;
+    const rank = layerRank(layer);
+    if (rank >= 0) ranks.add(rank);
+  }
+  if (!holdsFile) return false;
+  top = Math.max(top, ...[...ranks].map((rank) => rank * S.layerGap)) + 0.8;
+  S.columnTops.set(index, top);
+
+  // The glass: a faint box and its vertical edges, so the column reads without hiding its files.
+  const base = n.topY ?? 0;
+  const height = Math.max(0.2, top - base);
+  const hue = colorFor(n.layer);
+  const wall = BABYLON.MeshBuilder.CreateBox("column", { width: n.tileW, height, depth: n.tileD }, scene);
+  wall.position.set(n.cx, base + height / 2, n.cz);
+  const wallMaterial = materialFor(hue, 0.035, 0.02);
+  wallMaterial.backFaceCulling = false;
+  wall.material = wallMaterial;
+  wall.isPickable = false;
+  wall.metadata = { kind: "wall" };
+  S.columnMeshes.push(wall);
+
+  const hw = n.tileW / 2, hd = n.tileD / 2;
+  const corners = [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd], [-hw, -hd]];
+  const edges: BABYLON.Vector3[][] = [];
+  for (let i = 0; i < 4; i++)
+  {
+    const [x0, z0] = corners[i], [x1, z1] = corners[i + 1];
+    edges.push([new V3(n.cx + x0, base, n.cz + z0), new V3(n.cx + x0, top, n.cz + z0)]);
+    edges.push([new V3(n.cx + x0, top, n.cz + z0), new V3(n.cx + x1, top, n.cz + z1)]);
+  }
+  const edgeMesh = BABYLON.MeshBuilder.CreateLineSystem("column-edges", { lines: edges }, scene);
+  edgeMesh.color = BABYLON.Color3.FromHexString(hue);
+  edgeMesh.alpha = 0.28;
+  edgeMesh.isPickable = false;
+  edgeMesh.metadata = { kind: "wall" };
+  S.columnMeshes.push(edgeMesh);
+
+  // A thin plate at each layer the column holds, in that layer's colour.
+  for (const rank of [...ranks].sort((a, b) => a - b))
+  {
+    const layer = S.shownLayers[rank];
+    if (layer === undefined) continue;
+    const y = rank === 0 ? base + 0.012 : rank * S.layerGap;
+    const plate = BABYLON.MeshBuilder.CreateBox("column-floor", { width: Math.max(0.2, n.tileW - 0.3), height: 0.02, depth: Math.max(0.2, n.tileD - 0.3) }, scene);
+    plate.position.set(n.cx, y, n.cz);
+    plate.material = materialFor(colorFor(layer), 0.12, 0.16);
+    plate.isPickable = false;
+    plate.metadata = { kind: "floor", layer };
+    S.columnMeshes.push(plate);
+    const outline = BABYLON.MeshBuilder.CreateLines("column-floor-edge", {
+      points: [new V3(-hw + 0.15, 0, -hd + 0.15), new V3(hw - 0.15, 0, -hd + 0.15), new V3(hw - 0.15, 0, hd - 0.15), new V3(-hw + 0.15, 0, hd - 0.15), new V3(-hw + 0.15, 0, -hd + 0.15)],
     }, scene);
-    border.color = BABYLON.Color3.FromHexString(colorFor(name));
-    border.alpha = 0.38;
-    border.parent = plane;
-    border.isPickable = false;
-    plane.metadata = { layer: name, rank: index, border };
-    S.layerPlanes.push(plane);
-  });
+    outline.position.set(n.cx, y + 0.011, n.cz);
+    outline.color = BABYLON.Color3.FromHexString(colorFor(layer));
+    outline.alpha = 0.5;
+    outline.isPickable = false;
+    outline.metadata = { kind: "floor", layer };
+    S.columnMeshes.push(outline);
+  }
+  return true;
+}
+
+// Every folder column for the current choice: the chosen folder's visible children, or the folder
+// itself when it has none to split into.
+function buildColumns(): void
+{
+  clearColumnMeshes();
+  const parent = columnParent();
+  if (!parent) return;
+  let drawn = 0;
+  for (const n of parent.children) if (addColumn(n)) drawn++;
+  if (drawn === 0) addColumn(parent);
+}
+
+// Redraws the folder columns after a choice changes which folder is inside, without rebuilding the
+// treemap, the boxes, or the grid, none of which move when the choice changes.
+function refreshColumns(): void
+{
+  buildColumns();
 }
 
 // A ground grid under everything, the clearest hint of which way is up. A plain ruled
@@ -264,4 +349,4 @@ export function updatePulses(now: number): void
   if (painted) flushBoxes();
 }
 
-export { syncMeshes, centerView, recenterTarget, settleCamera };
+export { syncMeshes, centerView, recenterTarget, settleCamera, refreshColumns };

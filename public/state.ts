@@ -54,7 +54,8 @@ export const S = {
     shownExtraFolders: new Set<string>(),
     collapsed: new Set<string>(),
   } as OutlinerState,
-  layerPlanes: [] as BABYLON.Mesh[],           // the translucent planes, one per layer
+  columnMeshes: [] as BABYLON.Mesh[],          // the folder columns' walls and floors
+  columnTops: new Map<number, number>(),       // folder index -> the top of its column, for picking and names
   shownLayers: [] as string[],                 // the layers that still hold a drawn file, bottom plane first
   layerGap: LAYER_GAP,                         // the vertical spacing between layer planes, set by the spread slider
   boxes: [] as Box[],                          // one entry per visible file, with its terrace spot
@@ -253,13 +254,21 @@ export function frameBlock(rec: FileRecord): boolean
 }
 
 // Glides the camera to one folder, close enough that its files read.
-export function frameFolder(n: GraphNode, currentRadius: number): void
+export function frameFolder(n: GraphNode): void
 {
   if (n.cx === undefined) return;
-  const reach = Math.max(n.tileW ?? 8, n.tileD ?? 8);
+  // A chosen folder is a room whose child columns rise from its ground, so frame the whole height
+  // rather than the tile: otherwise the columns run off the top of the screen.
+  const tops = [...S.columnTops.values()];
+  const top = tops.length > 0 ? Math.max(...tops) : (n.topY ?? 0);
+  const height = Math.max(0, top - (n.topY ?? 0));
+  const reach = Math.max(n.tileW ?? 8, n.tileD ?? 8, height);
   S.autoSpin = false;
   window.dispatchEvent(new Event("codespace:spin"));
-  S.camGoal = { target: new V3(n.cx, n.topY!, n.cz!), radius: Math.max(8, Math.min(currentRadius, reach * 0.9 + 6)) };
+  S.camGoal = {
+    target: new V3(n.cx, (n.topY ?? 0) + height / 2, n.cz!),
+    radius: Math.max(8, reach * 1.35 + 7),
+  };
 }
 
 /** Whether any filter is active, from the tag filter or the filter strip. */
