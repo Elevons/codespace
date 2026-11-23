@@ -841,7 +841,7 @@
   body.phone #codeblock .panel-fold { display: none; }
   body.phone #info.collapsed #info-body, body.phone #showing.collapsed #showing-body,
   body.phone #insight.collapsed #insight-body { display: block; }
-  #mpane-details #info { font-size: 15px; padding: 0; }
+  #mpane-details #info { font-size: 15px; padding: 0; margin-bottom: 14px; }
   #mpane-details #info h3 { font-size: 17px; }
   #mpane-details #info ul { font-size: 14px; }
   #mpane-details #info li { padding: 8px 0; border-bottom: 1px solid #21262d; }

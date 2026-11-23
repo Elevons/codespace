@@ -17,7 +17,7 @@ const narrow = window.matchMedia("(max-width: 720px)");
 const PANES: Record<Pane, string[]> = {
   files: ["outliner"],
   filters: ["outliner-filters", "outliner-chips", "outliner-options", "outliner-bulk"],
-  details: ["showing", "info"],
+  details: ["info", "showing"],
   insight: ["insight"],
   chat: ["chat-panel"],
   view: ["tools", "controls"],
