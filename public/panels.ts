@@ -1,4 +1,4 @@
-import { S, colorFor, colorForSystem, copyText, frameFile, frameFolder, hasFilters, inScene as isInScene, isFileVisible, matchesFilters, matchesTagFilter, passesSlice, sliceValue, systemLabel, filePath, pathIndex, render, renderEdges } from "./state.js";
+import { S, colorFor, colorForSystem, copyText, frameFile, frameFolder, hasFilters, inScene as isInScene, isFileVisible, matchesFilters, matchesTagFilter, passesSlice, sliceValue, spotColumn, systemLabel, filePath, pathIndex, render, renderEdges } from "./state.js";
 import { folderColor, folderOf, labelFor, subtreeIndices } from "./rules.js";
 import { ancestorFolders, foldersToKeepOpen, matchesQueryTerms, queryTerms } from "./filter.js";
 import { refreshColumns } from "./meshes.js";
@@ -173,7 +173,7 @@ function selectFile(nodeIndex: number, fileIndex: number): void
 {
   // The outliner is drawn once, below, for the file; drawing it for the folder first would scroll
   // the tree to the folder's row and shift the rows under the pointer between two clicks.
-  select(nodeIndex, false);
+  select(nodeIndex, false, false);
   S.selectedFile = fileIndex;
   render();
 
@@ -476,7 +476,7 @@ function statsHtml(): string
     "<span><kbd>F</kbd> frame</span><span><kbd>R</kbd> reset</span><span><kbd>?</kbd> keys</span></div></div>";
 }
 
-function select(i: number, outline = true): void
+function select(i: number, outline = true, descend = true): void
 {
   S.selected = i;
   S.selectedFile = -1;
@@ -484,12 +484,19 @@ function select(i: number, outline = true): void
   S.extraFiles.clear();
   S.selectedBlock = -1;
   hideCode();
-  // A chosen folder is what you are inside, so only its own subtree stays lit; the root holds
-  // everything, so choosing it (a click on the empty ground) does not fade the whole map.
-  S.focusSet = i >= 0 && S.NODES[i]?.id !== "" ? subtreeIndices(S.NODES[i]) : null;
-  // The columns are the chosen folder's children, so choosing a folder, file, or breadcrumb
-  // redraws them one level down. The layout itself is unchanged.
-  refreshColumns();
+  // Going inside a folder makes its children the columns; a plain selection leaves the columns as
+  // they are, so a single click can pick out one column without hiding the rest.
+  if (descend)
+  {
+    const id = i >= 0 ? (S.NODES[i]?.id ?? "") : "";
+    S.columnRoot = id === "" ? null : id;
+    refreshColumns();
+  }
+  // The column that holds the choice stays bright; when the choice is the column root itself, its
+  // whole room stays bright. Everything else fades to a quarter, so the picked column stands out.
+  const spot = spotColumn();
+  const litRoot = spot >= 0 ? spot : (i >= 0 && S.NODES[i]?.id !== "" ? i : -1);
+  S.focusSet = litRoot >= 0 ? subtreeIndices(S.NODES[litRoot]) : null;
   const info = document.getElementById("info")!;
   info.classList.toggle("empty", i < 0);
   info.classList.toggle("collapsed", i < 0 && statsCollapsed);
@@ -503,8 +510,8 @@ function select(i: number, outline = true): void
   }
   const n = S.NODES[i];
   syncHash(n.id);
-  // Glide the camera to the chosen folder, close enough that its files read.
-  frameFolder(n);
+  // Going inside glides the camera to the room; a plain selection leaves the view where it is.
+  if (descend) frameFolder(n);
   const outs = S.EDGES.filter((e) => e[0] === n.id).sort((a, b) => b[2] - a[2]);
   const ins = S.EDGES.filter((e) => e[1] === n.id).sort((a, b) => b[2] - a[2]);
   const line = (e: [string, string, number], target: string) => "<li>" + escapeHtml(target) + '<span class="n">' + e[2] + "</span></li>";

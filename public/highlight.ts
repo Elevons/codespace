@@ -1,4 +1,4 @@
-import { S, isLitRecord, inSpotLayer, materialFor, fileColor } from "./state.js";
+import { S, isLitRecord, inSpotLayer, materialFor, fileColor, spotColumn } from "./state.js";
 import { placeBox, paintBox, releaseAccents, accent, retireAccents } from "./boxes.js";
 import { colorOf } from "./batch.js";
 
@@ -24,27 +24,29 @@ function applyHighlight(): void
     if (chosen || emphasise || shown || hovered || flash > 0)
     {
       const glow = chosen ? 0.85 : emphasise ? 1 : flash > 0 ? 0.4 + 0.6 * flash : 0.55;
-      const alpha = flash > 0 && !chosen && !emphasise ? 1 : lit ? 1 : 0.12;
+      const alpha = flash > 0 && !chosen && !emphasise ? 1 : lit ? 1 : 0.25;
       accent(rec, materialFor(hex, alpha, glow), chosen || emphasise || flash > 0.6);
     }
     else paintBox(rec, colorOf(hex));
     placeBox(rec);
   }
   retireAccents();
-  fadeLayerPlanes();
+  fadeColumns();
 }
 
 const FADED_GREY = "#6e7681";
 
-// While a layer is picked from the legend, every floor on another layer fades to a trace, so the
-// picked layer keeps its place in the stack.
-function fadeLayerPlanes(): void
+// The columns that are not the chosen one fade to a quarter, and when a layer is picked from the
+// legend its floors on other layers do too, so the chosen column and layer keep their place.
+function fadeColumns(): void
 {
+  const spot = spotColumn();
   for (const mesh of S.columnMeshes)
   {
-    const meta = mesh.metadata as { kind?: string; layer?: string } | undefined;
-    if (meta?.kind !== "floor") continue;
-    mesh.visibility = S.spotLayer !== null && meta.layer !== S.spotLayer ? 0.3 : 1;
+    const meta = mesh.metadata as { kind?: string; layer?: string; index?: number } | undefined;
+    const sibling = spot >= 0 && meta?.index !== spot;
+    const layerOut = meta?.kind === "floor" && S.spotLayer !== null && meta.layer !== S.spotLayer;
+    mesh.visibility = sibling || layerOut ? 0.25 : 1;
   }
 }
 

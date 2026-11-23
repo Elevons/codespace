@@ -1,7 +1,6 @@
 import { S, V3, scene, camera, canvas, engine, loadingNote, render } from "./state.js";
 import { settleCamera, updatePulses } from "./meshes.js";
-import { pickFile, placeBox, flushBoxes } from "./boxes.js";
-import { rayBox } from "./rules.js";
+import { pickFile, pickFolder, placeBox, flushBoxes } from "./boxes.js";
 import { applyHighlight } from "./highlight.js";
 import { pickFloor, syncFloors } from "./floors.js";
 import { rebuildEdges, updateFlow } from "./edges.js";
@@ -18,28 +17,6 @@ import "./insight.js";
 import "./mobile.js";
 
 /* -------------------------------------------------------- interaction ---- */
-
-// The folder under a screen point, found by testing the pick ray against each tile's box rather
-// than against a mesh. The tiles are batched into one mesh to draw fast, so they cannot name
-// themselves; this keeps a click landing on the smallest, deepest tile under the pointer.
-function pickFolder(x: number, y: number): number
-{
-  const ray = scene.createPickingRay(x, y, BABYLON.Matrix.IdentityReadOnly, camera);
-  const o = ray.origin, d = ray.direction;
-  let best = -1, bestArea = Infinity;
-  for (let i = 0; i < S.NODES.length; i++)
-  {
-    const n = S.NODES[i];
-    if (n.hidden || n.cx === undefined || n.tileW === undefined || n.tileD === undefined) continue;
-    // A folder column is tall, so a click high on it still lands on the folder it stands for.
-    const top = S.columnTops.get(i) ?? n.topY!;
-    const t = rayBox(o, d, n.cx - n.tileW / 2, n.cx + n.tileW / 2, n.baseY!, top, n.cz! - n.tileD / 2, n.cz! + n.tileD / 2);
-    if (t === null) continue;
-    const area = n.tileW * n.tileD;
-    if (area < bestArea) { bestArea = area; best = i; }
-  }
-  return best;
-}
 
 // A pointer move only marks a pick as wanted; the frame loop does one pick at most per frame,
 // so a fast mouse does not cost a scene-wide hit test on every event.
@@ -76,7 +53,10 @@ scene.onPointerObservable.add((info) =>
     else selectFile(fileHit.node, fileHit.file);
     return;
   }
-  select(pickFolder(scene.pointerX, scene.pointerY));
+  // A single tap on a folder column selects it; a double tap goes inside it (controls.ts). The
+  // empty ground comes back out to the repository root.
+  const folderHit = pickFolder(scene.pointerX, scene.pointerY);
+  select(folderHit, true, folderHit < 0);
 });
 
 /* --------------------------------------------------------------- frame ---- */

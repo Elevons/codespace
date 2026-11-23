@@ -93,8 +93,12 @@ function columnParent(): GraphNode | null
 {
   const root = S.NODES.find((n) => n.id === "");
   if (!root) return null;
-  if (S.selected < 0) return root;
-  return S.NODES[S.selected] ?? root;
+  if (S.columnRoot === null) return root;
+  const inside = S.NODES.find((n) => n.id === S.columnRoot);
+  if (inside) return inside;
+  // The folder that was isolated has gone, so come back out to the repository root.
+  S.columnRoot = null;
+  return root;
 }
 
 function clearColumnMeshes(): void
@@ -139,7 +143,7 @@ function addColumn(n: GraphNode): boolean
   wallMaterial.backFaceCulling = false;
   wall.material = wallMaterial;
   wall.isPickable = false;
-  wall.metadata = { kind: "wall" };
+  wall.metadata = { kind: "wall", index };
   S.columnMeshes.push(wall);
 
   const hw = n.tileW / 2, hd = n.tileD / 2;
@@ -155,7 +159,7 @@ function addColumn(n: GraphNode): boolean
   edgeMesh.color = BABYLON.Color3.FromHexString(hue);
   edgeMesh.alpha = 0.28;
   edgeMesh.isPickable = false;
-  edgeMesh.metadata = { kind: "wall" };
+  edgeMesh.metadata = { kind: "wall", index };
   S.columnMeshes.push(edgeMesh);
 
   // A thin plate at each layer the column holds, in that layer's colour.
@@ -168,7 +172,7 @@ function addColumn(n: GraphNode): boolean
     plate.position.set(n.cx, y, n.cz);
     plate.material = materialFor(colorFor(layer), 0.12, 0.16);
     plate.isPickable = false;
-    plate.metadata = { kind: "floor", layer };
+    plate.metadata = { kind: "floor", layer, index };
     S.columnMeshes.push(plate);
     const outline = BABYLON.MeshBuilder.CreateLines("column-floor-edge", {
       points: [new V3(-hw + 0.15, 0, -hd + 0.15), new V3(hw - 0.15, 0, -hd + 0.15), new V3(hw - 0.15, 0, hd - 0.15), new V3(-hw + 0.15, 0, hd - 0.15), new V3(-hw + 0.15, 0, -hd + 0.15)],
@@ -177,7 +181,7 @@ function addColumn(n: GraphNode): boolean
     outline.color = BABYLON.Color3.FromHexString(colorFor(layer));
     outline.alpha = 0.5;
     outline.isPickable = false;
-    outline.metadata = { kind: "floor", layer };
+    outline.metadata = { kind: "floor", layer, index };
     S.columnMeshes.push(outline);
   }
   return true;

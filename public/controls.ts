@@ -1,5 +1,6 @@
-import { S, camera, canvas, DEFAULT_ALPHA, filePath, frameBlock, frameFile, frameFolder, glow, hasFilters, isFileVisible, matchesTagFilter, render, renderEdges, fileIndex, pathIndex, sliceValue } from "./state.js";
+import { S, camera, canvas, scene, DEFAULT_ALPHA, filePath, frameBlock, frameFile, frameFolder, glow, hasFilters, isFileVisible, matchesTagFilter, render, renderEdges, fileIndex, pathIndex, sliceValue } from "./state.js";
 import { api } from "./endpoint.js";
+import { pickFile, pickFolder } from "./boxes.js";
 import { build } from "./city.js";
 import { centerView, recenterTarget, pulseFile } from "./meshes.js";
 import { collapseAllOutliner, folderNode, select, selectFile, setOutlinerFocus, openSymbol, openFile, renderOutliner, renderSelection, revealOutliner, sliceSet, toggleFileSelection, toggleFold } from "./panels.js";
@@ -81,7 +82,7 @@ async function refreshGraph(force = false): Promise<void>
     const folder = keptFolder === null ? -1 : S.NODES.findIndex((n) => n.id === keptFolder);
     const file = folder >= 0 && keptFile !== null ? S.NODES[folder].files.findIndex((_name, i) => filePath(folder, i) === keptFile) : -1;
     if (file >= 0) selectFile(folder, file);
-    else select(folder);
+    else select(folder, true, false);
     // The other chosen files come back with it, unless they are gone from the repository.
     if (file >= 0 && keptExtras.length > 0)
     {
@@ -662,12 +663,30 @@ function spotLayer(layer: string | null): void
   renderEdges();
 }
 
-// A double click or double tap on the map lets every layer back. A finger wobbles and lands its second tap a
-// little off the first, so the pair is judged loosely: a press that moves under MAP_TAP_SLOP is still a tap,
-// and a second tap within MAP_TAP_REACH of the first, inside MAP_TAP_MS, makes the pair. A press that drags
-// the camera further does not count. The browser's own dblclick is taken too, for a mouse.
+// A double click or double tap on a folder column isolates it (goes inside); elsewhere it lets every
+// layer back. A finger wobbles and lands its second tap a little off the first, so the pair is judged
+// loosely: a press that moves under MAP_TAP_SLOP is still a tap, and a second tap within MAP_TAP_REACH
+// of the first, inside MAP_TAP_MS, makes the pair. A press that drags the camera does not count. The
+// browser's own dblclick is taken too, for a mouse.
 const MAP_TAP_MS = 450, MAP_TAP_SLOP = 16, MAP_TAP_REACH = 60;
 let mapPress: { x: number; y: number } | null = null, lastMapTap: { x: number; y: number; at: number } | null = null;
+let lastDoubleAt = -Infinity;
+function doubleTap(): void
+{
+  // A pointer pair and the browser's own dblclick can both report the same pair; act once.
+  const now = performance.now();
+  if (now - lastDoubleAt < 300) return;
+  lastDoubleAt = now;
+  const folder = pickFolder(scene.pointerX, scene.pointerY);
+  const file = pickFile(scene.pointerX, scene.pointerY);
+  // A file wins over the column under it, as a single tap does, so only clear the layer pick then.
+  if (file === null && folder >= 0)
+  {
+    const id = S.NODES[folder]?.id;
+    if (id !== undefined && S.columnRoot !== id) { spotLayer(null); select(folder); return; }
+  }
+  spotLayer(null);
+}
 canvas.addEventListener("pointerdown", (event) =>
 {
   // A second finger is a pinch, not a tap.
@@ -678,19 +697,19 @@ canvas.addEventListener("pointerup", (event) =>
 {
   const press = mapPress;
   mapPress = null;
-  if (S.spotLayer === null || press === null || Math.hypot(event.clientX - press.x, event.clientY - press.y) > MAP_TAP_SLOP) return;
+  if (press === null || Math.hypot(event.clientX - press.x, event.clientY - press.y) > MAP_TAP_SLOP) return;
   // The event's own time, not the time it is handled: the first tap may select a folder and keep the page busy
   // past the window, though the finger came back in time.
   const now = event.timeStamp, last = lastMapTap;
   if (last !== null && now - last.at < MAP_TAP_MS && Math.hypot(event.clientX - last.x, event.clientY - last.y) < MAP_TAP_REACH)
   {
     lastMapTap = null;
-    spotLayer(null);
+    doubleTap();
     return;
   }
   lastMapTap = { x: event.clientX, y: event.clientY, at: now };
 });
-canvas.addEventListener("dblclick", () => { lastMapTap = null; spotLayer(null); });
+canvas.addEventListener("dblclick", () => { lastMapTap = null; doubleTap(); });
 
 // The chips above the tree name filters that live outside the strip; their cross removes one.
 document.getElementById("outliner-chips")!.addEventListener("click", (event) =>

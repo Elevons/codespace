@@ -56,6 +56,7 @@ export const S = {
   } as OutlinerState,
   columnMeshes: [] as BABYLON.Mesh[],          // the folder columns' walls and floors
   columnTops: new Map<number, number>(),       // folder index -> the top of its column, for picking and names
+  columnRoot: null as string | null,           // the folder whose children are the columns; null is the repository root
   shownLayers: [] as string[],                 // the layers that still hold a drawn file, bottom plane first
   layerGap: LAYER_GAP,                         // the vertical spacing between layer planes, set by the spread slider
   boxes: [] as Box[],                          // one entry per visible file, with its terrace spot
@@ -213,6 +214,19 @@ export function inSpotLayer(path: string): boolean
   return S.spotLayer === null || S.FILE_LAYERS.get(path) === S.spotLayer;
 }
 
+/** The drawn folder column that holds the choice, or -1 when the choice is nothing or the column root. */
+export function spotColumn(): number
+{
+  if (S.selected < 0) return -1;
+  let node: GraphNode | null | undefined = S.NODES[S.selected];
+  while (node)
+  {
+    if (node.index !== undefined && S.columnTops.has(node.index)) return node.index;
+    node = node.parent;
+  }
+  return -1;
+}
+
 // Whether a file stays bright under the current choice: the files being shown (S.trace) when there
 // are some, the chosen folder and its neighbours otherwise, and always the filters when any are on.
 export function isLitRecord(rec: FileRecord): boolean
@@ -258,9 +272,10 @@ export function frameFolder(n: GraphNode): void
 {
   if (n.cx === undefined) return;
   // A chosen folder is a room whose child columns rise from its ground, so frame the whole height
-  // rather than the tile: otherwise the columns run off the top of the screen.
+  // rather than the tile. When the chosen folder is itself one of the columns, frame that column.
   const tops = [...S.columnTops.values()];
-  const top = tops.length > 0 ? Math.max(...tops) : (n.topY ?? 0);
+  const own = n.index !== undefined ? S.columnTops.get(n.index) : undefined;
+  const top = own ?? (tops.length > 0 ? Math.max(...tops) : (n.topY ?? 0));
   const height = Math.max(0, top - (n.topY ?? 0));
   const reach = Math.max(n.tileW ?? 8, n.tileD ?? 8, height);
   S.autoSpin = false;

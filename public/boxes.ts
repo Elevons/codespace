@@ -25,7 +25,7 @@ function makeBatch(name: string, alpha: number): Batch
 
 function pairOf(): PairedBatch
 {
-  if (!pair) pair = new PairedBatch(makeBatch("files", 1), makeBatch("files-faint", 0.12));
+  if (!pair) pair = new PairedBatch(makeBatch("files", 1), makeBatch("files-faint", 0.25));
   return pair;
 }
 
@@ -108,6 +108,28 @@ export function pickFile(x: number, y: number): FileRecord | null
     if (s.y < 0.05) continue;
     const t = rayBox(ray.origin, ray.direction, p.x - s.x / 2, p.x + s.x / 2, p.y - s.y / 2, p.y + s.y / 2, p.z - s.z / 2, p.z + s.z / 2);
     if (t !== null && t < bestT) { bestT = t; best = rec; }
+  }
+  return best;
+}
+
+// The folder under a screen point, found by testing the pick ray against each tile's column. The
+// tiles are batched into one mesh, so they cannot name themselves; this keeps a click on the
+// smallest, deepest column under the pointer.
+export function pickFolder(x: number, y: number): number
+{
+  const ray = scene.createPickingRay(x, y, BABYLON.Matrix.IdentityReadOnly, camera);
+  const o = ray.origin, d = ray.direction;
+  let best = -1, bestArea = Infinity;
+  for (let i = 0; i < S.NODES.length; i++)
+  {
+    const n = S.NODES[i];
+    if (n.hidden || n.cx === undefined || n.tileW === undefined || n.tileD === undefined) continue;
+    // A folder column is tall, so a click high on it still lands on the folder it stands for.
+    const top = S.columnTops.get(i) ?? n.topY!;
+    const t = rayBox(o, d, n.cx - n.tileW / 2, n.cx + n.tileW / 2, n.baseY!, top, n.cz! - n.tileD / 2, n.cz! + n.tileD / 2);
+    if (t === null) continue;
+    const area = n.tileW * n.tileD;
+    if (area < bestArea) { bestArea = area; best = i; }
   }
   return best;
 }
