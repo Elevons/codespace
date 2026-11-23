@@ -19,7 +19,10 @@
 <div class="panel" id="codeblock" hidden>
   <div id="codeblock-head">
     <span id="codeblock-name"></span>
-    <button id="codeblock-close" type="button" title="Close the code panel">Close</button>
+    <div class="panel-head-actions">
+      <button class="panel-fold" type="button" data-fold="codeblock" aria-expanded="true" title="Collapse the code panel" aria-label="Collapse the code panel"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
+      <button id="codeblock-close" type="button" title="Close the code panel">Close</button>
+    </div>
   </div>
   <pre id="symbol-code"></pre>
 </div>
@@ -28,7 +31,10 @@
   <section class="panel" id="showing" hidden>
     <div id="showing-head">
       <h2 class="panel-title">Showing</h2>
-      <button id="showing-clear" type="button" title="Stop highlighting these files">Clear</button>
+      <div class="panel-head-actions">
+        <button class="panel-fold" type="button" data-fold="showing" aria-expanded="true" title="Collapse what is shown" aria-label="Collapse what is shown"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
+        <button id="showing-clear" type="button" title="Stop highlighting these files">Clear</button>
+      </div>
     </div>
     <div id="showing-body"></div>
   </section>
@@ -40,13 +46,17 @@
         <button type="button" data-itab="flows" role="tab" aria-selected="false">Flows</button>
         <button type="button" data-itab="health" role="tab" aria-selected="false">Health</button>
       </div>
+      <button class="panel-fold" type="button" data-fold="insight" aria-expanded="true" title="Collapse the insights" aria-label="Collapse the insights"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
       <button id="insight-close" type="button" title="Close the insights">Close</button>
     </div>
     <div id="insight-body"></div>
   </section>
   <section class="panel empty" id="info">
-    <h3>Click a block</h3>
-    <p class="hint">Trace what a folder imports, and what imports it.</p>
+    <div id="info-head">
+      <h2 class="panel-title">Details</h2>
+      <button class="panel-fold" type="button" data-fold="info" aria-expanded="true" title="Collapse the details" aria-label="Collapse the details"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg></button>
+    </div>
+    <div id="info-body"><p class="hint">Click a block to trace it.</p></div>
   </section>
 </div>
 
@@ -95,6 +105,23 @@
       <button id="outliner-hide-all" type="button" title="Hide every file box in the scene">Hide all</button>
       <button id="outliner-show-all-files" type="button" title="Show every file box, including extras and hidden groups">Show all</button>
     </div>
+  </section>
+  <section class="panel" id="chat-panel" hidden>
+    <div id="chat-head">
+      <h2 class="panel-title">Chat</h2>
+      <label class="sr-only" for="chat-history">Past chats</label>
+      <select id="chat-history" title="Reopen a past chat"></select>
+      <button id="chat-new" type="button" title="Start a new chat">New</button>
+      <button id="chat-close" type="button" title="Close the chat">Close</button>
+    </div>
+    <p class="hint" id="chat-model"></p>
+    <div id="chat-status" hidden><span class="pulse" aria-hidden="true"></span><span id="chat-status-text"></span><span id="chat-status-time"></span></div>
+    <div id="chat-log" aria-live="polite"></div>
+    <form id="chat-form">
+      <label class="sr-only" for="chat-input">Message</label>
+      <textarea id="chat-input" rows="1" placeholder="Ask, or say what to trace on the map" spellcheck="true" enterkeyhint="send"></textarea>
+      <button id="chat-send" type="submit">Send</button>
+    </form>
   </section>
 </div>
 
@@ -194,24 +221,6 @@
       <button id="repo-delete-yes" type="button">Delete</button>
     </div>
   </div>
-</div>
-
-<div class="panel" id="chat-panel" hidden>
-  <div id="chat-head">
-    <h2 class="panel-title">Chat</h2>
-    <label class="sr-only" for="chat-history">Past chats</label>
-    <select id="chat-history" title="Reopen a past chat"></select>
-    <button id="chat-new" type="button" title="Start a new chat">New</button>
-    <button id="chat-close" type="button" title="Close the chat">Close</button>
-  </div>
-  <p class="hint" id="chat-model"></p>
-  <div id="chat-status" hidden><span class="pulse" aria-hidden="true"></span><span id="chat-status-text"></span><span id="chat-status-time"></span></div>
-  <div id="chat-log" aria-live="polite"></div>
-  <form id="chat-form">
-    <label class="sr-only" for="chat-input">Message</label>
-    <textarea id="chat-input" rows="1" placeholder="Ask, or say what to trace on the map" spellcheck="true" enterkeyhint="send"></textarea>
-    <button id="chat-send" type="submit">Send</button>
-  </form>
 </div>
 
 <div class="panel" id="help" hidden>

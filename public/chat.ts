@@ -323,6 +323,9 @@ function setOpen(open: boolean): void
 {
   panel.hidden = !open;
   button.classList.toggle("on", open);
+  document.body.classList.toggle("chat-open", open && !document.body.classList.contains("phone"));
+  // The chat shares the right column, so it needs the outliner beside it rather than the tab that replaced it.
+  if (open && document.body.classList.contains("outliner-hidden")) document.getElementById("outliner-show")?.click();
   if (open) { unread = false; load(); input.focus(); }
   renderSignals();
 }
