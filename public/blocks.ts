@@ -40,6 +40,13 @@ export interface BlockInfo
   fromComment: boolean;
   /** Whether the model wrote the summary, when the source gave the block no comment. */
   fromModel?: boolean;
+  /** Whether the summary is the block's note in the architecture file, rather than a comment in the code. */
+  fromNotes?: boolean;
+  /**
+   * The architecture file's notes on what the block holds: its members, as "member", and its steps, as
+   * ":1", ":2", or "member:1" for a member's steps, each with its note, in the order the file keeps them.
+   */
+  details?: { name: string; note: string }[];
   /** The names the block declares, when it groups several declarations. */
   members?: string[];
   /** The names of the file's other blocks this one mentions. */

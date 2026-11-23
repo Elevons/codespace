@@ -16,8 +16,9 @@ const Block = `${BlockStart}
 
 \`.codespace/architecture.json\` says what each file in this repository is for, and which system and layer
 it belongs to; the Codespace map is drawn from it. Keep it true as you work: when you add, move, rename,
-delete, or change what a file is for, update its entry in the same change. The format and the rules are in
-\`.codespace/README.md\`.
+delete, or change what a file is for, update its entry in the same change. Explanations of what the code's
+classes, functions, and steps are for go in that entry's \`notes\`, not in comments in the code. The format and
+the rules are in \`.codespace/README.md\`.
 ${BlockEnd}
 `
 
@@ -48,7 +49,13 @@ change to the code carries its entry along. **Whoever changes a file updates its
       "system": "server",
       "layer": "api",
       "tags": ["orchestrate", "io"],
-      "summary": "Serves the order endpoints and checks each request before it reaches the store."
+      "summary": "Serves the order endpoints and checks each request before it reaches the store.",
+      "notes": {
+        "OrderRoutes": "The order endpoints, each checked before it reaches the store.",
+        "OrderRoutes.Create": "Takes a new order, checks it, and stores it.",
+        "OrderRoutes.Create:1": "First we check the order has a customer and at least one line.",
+        "OrderRoutes.Create:2": "Then we store it and answer with its number."
+      }
     }
   },
   "folders": { "src/api": { "summary": "The HTTP endpoints." } }
@@ -60,10 +67,21 @@ change to the code carries its entry along. **Whoever changes a file updates its
 - **layer:** the file's level in the stack, from \`layers\` (listed bottom first). It is the file's job, not its
   system and not its folder.
 - **tags:** its roles, primary first, from ${TAG_VOCABULARY.map((tag) => `\`${tag}\``).join(', ')}. Other tags are stored and shown grey.
+- **notes** (optional): what the file's declarations are for, by name: a class or function as \`Name\`, a member
+  as \`Class.member\`, and a function's steps in order as \`Name:1\`, \`Name:2\`. The map shows them with the file's
+  blocks. Each note is at most 2000 characters.
 - Use a layer and a system that already exist. Add a new one only when nothing fits, and declare it first.
 
 Every ordinary file entry needs a summary, a system, a layer, and tags. A generated or vendored file is the
 exception: its entry may be a summary alone.
+
+## Explanations live here, not in the code
+
+Write what a class, function, field, or step is for as a note in this file, not as a comment in the code. Do
+not add JSDoc (\`/** … */\`) summaries or step-by-step comments to the source; keep code comments to a short line
+saying *why* something unusual is done. When a declaration is renamed, moved, or deleted, rename, move, or
+delete its notes too, and rewrite a note whose code no longer does what it says. Codespace's
+\`lift-notes\` command moves comments already in the code into notes here.
 
 ## Keep the layers honest
 

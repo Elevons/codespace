@@ -34,7 +34,12 @@ The file has:
   layer, or a layer's name repeats a system's name, the layering is wrong. The map groups and filters by
   system and layer in its Outliner, and the filter strip narrows the 3D scene to the selected
   values; until a repository declares systems, those controls stay hidden.
-- `files` — keyed by repository-relative path: optional `system`, `layer`, `tags`, `summary`.
+- `files` — keyed by repository-relative path: optional `system`, `layer`, `tags`, `summary`, and `notes`:
+  what the file's declarations are for, by name (`Name`, `Class.member`, and a function's steps as `Name:1`,
+  `Name:2`). Notes are where explanations of the code live, **not comments in the code**: do not add JSDoc
+  summaries or step-by-step comments to source files; keep code comments to a short *why*. `apply` merges
+  notes by name (null removes one; `replaceNotes: true` replaces them all). Every summary and note is at most
+  2000 characters.
 - `folders` — keyed by folder path: optional `summary`.
 
 Tags come only from: `entry`, `orchestrate`, `core`, `data`, `io`, `ui`, `config`,
@@ -81,12 +86,18 @@ again. Before it reads anything `next` runs `sync`: an entry follows a file that
 path) and an entry for a deleted file is dropped. `apply` records each file it names in
 `.codespace/ingested.json` (git-ignored, per machine), which is how a change is noticed.
 
+`lift-notes` moves explanations already written as comments into notes: every JSDoc comment (`/** … */`) and
+every step comment (`//>`) in a repository's TypeScript and JavaScript files becomes a note in its entry and is
+taken out of the code; other comments stay. `--dry-run` only counts them. Run it once on a repository written
+with comment-heavy rules, then remove those rules from its instructions.
+
 Three more commands finish the job:
 
 ```sh
 node --experimental-transform-types src/cli/Cli.ts sync --repo .      # entries follow moved files; drop deleted ones
 node --experimental-transform-types src/cli/Cli.ts install --repo .   # once, before the first batch
 node --experimental-transform-types src/cli/Cli.ts refine --repo .    # the second pass, after "remaining": 0
+node --experimental-transform-types src/cli/Cli.ts lift-notes --repo . # move JSDoc and //> comments into notes
 ```
 
 `install` leaves the upkeep rules in the repository being mapped: a short marked block in its `AGENTS.md`
@@ -128,9 +139,11 @@ curl -s -X POST localhost:5190/api/view -H 'Content-Type: application/json' -d @
   step, each with its own note, when a process comes back to it. Without `trace` the files are
   simply highlighted as a set. A plain path string works in place of `{"path", "note"}`. Each
   step is one file, so name the function or method in its note (`Table.UpdateNeeds drains ...`).
-  Limits: 1000 files, 600 characters per file note, 120 for the title, 1500 for the overall note.
+  Limits: 1000 files, 2000 characters per file note, 120 for the title, 2000 for the overall note.
   While a route is shown, the imports between its files are drawn too, as thin blue wires, so the
-  route reads as a line graph and not only a chain; opening a step shows its own wires beside it.
+  route reads as a line graph and not only a chain; opening a step shows its own wires beside it, only to
+  the route's other files, and the Showing panel lists, under each step, its layer, system, and tags and which
+  other steps it uses and is used by.
   The reply is `{"ok": true, "shown": n, "unknown": [...]}`; any path in `unknown` was not drawn,
   so fix it and send again.
 - **`focus`** — `{"action": "focus", "path": "src/repo"}` selects a file or folder and moves the
@@ -217,7 +230,8 @@ ranges. Choosing a rail row or a floor frames that block's floor and opens its l
 names bright and starting from that floor, and dims the rest. An import into an open file ends at
 the block that declares the name the importing file takes, so its wire meets that block rather
 than the middle of the file. The blocks are read on demand, when the
-file is opened, and never stored: a summary comes from the block's own comment. A block with no comment
+file is opened, and never stored: a summary is the block's note in the architecture file, else its own comment,
+and an open block's rail row also lists its members' and steps' notes. A block with neither
 shows a plain description of its shape first, then `POST /api/blocks/summaries` (a page call, not a tool)
 asks the configured model for one sentence, kept in memory for the session; a server with no model leaves
 the plain description. The file's own comments are never replaced. Every function and class stays one
@@ -269,6 +283,7 @@ machine as `chat` events on the view stream. Chats and pi's settings live in `~/
   what to ingest next (`Next.ts` is the one `next`, shared by the CLI and the API), and its files'
   blocks on demand (`Blocks.ts`). `Flows.ts` keeps saved views and drafts the tour, `Health.ts` makes
   the health report and the secret scan, and `Neighbours.ts` walks the files around one file. No HTTP in here.
+  `LiftNotes.ts` moves JSDoc and step comments out of scripts into notes.
   `DescribeGuide.ts`, `JsonStore.ts`, and `ShowLimits.ts` hold the first-pass instructions, the
   repository-scoped JSON access, and the show limits.
 - `src/server/` — the HTTP server, the endpoints, the tool list (`Tools.ts`), the view stream,

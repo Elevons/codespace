@@ -384,6 +384,12 @@
       "tags": ["core", "io"],
       "summary": "Remembers what each file looked like when its description was written, so a later update can tell which descriptions have gone stale."
     },
+    "src/repo/LiftNotes.ts": {
+      "system": "server",
+      "layer": "repo",
+      "tags": ["core", "io"],
+      "summary": "Moves the plain-English comments out of a repository's scripts into its architecture file as notes, so explanations live beside the map rather than in the code."
+    },
     "src/repo/Neighbours.ts": {
       "system": "server",
       "layer": "repo",
@@ -551,6 +557,12 @@
       "layer": "tests",
       "tags": ["test"],
       "summary": "Tests the one write path: whole writes with no temporary file left, and a .codespace path that is a file being refused untouched."
+    },
+    "tests/LiftNotes.test.ts": {
+      "system": "meta",
+      "layer": "tests",
+      "tags": ["test"],
+      "summary": "Checks that lifting comments makes the right notes, leaves other comments, and that the blocks then read their summaries from the notes."
     },
     "tests/Neighbours.test.ts": {
       "system": "meta",

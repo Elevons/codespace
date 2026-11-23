@@ -7,6 +7,7 @@
  *   node src/cli/Cli.ts refine [--size N]    the second pass: layer breaks, files that fit elsewhere, and layering problems
  *   node src/cli/Cli.ts sync                 carry entries along with moved files and drop those for files that are gone
  *   node src/cli/Cli.ts install              leave the upkeep rules in the repository, so its architecture file is kept true
+ *   node src/cli/Cli.ts lift-notes           move JSDoc and //> step comments out of the scripts into the architecture file's notes
  *   node src/cli/Cli.ts status               how much is left to describe
  *   node src/cli/Cli.ts repo                 which repository it reads, and where
  *
@@ -20,6 +21,7 @@ import { Graph } from '../repo/Graph.ts'
 import { ClampSize, DefaultBatch, MaxBatchSize, StatusAsync } from '../repo/Ingest.ts'
 import { InstallAsync } from '../repo/Install.ts'
 import { Ledger } from '../repo/Ledger.ts'
+import { LiftNotesAsync } from '../repo/LiftNotes.ts'
 import { TakeNextAsync } from '../repo/Next.ts'
 import { DefaultRefineSize, Refine } from '../repo/Refine.ts'
 import { SyncAsync } from '../repo/Sync.ts'
@@ -37,6 +39,8 @@ const Usage = `Usage: node src/cli/Cli.ts <command> [--repo <folder>]
                              files that would sit better on another layer or in another system, and layering problems
   install                    write the upkeep rules into the repository (a note in AGENTS.md, the rules in .codespace/README.md),
                              so whoever changes the code later keeps its architecture file true
+  lift-notes [--dry-run]     move every script's JSDoc (/** */) and step (//>) comments into the architecture file's
+                             notes, and take them out of the code; --dry-run only counts them
   apply --file <json>        write {"systems": {...}, "layers": [...], "files": {...}, "folders": {...}} back; - reads stdin
 
 Options:
@@ -100,6 +104,12 @@ export async function RunAsync(args: readonly string[]): Promise<number>
             const architecture = await Architecture.ReadAsync(repo.Root, await repo.ListFilesAsync())
             const graph = await Graph.BuildAsync(repo)
             console.log(JSON.stringify({ name: repo.Name, root: repo.Root, ...Refine(architecture, graph.Edges(), size) }))
+            return 0
+        }
+
+        if (command === 'lift-notes')
+        {
+            console.log(JSON.stringify({ ok: true, ...await LiftNotesAsync(repo, rest.includes('--dry-run')) }))
             return 0
         }
 

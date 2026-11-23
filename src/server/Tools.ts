@@ -72,6 +72,11 @@ const FileEntry = {
         system: { type: ['string', 'null'], description: 'A system that the systems list declares.' },
         layer: { type: ['string', 'null'], description: 'A layer that the layers list declares. A layer is the level or role of the file in the stack.' },
         tags: { type: ['array', 'null'], items: { type: 'string' }, description: `Tags from this list: ${TAG_VOCABULARY.join(', ')}.` },
+        notes: {
+            type: ['object', 'null'], additionalProperties: { type: ['string', 'null'], maxLength: 2000 },
+            description: 'What the declarations in the file are for, by name: "Name" for a class or function, "Class.member" for a member, and "Name:1", "Name:2" for the steps of a function in order. These notes replace comments in the code. A note set to null is removed. The notes are merged with the notes that the file has.',
+        },
+        replaceNotes: { type: 'boolean', description: 'When true, the notes given replace all of the old notes of the file.' },
     },
     additionalProperties: false,
 }
@@ -290,6 +295,7 @@ Write each entry with apply. Do this again until remaining is 0.`,
         description: `Writes entries to the architecture file. It writes all entries or no entries. If there is a problem, the answer lists each reason.
 Each usual file entry needs a summary, a system, a layer, and tags. Declare a system or a layer before an entry uses it.
 List the layers from the bottom layer to the top layer. All systems use the same layers. Write the folder summaries last.
+Put explanations of classes, functions, and steps in the notes of a file entry. Do not write them as comments in the code.
 The answer has the full architecture file and a list of notes.`,
         parameters: {
             type: 'object',

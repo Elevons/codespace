@@ -58,7 +58,8 @@ panel can delete this folder whole, so a repository can be described again from 
 | `system` | The system the file belongs to. One system can use any number of shared layers. |
 | `layer` | The file's level or role in the stack — its job, not its system or folder. Its box rises to that layer's plane. |
 | `tags` | The file's roles, primary first. The first tag sets its colour. |
-| `summary` | One plain sentence on what the file is *for*: what it does and why it exists, not how. |
+| `summary` | One plain sentence on what the file is *for*: what it does and why it exists, not how. At most 2000 characters. |
+| `notes` | What the file's declarations are for, by name: `Name`, `Class.member`, and a function's steps as `Name:1`, `Name:2`. The block rail shows them. Explanations live here rather than as comments in the code; `lift-notes` moves existing JSDoc and `//>` comments here. Each note is at most 2000 characters. |
 | `folders` entry | A `summary` saying what the folder's contents are for, written once its files and folders are described. |
 
 Every field is optional to the reader: a file with no entry is read as one with no system, layer, or
@@ -172,12 +173,13 @@ the two trees cannot drift.
   it, then the rest of the blocks grow upward from its top. A block is
   an import run, a run of constants or types, a function or class, or a **section** of a long
   function cut at the comments that lead its steps. The block rail in the info panel lists the same
-  blocks with their line ranges and a summary: the block's own comment first; a block with none
+  blocks with their line ranges and a summary: the block's note in the architecture file first, then its own
+  comment (an open block also lists its members' and steps' notes); a block with neither
   starts with a plain description of its shape, and the model writes a sentence for it as the file
   opens (kept in memory for the session, and skipped when no model is configured). Choosing a rail
   row or a floor opens that block's lines; the import wires its text names stay bright and start
   at that floor, while the rest fade back. An import into an open file lands on the block that
-  declares the name the importing file takes, so an amber wire meets the exported block itself. Nothing about blocks is stored in the architecture file,
+  declares the name the importing file takes, so an amber wire meets the exported block itself. Only the notes about blocks are stored in the architecture file,
   and no pass reads a whole repository for them. The open file's import wires end on the block that
   carries them rather than on the middle of its box. The words are defined in `docs/GLOSSARY.md`.
 - `.codespace/` is part of the repository, so it is on the map like anything else, as an

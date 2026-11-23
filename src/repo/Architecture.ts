@@ -3,8 +3,11 @@ import { join } from 'node:path'
 import { TAG_VOCABULARY } from '../../public/tags.ts'
 import { ArchitecturePath, CodespaceFolder, JsonStore } from './JsonStore.ts'
 
-/** The longest summary kept, in characters. */
-const MaxSummary = 600
+/** The longest summary or note kept, in characters. */
+export const MaxSummary = 2000
+
+/** The longest name a note may be kept under, in characters. */
+export const MaxNoteKey = 200
 
 /** Whether a value is a plain JSON object, not null and not a list. */
 function IsObject(value: unknown): value is Record<string, unknown>
@@ -23,6 +26,12 @@ interface IFileEntry
     tags?: string[]
     /** What it is for, in a sentence. */
     summary?: string
+    /**
+     * What the file's declarations are for, kept here rather than as comments in the code. Each is
+     * keyed by the declaration's name, with a class's members as "Class.member", and the steps of a
+     * function as "Function:1", "Function:2", in order.
+     */
+    notes?: Record<string, string>
 }
 
 /** What the architecture file says about one system: a slice of the repository that shares layers. */
@@ -57,7 +66,8 @@ export interface IArchitecturePatch
     /** Systems to add, change, or remove. Null removes one that no file uses. */
     systems?: Record<string, { summary?: string | null } | null>
     /** Changes to individual files by path. A field set to null is removed. */
-    files?: Record<string, { system?: string | null, layer?: string | null, tags?: string[] | null, summary?: string | null }>
+    files?: Record<string, { system?: string | null, layer?: string | null, tags?: string[] | null, summary?: string | null,
+        notes?: Record<string, string | null> | null, replaceNotes?: boolean }>
     /** Changes to folder summaries by path. Null removes one. */
     folders?: Record<string, { summary?: string | null }>
     /** Entries to move to a new path, for a file that was moved or renamed. Applied first. */
@@ -360,6 +370,24 @@ export class Architecture
                 else if (change.summary.length > MaxSummary) problems.push(`"${path}": summary is over ${MaxSummary} characters.`)
                 else entry.summary = change.summary.trim()
             }
+            if (change.notes !== undefined)
+            {
+                // Notes are merged by name: a note set to null is removed, and null for all of them clears them.
+                // replaceNotes drops the old notes first, so the given set is the whole set.
+                const kept: Record<string, string> = change.notes === null || change.replaceNotes === true || !IsObject(entry.notes)
+                    ? {}
+                    : { ...(entry.notes as Record<string, string>) }
+                for (const [rawKey, note] of Object.entries(change.notes ?? {}))
+                {
+                    const key = rawKey.trim()
+                    if (key === '' || key.length > MaxNoteKey) { problems.push(`"${path}": a note needs a name of 1 to ${MaxNoteKey} characters.`); continue }
+                    if (note === null || note.trim() === '') delete kept[key]
+                    else if (note.length > MaxSummary) problems.push(`"${path}": the note "${key}" is over ${MaxSummary} characters.`)
+                    else kept[key] = note.trim()
+                }
+                if (Object.keys(kept).length === 0) delete entry.notes
+                else entry.notes = kept
+            }
             if (Object.keys(entry).length === 0) delete files[path]
             else files[path] = entry
         }
@@ -398,7 +426,11 @@ export class Architecture
             {
                 const entry = entries[path]!
                 const keys = [...order.filter((key) => key in entry), ...Object.keys(entry).filter((key) => !order.includes(key))]
-                const body = keys.length === 0 ? '{}' : `{\n${keys.map((key) => `      ${JSON.stringify(key)}: ${Architecture.Inline(entry[key])}`).join(',\n')}\n    }`
+                // Notes are many and long, so each goes on its own line.
+                const value = (key: string): string => key === 'notes' && IsObject(entry[key])
+                    ? Architecture.Block(entry[key] as Record<string, unknown>)
+                    : Architecture.Inline(entry[key])
+                const body = keys.length === 0 ? '{}' : `{\n${keys.map((key) => `      ${JSON.stringify(key)}: ${value(key)}`).join(',\n')}\n    }`
                 return `    ${JSON.stringify(path)}: ${body}`
             })
             return lines.length === 0 ? '{}' : `{\n${lines.join(',\n')}\n  }`
@@ -442,6 +474,10 @@ export class Architecture
                 if (!IsObject(change)) { problems.push(`The entry for "${path}" must be an object.`); continue }
                 for (const field of ['system', 'layer', 'summary'] as const)
                     if (change[field] !== undefined && change[field] !== null && typeof change[field] !== 'string') problems.push(`"${path}": ${field} must be text.`)
+                const notes = change.notes
+                if (notes !== undefined && notes !== null && (!IsObject(notes) || Object.values(notes).some((note) => note !== null && typeof note !== 'string')))
+                    problems.push(`"${path}": notes must be an object of text, keyed by name.`)
+                if (change.replaceNotes !== undefined && typeof change.replaceNotes !== 'boolean') problems.push(`"${path}": replaceNotes must be true or false.`)
                 const tags = change.tags
                 if (tags !== undefined && tags !== null && (!Array.isArray(tags) || tags.some((tag) => typeof tag !== 'string'))) problems.push(`"${path}": tags must be a list of names.`)
             }
@@ -475,6 +511,16 @@ export class Architecture
         const folders = new Set<string>()
         for (const path of known) for (let cut = path.lastIndexOf('/'); cut > 0; cut = path.lastIndexOf('/', cut - 1)) folders.add(path.slice(0, cut))
         return folders
+    }
+
+    /**
+     * Writes an object of notes with one note per line, in the order they were given.
+     * @param notes the notes, by name
+     */
+    private static Block(notes: Record<string, unknown>): string
+    {
+        const lines = Object.entries(notes).map(([key, note]) => `        ${JSON.stringify(key)}: ${JSON.stringify(note)}`)
+        return lines.length === 0 ? '{}' : `{\n${lines.join(',\n')}\n      }`
     }
 
     /**
@@ -535,6 +581,14 @@ export class Architecture
 
         if (typeof raw.summary === 'string' && raw.summary.trim() !== '') entry.summary = raw.summary.trim().slice(0, MaxSummary)
         else if (raw.summary !== undefined) result.warnings.push(`"${path}": summary should be text.`)
+
+        if (IsObject(raw.notes))
+        {
+            const notes: Record<string, string> = {}
+            for (const [key, note] of Object.entries(raw.notes)) if (typeof note === 'string' && note.trim() !== '') notes[key] = note.trim().slice(0, MaxSummary)
+            if (Object.keys(notes).length > 0) entry.notes = notes
+        }
+        else if (raw.notes !== undefined) result.warnings.push(`"${path}": notes should be an object of text, keyed by name.`)
         return entry
     }
 }

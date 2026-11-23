@@ -20,16 +20,38 @@ function renderShowing(): void
 {
   const shown = S.trace;
   panel.hidden = shown === null;
+  document.body.classList.toggle("showing-route", shown !== null);
   if (shown === null) { body.innerHTML = ""; return; }
   const known = pathIndex().files;
+  // The step each file first appears at, and the imports between the shown files, so each step can
+  // say which of the others it uses and which use it.
+  const stepOf = new Map<string, number>();
+  shown.paths.forEach((path, step) => { if (!stepOf.has(path)) stepOf.set(path, step); });
+  const uses = new Map<string, string[]>(), usedBy = new Map<string, string[]>();
+  for (const [from, to] of S.FILE_EDGES)
+  {
+    if (from === to || !stepOf.has(from) || !stepOf.has(to)) continue;
+    (uses.get(from) ?? uses.set(from, []).get(from)!).push(to);
+    (usedBy.get(to) ?? usedBy.set(to, []).get(to)!).push(from);
+  }
+  const name = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+  const links = (paths: string[] | undefined) => (paths ?? [])
+    .sort((x, y) => stepOf.get(x)! - stepOf.get(y)!)
+    .map((path) => '<a href="#" class="path ref" data-path="' + escapeHtml(path) + '">' +
+      (shown.trace ? (stepOf.get(path)! + 1) + " " : "") + escapeHtml(name(path)) + "</a>").join(", ");
   const rows = shown.paths.map((path, step) =>
   {
     const note = shown.notes[step];
     const summary = S.FILE_SUMMARIES.get(path);
+    const where = [S.FILE_LAYERS.get(path), S.FILE_SYSTEMS.get(path), ...(S.FILE_TAGS.get(path) ?? [])].filter(Boolean) as string[];
+    const out = links(uses.get(path)), into = links(usedBy.get(path));
     return "<li>" + (shown.trace ? '<span class="step">' + (step + 1) + "</span>" : '<span class="dot"></span>') +
       "<div>" + (known.has(path) ? '<a href="#" class="path" data-path="' + escapeHtml(path) + '">' + escapeHtml(path) + "</a>" : "<code>" + escapeHtml(path) + "</code>") +
-      (summary ? '<p class="summary">' + escapeHtml(summary) + "</p>" : "") +
-      (note !== "" && note !== summary ? (summary ? "<hr>" : "") + '<p class="what">' + escapeHtml(note) + "</p>" : "") + "</div></li>";
+      (where.length > 0 ? '<p class="where">' + escapeHtml(where.join(" · ")) + "</p>" : "") +
+      (note !== "" && note !== summary ? '<p class="what">' + escapeHtml(note) + "</p>" : "") +
+      (summary ? '<p class="summary"><span>The file:</span> ' + escapeHtml(summary) + "</p>" : "") +
+      (out ? '<p class="links"><span>Uses</span> ' + out + "</p>" : "") +
+      (into ? '<p class="links"><span>Used by</span> ' + into + "</p>" : "") + "</div></li>";
   });
   body.innerHTML = (shown.title ? "<h3>" + escapeHtml(shown.title) + "</h3>" : "") +
     (shown.note ? '<p class="about">' + escapeHtml(shown.note) + "</p>" : "") +

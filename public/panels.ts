@@ -315,7 +315,16 @@ function railRow(block: BlockInfo, index: number): string
     '<span class="rail-lines">' + range + '</span></span>' +
     '<span class="rail-sum' + (block.fromComment ? "" : " made") + '" title="' +
     (block.fromComment ? "" : "No comment in the source: this is a plain description of the block.") + '">' +
-    escapeHtml(block.summary) + "</span>" + refs + "</span></button>";
+    escapeHtml(block.summary) + "</span>" + refs + detailsHtml(block) + "</span></button>";
+}
+
+// The notes the architecture file keeps on what a block holds, shown while the block is open.
+function detailsHtml(block: BlockInfo): string
+{
+  if (!block.details || block.details.length === 0) return "";
+  const label = (name: string) => name.replace(/:(\d+)$/, (_, step: string) => (name.startsWith(":") ? "" : " · ") + "step " + step);
+  return '<span class="rail-details">' + block.details.map((detail) =>
+    '<span class="rail-detail"><b>' + escapeHtml(label(detail.name)) + "</b> " + escapeHtml(detail.note) + "</span>").join("") + "</span>";
 }
 
 // Opens one block of the shown file: its lines in the code panel, and its floor on the map.

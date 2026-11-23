@@ -228,6 +228,8 @@ export class Server
             Architecture.ReadAsync(repo.Root, snapshot.files),
             Server.ReadChangesAsync(repo.Root),
         ])
+        // The declarations' notes are read with a file's blocks, not with the whole map.
+        for (const entry of Object.values(architecture.files)) delete entry.notes
         SendJson(response, 200, {
             repo: this.InfoOf(workspace),
             fingerprint: snapshot.fingerprint,
@@ -380,9 +382,12 @@ export class Server
         try
         {
             const text = await workspace.repo.ReadFileAsync(path)
-            const known = new Set(await workspace.repo.ListFilesAsync())
-            // Each block carries the files its own text imports, so a chosen block can show its wires.
-            SendJson(response, 200, Blocks.Read(path, text, (specifier) => Graph.ResolveImport(path, specifier, known)))
+            const files = await workspace.repo.ListFilesAsync()
+            const known = new Set(files)
+            const notes = (await Architecture.ReadAsync(workspace.repo.Root, files)).files[path]?.notes
+            // Each block carries the files its own text imports, so a chosen block can show its wires,
+            // and the notes the architecture file keeps on it.
+            SendJson(response, 200, Blocks.Read(path, text, (specifier) => Graph.ResolveImport(path, specifier, known), notes))
         }
         catch (error)
         {
@@ -420,7 +425,8 @@ export class Server
             return
         }
 
-        const report = Blocks.Read(path, text)
+        const notes = (await Architecture.ReadAsync(workspace.repo.Root, await workspace.repo.ListFilesAsync())).files[path]?.notes
+        const report = Blocks.Read(path, text, undefined, notes)
         const lines = text.split('\n')
         const wanted = report.blocks.filter((block) => block.fromComment === false).slice(0, MaxBlocks)
         if (wanted.length === 0) { SendJson(response, 200, { ok: true, summaries: {} }); return }

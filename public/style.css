@@ -95,6 +95,17 @@
   #showing-body .what { margin: 2px 0 0; font-size: 12.5px; line-height: 1.45; color: #c9d1d9; }
   #showing-body .summary { margin: 3px 0 0; font-size: 12.5px; line-height: 1.45; color: #8b91ad; }
   #showing-body hr { margin: 8px 0; border: 0; border-top: 1px solid #30363d; }
+  #showing-body .where { margin: 2px 0 0; font: 10.5px ui-monospace, Menlo, monospace; color: #8b949e; }
+  #showing-body .summary span, #showing-body .links span { color: #6e7681; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin-right: 4px; }
+  #showing-body .links { margin: 4px 0 0; font-size: 12px; line-height: 1.5; color: #8b949e; }
+  #showing-body a.ref { font-weight: 500; font-size: 11px; }
+  /* While something is shown the left column widens and the explanation gets most of its height. */
+  body.showing-route #dock-left { width: clamp(260px, 32vw, 500px); }
+  body.showing-route #showing { flex: 1 1 auto; max-height: 72%; }
+  body.showing-route #showing-body h3 { font-size: 15px; }
+  body.showing-route #showing-body .about { font-size: 13.5px; }
+  body.showing-route #showing-body .what { font-size: 13.5px; line-height: 1.5; color: #e6edf3; margin-top: 6px; }
+  body.showing-route #showing-body .summary { font-size: 12.5px; margin-top: 6px; }
 
   /* Recent changes, saved flows, and the health check, on one panel with three tabs. */
   #insight { flex: 0 1 auto; min-height: min(260px, 40%); max-height: 62%; padding: 0; display: flex; flex-direction: column; overflow: hidden; }
@@ -416,6 +427,11 @@
   .rail-lines { flex: none; font: 10px ui-monospace, Menlo, monospace; color: #6e7681; }
   .rail-sum { font-size: 11px; line-height: 1.35; color: #9aa4b2; }
   .rail-sum.made { color: #6e7681; font-style: italic; }
+  .rail-sum { white-space: pre-line; }
+  .rail-details { display: none; flex-direction: column; gap: 4px; margin-top: 6px; padding-left: 8px; border-left: 1px solid #30363d; }
+  .rail-row.sel .rail-details { display: flex; }
+  .rail-detail { font-size: 11px; line-height: 1.4; color: #9aa4b2; white-space: pre-line; }
+  .rail-detail b { color: #c9d1d9; font-weight: 600; }
   .rail-refs { font-size: 10px; color: #6e7681; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* The code panel: a line-number gutter and coloured tokens. */

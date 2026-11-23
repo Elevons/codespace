@@ -180,7 +180,7 @@ function pointsUp(userPath: string, usedPath: string): boolean
 // of the file that uses it; between folders the strand follows the folder tree, so a folder's imports
 // from one region travel together and fan out to their files. Chosen files' own imports arch
 // straight from box to box instead, with nothing drawn on the pads; with several chosen, every one
-// of their imports is drawn. Nothing chosen, or a route shown, draws no wires; the layer breaks
+// of their imports is drawn. Nothing chosen draws no wires, and while a route is shown a chosen file's wires reach only the route's files; the layer breaks
 // (collectBreaks) still show. A chosen file shows only its own imports, not its folder's as well.
 // Without declared layers, an import into a folder nested deeper is drawn as a break; with them,
 // it is a file using a higher layer.
@@ -189,7 +189,7 @@ function collectEdges(): Edge[]
   const result: Edge[] = [];
   const folderChosen = S.selected >= 0 && S.selectedFile < 0 && S.trace === null;
   // A chosen file keeps its wires while a route is shown too, so a step that is opened still shows
-  // its own imports beside the route. A chosen folder keeps its bus only when no route is shown.
+  // its own imports beside the route, but only those to the route's files. A chosen folder keeps its bus only when no route is shown.
   const chosen = S.selected >= 0 && S.selectedFile >= 0
     ? new Set([filePath(S.selected, S.selectedFile), ...S.extraFiles])
     : null;
@@ -213,6 +213,9 @@ function collectEdges(): Edge[]
       if (chosen !== null)
       {
         if (chosen.has(from) === false && chosen.has(to) === false) continue;
+        // While a route is shown, a chosen file keeps only its wires to the route's own files, so the
+        // route is not lost under wires to files it does not visit.
+        if (S.trace !== null && (S.trace.set.has(from) === false || S.trace.set.has(to) === false)) continue;
         state = chosen.has(from) ? "out" : "in";
       }
       else
@@ -321,7 +324,7 @@ function collectBreaks(): Break[]
   const result: Break[] = [];
   if (S.LAYERS.length === 0) return result;
   // A chosen file keeps its wires while a route is shown too, so a step that is opened still shows
-  // its own imports beside the route. A chosen folder keeps its bus only when no route is shown.
+  // its own imports beside the route, but only those to the route's files. A chosen folder keeps its bus only when no route is shown.
   const chosen = S.selected >= 0 && S.selectedFile >= 0
     ? new Set([filePath(S.selected, S.selectedFile), ...S.extraFiles])
     : null;

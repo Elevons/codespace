@@ -152,9 +152,9 @@ test('A show request is capped, and its title, note, and file notes are cut to t
 
         const view = (await send(port, '/api/view')).body.shown
         assert.equal(view.files.length, MaxShown)
-        assert.equal(view.files[0].note.length, 600)
+        assert.equal(view.files[0].note.length, MaxFileNote)
         assert.equal(view.title.length, 120)
-        assert.equal(view.note.length, 1500)
+        assert.equal(view.note.length, MaxNote)
     }
     finally { await stop(); await removeTemp(root) }
 })

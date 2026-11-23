@@ -20,10 +20,13 @@ export class Blocks
      * Reads one file's blocks.
      * @param path the file's repository-relative path, which picks the parser
      * @param text the file's text
+     * @param resolve finds the file an import specifier names
+     * @param notes the file's notes in the architecture file, which come before its comments
      */
-    public static Read(path: string, text: string, resolve: (specifier: string) => string | null = () => null): IBlocksReport
+    public static Read(path: string, text: string, resolve: (specifier: string) => string | null = () => null, notes: Record<string, string> = {}): IBlocksReport
     {
         const blocks = TS_JS_FILE.test(path) ? ScriptBlocks(text, path, resolve) : LineBlocks(text, path)
+        AddNotes(blocks, notes)
         AddReferences(text, blocks)
         return { path, lines: text.split('\n').length, blocks }
     }
@@ -282,6 +285,40 @@ function LineBlocks(text: string, path: string): BlockInfo[]
             fromComment: written.summary !== '', exported: start.exported, refs: [],
         }
     })
+}
+
+/**
+ * Puts the architecture file's notes on the blocks they name. A block's own note becomes its summary,
+ * in place of any comment; its members' and steps' notes become its details.
+ */
+function AddNotes(blocks: BlockInfo[], notes: Record<string, string>): void
+{
+    const keys = Object.keys(notes)
+    if (keys.length === 0) return
+    // The notes under one name: the members ("Name.member") and steps ("Name:1") it holds.
+    // Inside a block of one declaration the name is dropped; in a group it is kept, to say whose they are.
+    const under = (name: string, whole = false): { name: string, note: string }[] => keys
+        .filter((key) => key.startsWith(name + '.') || key.startsWith(name + ':'))
+        .map((key) => ({ name: whole ? key : key[name.length] === ':' ? key.slice(name.length) : key.slice(name.length + 1), note: notes[key]! }))
+    for (const block of blocks)
+    {
+        const members = block.members !== undefined && GenericName.test(block.name) ? block.members : [block.name]
+        const own = members.length === 1 ? notes[members[0]!] : undefined
+        if (own !== undefined)
+        {
+            block.summary = own
+            block.fromComment = true
+            block.fromNotes = true
+        }
+        const details: { name: string, note: string }[] = []
+        if (members.length === 1) details.push(...under(members[0]!))
+        else for (const member of members)
+        {
+            if (notes[member] !== undefined) details.push({ name: member, note: notes[member]! })
+            details.push(...under(member, true))
+        }
+        if (details.length > 0) block.details = details
+    }
 }
 
 /** Fills in which of the file's other blocks each block mentions. */
