@@ -1,3 +1,4 @@
+import { ConceptsGuide } from '../repo/ConceptsGuide.ts'
 import { DescribeGuide } from '../repo/DescribeGuide.ts'
 import { RefineGuide } from '../repo/RefineGuide.ts'
 import { MapTools } from '../server/Tools.ts'
@@ -57,7 +58,11 @@ ${DescribeGuide(cli, root)}
 
 ## Refining the description
 
-${RefineGuide(cli, root)}`
+${RefineGuide(cli, root)}
+
+## Writing down the design: things and operations
+
+${ConceptsGuide(cli, root)}`
 }
 
 

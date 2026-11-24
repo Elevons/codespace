@@ -10,6 +10,7 @@ import { openBlockAt, select, selectFile, toggleFileSelection } from "./panels.j
 import { setSpin, refreshGraph } from "./controls.js";
 import { loadRepo } from "./repo.js";
 import { routeTargets } from "./route.js";
+import { conceptTargets, conceptTap, placeConceptLabels } from "./concepts.js";
 import { syncPads } from "./pads.js";
 import "./view.js";
 import "./repo-switch.js";
@@ -61,6 +62,7 @@ scene.onPointerObservable.add((info) =>
     return;
   }
   if (info.type !== BABYLON.PointerEventTypes.POINTERTAP || event.button === 2) return;
+  if (conceptTap()) return;
 
   // An open file's floors win over its cube, so a tap lands on the block it looks like it does.
   const blockHit = pickFloor(scene.pointerX, scene.pointerY);
@@ -101,6 +103,7 @@ engine.runRenderLoop(() =>
 
   // A shown route lifts its files onto an arch; everyone else heads back to their terrace.
   routeTargets();
+  conceptTargets();
 
   let moving = false;
   for (const rec of S.fileRecords.values())
@@ -154,7 +157,9 @@ engine.runRenderLoop(() =>
   else if (moving)
   {
     edgeClock += seconds;
-    if (edgeClock >= EDGE_INTERVAL) { rebuildEdges(); edgeClock = 0; }
+    // Zoomed out to the concepts, only the files' own threads redraw, so they can follow every
+    // frame; in the city the full wire set waits for its steady rate.
+    if (S.conceptZoom || edgeClock >= EDGE_INTERVAL) { rebuildEdges(); edgeClock = 0; }
     // The layer rings are cheap to move and should not stutter behind a gliding box.
     syncPads();
   }
@@ -168,6 +173,7 @@ engine.runRenderLoop(() =>
 
   loadingNote.style.display = S.NODES.length > 0 ? "none" : "";
   scene.render();
+  placeConceptLabels();
   labelClock += seconds;
   if (labelClock >= LABEL_INTERVAL) { labelClock = 0; updateLabels(); }
 });

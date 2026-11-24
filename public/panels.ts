@@ -470,7 +470,7 @@ function statsHtml(): string
     '<div class="stats">' + stat(String(folders), "folders") + stat(String(files), "files") +
     stat(String(S.FILE_LINES.size), "code files") + stat(lines.toLocaleString(), "lines") +
     stat(String(S.FILE_EDGES.length), "imports") + "</div>" +
-    '<div class="keys key-only"><span><kbd>Space</kbd> spin</span><span><kbd>/</kbd> search</span>' +
+    '<div class="keys key-only"><span><kbd>Space</kbd> concepts</span><span><kbd>/</kbd> search</span>' +
     "<span><kbd>F</kbd> frame</span><span><kbd>R</kbd> reset</span><span><kbd>?</kbd> keys</span></div>";
 }
 

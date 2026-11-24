@@ -17,6 +17,7 @@ declare namespace BABYLON
         static Distance(a: Vector3, b: Vector3): number;
         static DistanceSquared(a: Vector3, b: Vector3): number;
         static LerpToRef(a: Vector3, b: Vector3, t: number, ref: Vector3): void;
+        static Lerp(a: Vector3, b: Vector3, t: number): Vector3;
         static Minimize(a: Vector3, b: Vector3): Vector3;
         static Maximize(a: Vector3, b: Vector3): Vector3;
         static Project(vector: Vector3, world: Matrix, transform: Matrix, viewport: Viewport): Vector3;
@@ -37,6 +38,8 @@ declare namespace BABYLON
         b: number;
         constructor(r?: number, g?: number, b?: number);
         static FromHexString(hex: string): Color3;
+        static FromHSV(hue: number, saturation: number, value: number): Color3;
+        static Black(): Color3;
         static White(): Color3;
         scale(factor: number): Color3;
         toColor4(alpha?: number): Color4;
@@ -125,6 +128,7 @@ declare namespace BABYLON
         specularColor: Color3;
         disableLighting: boolean;
         backFaceCulling: boolean;
+        wireframe: boolean;
     }
 
     class Engine

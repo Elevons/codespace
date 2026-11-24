@@ -113,7 +113,7 @@ export interface FileRecord
 }
 
 /** What the map colours files by: their role, layer, system, folder, size, or recent changes. */
-export type ColorBy = "tag" | "layer" | "system" | "folder" | "size" | "changes";
+export type ColorBy = "tag" | "layer" | "system" | "folder" | "size" | "changes" | "history";
 
 /** The outliner's view state: what it filters to, how it lists files, and what the scene hides. */
 export interface OutlinerState
@@ -154,6 +154,7 @@ export interface CamGoal
     target: BABYLON.Vector3;
     radius: number;
     beta?: number;
+    alpha?: number;
 }
 
 /** The graph read from the server: nodes, edges, and the architecture's tags and layers. */
@@ -174,4 +175,11 @@ export interface Graph
     changes: Map<string, number>;
     layerOrder: string[] | null;
     notes: string[];
+    concepts: Concepts;
+}
+
+export interface Concepts
+{
+    things: Record<string, { summary?: string; layer?: string; rules?: string[] }>;
+    operations: Record<string, { summary?: string; files: string[]; reads: string[]; writes: string[]; steps: { text: string; files: string[] }[]; rules: string[] }>;
 }

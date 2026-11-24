@@ -6,6 +6,14 @@ import { resizePads } from "./pads.js";
 let gridMesh: BABYLON.Mesh | null = null;
 let plateMesh: BABYLON.Mesh | null = null;
 let plateLines: BABYLON.Mesh | null = null;
+let extraBounds: { min: BABYLON.Vector3; max: BABYLON.Vector3 } | null = null;
+
+// Extra reach added while the concept zoom is on, so the layer planes and camera frame docked
+// plates and column rims as well as the file dots.
+function setConceptBounds(bounds: { min: BABYLON.Vector3; max: BABYLON.Vector3 } | null): void
+{
+  extraBounds = bounds;
+}
 
 // Builds, reuses, or retires each file's record so its box sits on its folder's tile.
 function syncMeshes(): void
@@ -153,11 +161,16 @@ function sceneBounds(): { min: BABYLON.Vector3; max: BABYLON.Vector3 } | null
     min = min ? V3.Minimize(min, low) : low;
     max = max ? V3.Maximize(max, high) : high;
   }
-  if (plateMesh)
+  if (plateMesh && !S.conceptZoom)
   {
     const info = plateMesh.getBoundingInfo().boundingBox;
     min = min ? V3.Minimize(min, info.minimumWorld) : info.minimumWorld.clone();
     max = max ? V3.Maximize(max, info.maximumWorld) : info.maximumWorld.clone();
+  }
+  if (extraBounds)
+  {
+    min = min ? V3.Minimize(min, extraBounds.min) : extraBounds.min.clone();
+    max = max ? V3.Maximize(max, extraBounds.max) : extraBounds.max.clone();
   }
   return min ? { min, max: max! } : null;
 }
@@ -191,11 +204,17 @@ function settleCamera(share: number): void
   V3.LerpToRef(camera.target, S.camGoal.target, share, camera.target);
   camera.radius += (S.camGoal.radius - camera.radius) * share;
   if (S.camGoal.beta !== undefined) camera.beta += (S.camGoal.beta - camera.beta) * share;
+  let alphaDelta = 0;
+  if (S.camGoal.alpha !== undefined)
+  {
+    alphaDelta = Math.atan2(Math.sin(S.camGoal.alpha - camera.alpha), Math.cos(S.camGoal.alpha - camera.alpha));
+    camera.alpha += alphaDelta * share;
+  }
   const tilted = S.camGoal.beta === undefined || Math.abs(camera.beta - S.camGoal.beta) < 0.002;
-  if (tilted && V3.Distance(camera.target, S.camGoal.target) < 0.01 && Math.abs(camera.radius - S.camGoal.radius) < 0.01) S.camGoal = null;
+  const turned = S.camGoal.alpha === undefined || Math.abs(alphaDelta) < 0.002;
+  if (tilted && turned && V3.Distance(camera.target, S.camGoal.target) < 0.01 && Math.abs(camera.radius - S.camGoal.radius) < 0.01) S.camGoal = null;
 }
 
-/** One pulse ring: a ring on a folder's floor that grows and fades after a live change. */
 interface Ring { mesh: BABYLON.Mesh; material: BABYLON.StandardMaterial; start: number; life: number }
 const rings: Ring[] = [];
 
@@ -264,4 +283,10 @@ export function updatePulses(now: number): void
   if (painted) flushBoxes();
 }
 
-export { syncMeshes, centerView, recenterTarget, settleCamera };
+// The city's ground, which the concept zoom puts away while it is on.
+function sceneryMeshes(): BABYLON.Mesh[]
+{
+  return [gridMesh, plateMesh, plateLines].filter((mesh): mesh is BABYLON.Mesh => mesh !== null);
+}
+
+export { syncMeshes, buildLayerPlanes, setConceptBounds, centerView, recenterTarget, settleCamera, sceneryMeshes };

@@ -1,4 +1,4 @@
-import { S, V3, scene, glowMaterial, materialFor, filePath, matchesFilters, hasFilters, inScene, inSpotLayer } from "./state.js";
+import { S, V3, scene, glowMaterial, materialFor, filePath, matchesFilters, hasFilters, inScene, inSpotLayer, layerRank } from "./state.js";
 import { routeFolderHues, routeRuns, runLine } from "./route.js";
 import type { FileRecord } from "./types.js";
 
@@ -366,6 +366,7 @@ function collectTethers(): Tether[]
 {
   const tethers: Tether[] = [];
   const hues = routeFolderHues();
+  const zoomed = S.conceptZoom;
   const active = S.trace !== null || S.focusSet !== null || S.spotLayer !== null || hasFilters();
   for (const rec of S.fileRecords.values())
   {
@@ -374,7 +375,16 @@ function collectTethers(): Tether[]
     const lit = matchesFilters(rec.path) && inSpotLayer(rec.path) && (S.trace === null || S.trace.set.has(rec.path)) && (S.focusSet === null || S.focusSet.has(rec.node));
     const pos = rec.shape.position;
     const bottomY = pos.y - rec.shape.scaling.y / 2;
-    const routed = S.trace !== null && S.trace.trace && S.trace.set.has(rec.path);
+    const routed = !zoomed && S.trace !== null && S.trace.trace && S.trace.set.has(rec.path);
+    // Zoomed out to the concepts, the file has left its folder for a column and the plates are put
+    // away, so its thread drops to the plane of its own layer instead of a folder top.
+    let anchorY = folder.topY;
+    if (zoomed)
+    {
+      const layer = S.FILE_LAYERS.get(rec.path);
+      const rank = layer === undefined ? -1 : layerRank(layer);
+      anchorY = rank < 0 ? 0 : rank * S.layerGap + 0.012;
+    }
     if (routed && rec.terrace)
     {
       const floor = new V3(pos.x, folder.topY, pos.z);
@@ -385,70 +395,19 @@ function collectTethers(): Tether[]
       tethers.push({ points, hue: hues.get(rec.node) || "#8b98a8", routed: true, lit: true });
       continue;
     }
-    if (bottomY - folder.topY < 0.05) continue;
-    tethers.push({ points: [new V3(pos.x, bottomY, pos.z), new V3(pos.x, folder.topY, pos.z)], hue: "#8b98a8",
+    if (bottomY - anchorY < 0.05) continue;
+    tethers.push({ points: [new V3(pos.x, bottomY, pos.z), new V3(pos.x, anchorY, pos.z)], hue: "#8b98a8",
       routed: false, faded: S.trace !== null && S.trace.trace, lit: active && lit });
   }
   return tethers;
 }
 
-// Redraws every import: quiet hairlines for the crowd, and solid strands with
-// arrowheads for the chosen block's imports and for every layer break.
-function rebuildEdges(): void
+// The tethers: a file that floats above the ground is tied straight down to its plate, or, while
+// the map is zoomed out to the concepts, to the plane of its own layer under its column.
+// They are batched into one line system, because a tube and a disc per file was the single
+// heaviest part of a redraw on a large map. Only a routed file keeps its own tube.
+function drawTethers(): void
 {
-  if (edgeLines) edgeLines.dispose();
-  edgeLines = null;
-  for (const shape of edgeShapes) shape.dispose();
-  edgeShapes = [];
-  flowEdges = [];
-
-  // Every wire is for something chosen (a folder, a file, or a route), so each is a solid strand
-  // with a travelling dot: green along a route, red for a layer break, blue going out, amber coming in.
-  // A wire that belongs to another block when one is chosen is drawn faint, with no travelling dot.
-  const lines: BABYLON.Vector3[][] = [], colors: BABYLON.Color4[][] = [];
-  for (const edge of collectEdges())
-  {
-    const length = V3.Distance(edge.user, edge.used);
-    const bow = edge.bow !== undefined ? edge.bow : Math.min(6, 0.25 * length + 0.3);
-    const state = edge.state;
-    const hex = state === "trace" ? "#3fb950" : state === "import" ? "#79c0ff" : edge.broken ? "#f85149" : state === "out" ? "#58a6ff" : "#d29922";
-    // The route's line graph is a thin stranded hint, with no travelling dot to compete with the steps.
-    if (state === "import")
-    {
-      addStrand(edge, bow, hex, 0.028);
-      continue;
-    }
-    if (edge.dim === true)
-    {
-      addStrand(edge, bow, FadeHex(hex, 0.35), 0.02);
-      continue;
-    }
-    addStrand(edge, bow, hex, state === "trace" ? 0.04 : 0.05);
-    flowEdges.push({ edge, bow, hex });
-  }
-  // Layer breaks: a thin red line from tether foot to tether foot, brightening toward the file
-  // that uses the import, so direction reads without an arrowhead per line. Each follows the same
-  // circuit routing as a chosen folder's traces, so a break bends with the rest of the wiring
-  // instead of cutting straight across the plates.
-  const breaks = collectBreaks();
-  const breakEdges: Edge[] = breaks.map(({ user, used }) => ({ user, used, broken: true, state: "break" }));
-  routeTraces(breakEdges, breaks.map(({ from, to }) => `break:${Math.min(from, to)}>${Math.max(from, to)}`));
-  breaks.forEach(({ user, used, lit }, i) =>
-  {
-    const base = lit ? 0.85 : 0.08;
-    const trace = breakEdges[i].trace ?? [used, user];
-    lines.push(trace);
-    colors.push(breakTraceColors(trace, base * 0.35, base));
-  });
-  if (lines.length > 0)
-  {
-    edgeLines = BABYLON.MeshBuilder.CreateLineSystem("edges", { lines, colors, useVertexAlpha: true }, scene);
-    edgeLines.isPickable = false;
-  }
-
-  // The tethers: a file that floats above the ground is tied straight down to its plate.
-  // They are batched into one line system, because a tube and a disc per file was the single
-  // heaviest part of a redraw on a large map. Only a routed file keeps its own tube.
   if (tetherLines) tetherLines.dispose();
   tetherLines = null;
   for (const shape of tetherShapes) shape.dispose();
@@ -496,6 +455,63 @@ function rebuildEdges(): void
   {
     tetherLines = BABYLON.MeshBuilder.CreateLineSystem("tethers", { lines: pillarLines, colors: pillarColors, useVertexAlpha: true }, scene);
     tetherLines.isPickable = false;
+  }
+}
+
+// Redraws every import: quiet hairlines for the crowd, and solid strands with
+// arrowheads for the chosen block's imports and for every layer break.
+function rebuildEdges(): void
+{
+  if (edgeLines) edgeLines.dispose();
+  edgeLines = null;
+  for (const shape of edgeShapes) shape.dispose();
+  edgeShapes = [];
+  flowEdges = [];
+  drawTethers();
+  if (S.conceptZoom) return;
+
+  // Every wire is for something chosen (a folder, a file, or a route), so each is a solid strand
+  // with a travelling dot: green along a route, red for a layer break, blue going out, amber coming in.
+  // A wire that belongs to another block when one is chosen is drawn faint, with no travelling dot.
+  const lines: BABYLON.Vector3[][] = [], colors: BABYLON.Color4[][] = [];
+  for (const edge of collectEdges())
+  {
+    const length = V3.Distance(edge.user, edge.used);
+    const bow = edge.bow !== undefined ? edge.bow : Math.min(6, 0.25 * length + 0.3);
+    const state = edge.state;
+    const hex = state === "trace" ? "#3fb950" : state === "import" ? "#79c0ff" : edge.broken ? "#f85149" : state === "out" ? "#58a6ff" : "#d29922";
+    // The route's line graph is a thin stranded hint, with no travelling dot to compete with the steps.
+    if (state === "import")
+    {
+      addStrand(edge, bow, hex, 0.028);
+      continue;
+    }
+    if (edge.dim === true)
+    {
+      addStrand(edge, bow, FadeHex(hex, 0.35), 0.02);
+      continue;
+    }
+    addStrand(edge, bow, hex, state === "trace" ? 0.04 : 0.05);
+    flowEdges.push({ edge, bow, hex });
+  }
+  // Layer breaks: a thin red line from tether foot to tether foot, brightening toward the file
+  // that uses the import, so direction reads without an arrowhead per line. Each follows the same
+  // circuit routing as a chosen folder's traces, so a break bends with the rest of the wiring
+  // instead of cutting straight across the plates.
+  const breaks = collectBreaks();
+  const breakEdges: Edge[] = breaks.map(({ user, used }) => ({ user, used, broken: true, state: "break" }));
+  routeTraces(breakEdges, breaks.map(({ from, to }) => `break:${Math.min(from, to)}>${Math.max(from, to)}`));
+  breaks.forEach(({ user, used, lit }, i) =>
+  {
+    const base = lit ? 0.85 : 0.08;
+    const trace = breakEdges[i].trace ?? [used, user];
+    lines.push(trace);
+    colors.push(breakTraceColors(trace, base * 0.35, base));
+  });
+  if (lines.length > 0)
+  {
+    edgeLines = BABYLON.MeshBuilder.CreateLineSystem("edges", { lines, colors, useVertexAlpha: true }, scene);
+    edgeLines.isPickable = false;
   }
 
   // Under the route's lane, a strip on the floor for each run of steps from one folder, in that

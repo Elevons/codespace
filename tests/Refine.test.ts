@@ -11,7 +11,7 @@ function architecture(layers: string[], systems: string[], files: Record<string,
         layers,
         systems: Object.fromEntries(systems.map((name) => [name, { summary: `The ${name}.` }])),
         files: Object.fromEntries(Object.entries(files).map(([path, entry]) => [path, { ...entry, summary: `Does ${path}.` }])),
-        folders: {}, warnings: [], error: '',
+        folders: {}, concepts: { things: {}, operations: {} }, warnings: [], error: '',
     }
 }
 

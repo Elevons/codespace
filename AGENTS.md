@@ -41,6 +41,16 @@ The file has:
   notes by name (null removes one; `replaceNotes: true` replaces them all). Every summary and note is at most
   2000 characters.
 - `folders` — keyed by folder path: optional `summary`.
+- `concepts` (optional) — what the code does, above the files: `things` (the data, keyed by name, each with a
+  `summary`) and `operations` (what changes the data, keyed by a plain name such as "Read a repository", each
+  with a `summary`, the `files` it lives in, the things it `reads` and `writes`, ordered plain-word `steps`
+  `{text, files}`, and `rules`; a thing also has the `layer` it is held on and `rules`). Space, or the Concepts
+  button, zooms the map out to them: each operation's files gather into one column, and each thing floats at
+  its layer's height, wired to the operations that read (dashed) and write (solid) it. Clicking an operation
+  opens its process sheet (In, Steps, Out, Rules); a step points at its files. Files no operation names
+  gather under "Not in an operation". `apply` edits the section (merged by name, `null` removes, same
+  validation), and `concepts` hands out the work, like `next`: entry points to turn into operations, then
+  the operations and things still missing steps, reads/writes, or a layer.
 
 Tags come only from: `entry`, `orchestrate`, `core`, `data`, `io`, `ui`, `config`,
 `test`. Other tags are accepted and stored, but drawn grey. Summaries are one plain sentence
@@ -59,6 +69,7 @@ node --experimental-transform-types src/cli/Cli.ts repo --repo .
 node --experimental-transform-types src/cli/Cli.ts status --repo .
 node --experimental-transform-types src/cli/Cli.ts next --repo . --size 12
 node --experimental-transform-types src/cli/Cli.ts apply --file batch.json --repo .
+node --experimental-transform-types src/cli/Cli.ts concepts --repo . --size 8   # the concepts pass
 ```
 
 `next` prints the files (or folders) that still need describing, with their source, imports,
@@ -169,10 +180,10 @@ On the page, shift-click a file row in the Outliner, or a file box on the map, t
 selection or take it out. The file chosen first stays the one whose block stack is open; the rest
 are listed under it, with a cross to remove each one.
 
-### Insights: recent work, flows, and a health check
+### Insights: recent work, flows, history, and a health check
 
-The bottom bar's **Start here**, **Changes**, **Flows**, and **Health** buttons open one panel with
-three tabs (Start here draws the tour and opens Flows); on a phone the panel has its own Insights tab
+The bottom bar's **Start here**, **Changes**, **Flows**, **History**, and **Health** buttons open one panel with
+four tabs (Start here draws the tour and opens Flows); on a phone the panel has its own Insights tab
 in the tab bar. Each answer is also an endpoint:
 
 - **Recent** lists `/api/changes` — each file changed since `HEAD`, with its line count — and
@@ -186,6 +197,12 @@ in the tab bar. Each answer is also an endpoint:
   step's note taken from that file's summary. Save it as `start-here` to keep it. A flow's paths
   are checked against the repository whenever it is saved or shown, so it never lies about a file
   that has gone.
+- **History** is `GET /api/history`: the last 400 commits of `git log`, oldest first, each with its hash,
+  date, subject, and the files it touched, named as they are today (a renamed file is credited to its
+  current path, and deleted files are left out). The History tab scrubs through them: the map is
+  coloured by history while the tab is open (also the Colour menu's History), files not yet born are
+  dark, a file the commit touched is red and cools to blue over ten commits, and a play button steps
+  through. Outside git the list is empty.
 - **Health** is `GET /api/health`: the size of the codebase, the files still undescribed, the
   imports that go up the layers (the same rule as `refine`), the largest files, and values that
   look like keys in files a browser can read. The secret scan is a pattern, not proof: a key that
@@ -215,6 +232,7 @@ Reading, for finding the right files and steps before you show them:
 | `GET /api/source?path=src/a.ts` | one file's text |
 | `GET /api/blocks?path=src/a.ts` | one file's blocks: its declarations and groups, each with a summary, a kind, a line range, and the blocks it refers to |
 | `GET /api/changes` | each file changed since `HEAD`, with how many lines changed |
+| `GET /api/history` | the repository's last 400 commits, oldest first, with the files each touched |
 | `GET /api/health` | the codebase's size, largest files, layer breaks, undescribed files, and key-shaped values |
 | `GET /api/flows` | the saved flows; `?draft=1` drafts a start-here tour instead |
 | `POST /api/flows` | `{"action":"save","flow"}`, `{"action":"show","name"}`, or `{"action":"delete","name"}` |

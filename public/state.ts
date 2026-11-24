@@ -1,9 +1,10 @@
 import { CODE_FILE } from "./symbols.js";
 import { STACK_SCALE, type IBlocksReport } from "./blocks.js";
+import { historyHeat, type ITimeline } from "./history.js";
 import { passesSliceValues } from "./filter.js";
 import { folderColor, folderOf, isFileVisible as fileVisible, layerRank as rankOf, nodeMatchesFilters as nodeMatches } from "./rules.js";
 import { TAG_COLORS, type Tag } from "./tags.js";
-import type { Box, CamGoal, ColorBy, FileRecord, FileSpot, GraphNode, GroupAxis, OutlinerState, Trace } from "./types.js";
+import type { Box, CamGoal, ColorBy, Concepts, FileRecord, FileSpot, GraphNode, GroupAxis, OutlinerState, Trace } from "./types.js";
 
 // ---- constants ----
 export const V3 = BABYLON.Vector3;
@@ -40,6 +41,8 @@ export const S = {
   } | null, // where the opened file's wires join its floors, and the chosen floor's box
   FILE_CHANGES: new Map<string, number>(),     // path -> changed lines since HEAD, for the changes colouring
   ARCH_NOTES: [] as string[],                  // problems found in the architecture file, to show
+  CONCEPTS: { things: {}, operations: {} } as Concepts, // the operations and things the architecture file declares
+  conceptZoom: false,                          // whether the map is zoomed out to operations and things
   FILE_LAYERS: new Map<string, string>(),      // path -> the layer the architecture file puts it in
   FILE_SYSTEMS: new Map<string, string>(),     // path -> the system the architecture file puts it in
   LAYERS: [] as string[],                      // the layer names, bottom plane first
@@ -75,6 +78,8 @@ export const S = {
   graphSignature: "",
   extrasShown: false,                          // whether the extras (tests, docs, library code) are shown
   colorBy: "tag" as ColorBy,                   // what the boxes are coloured by
+  history: null as ITimeline | null,           // the git history, once the History tab has read it
+  historyAt: 0,                                // the commit the history colouring stands at
   tagFilter: null as string | null,            // the tag the tag filter is set to, or null for none
   spotLayer: null as string | null,           // the layer picked from the legend: it stays bright and every other layer fades in place
   isolatedFiles: null as Set<string> | null,   // an ad-hoc filter: only these files are drawn, or null for none
@@ -162,6 +167,15 @@ function changeColor(weight: number): string
   return mixHex("#e3b341", "#f85149", Math.min(1, Math.sqrt(weight / 60)));
 }
 
+// Not yet born is a dark ghost; a file the commit touched is hot, cooling to a quiet blue.
+function historyColor(path: string): string
+{
+  const heat = S.history ? historyHeat(S.history, path, S.historyAt) : 0;
+  if (heat < 0) return "#151a21";
+  if (heat === 0) return "#2f5d8a";
+  return heat < 0.5 ? mixHex("#2f5d8a", "#e3b341", heat * 2) : mixHex("#e3b341", "#f85149", (heat - 0.5) * 2);
+}
+
 // The colour of one file: by the map's chosen colouring, which defaults to its first tag.
 export function fileColor(path: string): string
 {
@@ -170,6 +184,7 @@ export function fileColor(path: string): string
   if (S.colorBy === "folder") return folderColor(path);
   if (S.colorBy === "size") return sizeColor(linesOf(path));
   if (S.colorBy === "changes") return changeColor(S.FILE_CHANGES.get(path) || 0);
+  if (S.colorBy === "history") return historyColor(path);
   if (S.colorBy === "layer") return colorFor(layer);
   const tags = S.FILE_TAGS.get(path);
   return tags && tags.length > 0 ? colorForTag(tags[0]) : colorFor(layer);

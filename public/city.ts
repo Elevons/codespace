@@ -32,6 +32,36 @@ function build(): void
   renderEdges();
 }
 
+// Re-stacks the boxes when the spread slider moves the layer gap. Only a file's height depends on
+// the gap, never the treemap or a folder, so this skips the layout, the tiles, and every folder:
+// the boxes follow the slider at once, and their rings, threads, and labels follow them.
+function restack(): void
+{
+  const layered = S.LAYERS.length > 0;
+  for (const b of S.boxes)
+  {
+    const layer = layered ? S.FILE_LAYERS.get(b.path) : undefined;
+    const rank = layer === undefined ? -1 : layerRank(layer);
+    const topY = S.NODES[b.node]?.topY ?? 0;
+    const baseY = rank < 0 ? topY : Math.max(topY, rank * S.layerGap);
+    b.terrace.y = baseY + b.terraceSize.y / 2;
+    const rec = S.fileRecords.get(b.path);
+    if (!rec) continue;
+    rec.terrace.y = b.terrace.y;
+    rec.target.y = b.terrace.y;
+    // The slider should feel attached to the boxes, so a box at rest takes its new height at once.
+    // A box lifted onto a shown route's lane glides instead, since that lane is not its resting spot.
+    if (S.trace === null || !S.trace.trace || !S.trace.set.has(b.path)) rec.shape.position.y = b.terrace.y;
+  }
+  S.shownLayers.forEach((_name, index) =>
+  {
+    const plane = S.layerPlanes[index];
+    if (plane) plane.position.y = index * S.layerGap;
+  });
+  S.dirty = true;
+  S.edgesDirty = true;
+}
+
 // The layers that hold at least one drawn file, gathered while the folders are weighed.
 const liveLayers = new Set<string>();
 
@@ -162,4 +192,4 @@ function placeNode(n: GraphNode, rect: { x: number; z: number; w: number; d: num
   }
 }
 
-export { build };
+export { build, restack };

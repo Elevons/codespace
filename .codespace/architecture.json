@@ -12,7 +12,13 @@
     }
   },
   "files": {
+    ".codespace/README.md": {
+      "summary": "Codespace metadata, written by the map and its tools rather than by hand."
+    },
     ".codespace/architecture.json": {
+      "summary": "Codespace metadata, written by the map and its tools rather than by hand."
+    },
+    ".codespace/flows.json": {
       "summary": "Codespace metadata, written by the map and its tools rather than by hand."
     },
     "AGENTS.md": {
@@ -100,13 +106,29 @@
       "system": "browser",
       "layer": "render",
       "tags": ["core"],
-      "summary": "Lays the repository's folder tree out as a treemap and feeds the shapes that draw it."
+      "summary": "Lays the repository's folder tree out as a treemap and feeds the shapes that draw it.",
+      "notes": {
+        "restack": "Re-heights the file boxes and layer planes when the spread slider moves the layer gap, without laying the treemap out again, so only a file's height changes."
+      }
+    },
+    "public/concepts.ts": {
+      "system": "browser",
+      "layer": "render",
+      "tags": ["ui"],
+      "summary": "Zooms the map out from files to operations as columns with the things they read and write floating at their layers, and opens each operation as a process sheet.",
+      "notes": {
+        "buildLayout": "Places each operation in one of the two banks with a spine of shared things between them, docks the things only one operation touches beside its column, and gives every file a spot in its owning operation's column. Files no operation names gather under 'Not in an operation'.",
+        "conceptTargets": "Runs each frame after the route has set its targets, so while the zoom is on every file glides to its operation and shrinks to a dot; the size it had is kept so zooming back restores it.",
+        "setZoom": "Turns the zoom on or off: puts away the city's ground, layer planes, labels, rings, and wires, frames the camera from above, and on the way back restores every file to its terrace.",
+        "conceptTap": "While zoomed out, a tap on a file zooms back in and opens that file; any other tap is swallowed so nothing behind the dots is chosen.",
+        "openOperation": "Clicking an operation's name zooms back in and shows its files lit in place, with the operation's summary as the note."
+      }
     },
     "public/controls.ts": {
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "core"],
-      "summary": "The map's controls and options: framing the chosen block, file, or folder; colouring, grouping, filters (including picking out a layer from its legend name), shift-click selection, collapsing the outliner, and refreshing the graph."
+      "summary": "The map's controls and options: framing the chosen block, file, or folder; colouring (choosing History opens its tab), grouping, filters (including picking out a layer from its legend name), shift-click selection, collapsing the outliner, and refreshing the graph."
     },
     "public/edges.ts": {
       "system": "browser",
@@ -150,6 +172,19 @@
       "tags": ["core"],
       "summary": "Paints each file for the current choice, tinting the batched crowd, lighting every selected file, fading a file that was just edited, and greying the layers left out when one is picked from the legend."
     },
+    "public/history.ts": {
+      "system": "browser",
+      "layer": "model",
+      "tags": ["data", "core"],
+      "summary": "The shape of a commit and the rule that turns the git history into a per-file heat, shared by the server that reads git and the page that colours the map.",
+      "notes": {
+        "MaxHistoryCommits": "How many of the newest commits the server reads, so a long history stays a small answer.",
+        "HeatWindow": "How many commits a touched file takes to cool from red back to blue.",
+        "IHistoryCommit": "One commit: its hash, date, subject, and the files it touched, named as they are today.",
+        "buildTimeline": "Reads the commits once into each file's list of touching commits and the commit it first appeared in.",
+        "historyHeat": "A file's heat at one commit: -1 before it existed, 1 when that commit touched it, fading to 0 over the heat window; a file git never saw exists only at the newest commit."
+      }
+    },
     "public/index.html": {
       "system": "browser",
       "layer": "shell",
@@ -166,7 +201,13 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui"],
-      "summary": "The Insights panel and its bottom-bar buttons: the files changed since HEAD, the saved flows with the start-here tour, and the health check."
+      "summary": "The Insights panel and its bottom-bar buttons: the files changed since HEAD, the saved flows with the start-here tour, the commit history scrubber, and the health check.",
+      "notes": {
+        "renderHistory": "Reads /api/history, switches the map to history colouring, and draws the commit bars, the scrubber and the play button.",
+        "paintHistory": "Updates the stats, the commit line and the bars for the commit the scrubber stands at, without redrawing the tab.",
+        "goToCommit": "Moves the scrubber to one commit and repaints the map.",
+        "leaveHistory": "Restores the colouring the map had before the tab opened, so history colouring never outlives its controls."
+      }
     },
     "public/labels.ts": {
       "system": "browser",
@@ -238,7 +279,7 @@
       "system": "browser",
       "layer": "model",
       "tags": ["core"],
-      "summary": "The map's pure folder, colour, layer-rank, visibility, and ray-picking rules, kept testable away from the scene."
+      "summary": "The map's pure folder, colour, layer-rank, visibility, ray-picking, and concept-spine layout rules, kept testable away from the scene."
     },
     "public/shown.ts": {
       "system": "browser",
@@ -250,7 +291,7 @@
       "system": "browser",
       "layer": "model",
       "tags": ["core"],
-      "summary": "The page's mutable world and constants: the graph, the chosen file and block, the selection, import names, filters, the layer picked from the legend, edit flashes, wire anchors, scene handles, and camera framing for a file's block stack or a chosen floor."
+      "summary": "The page's mutable world and constants: the graph, the chosen file and block, the selection, import names, filters, the layer picked from the legend, edit flashes, wire anchors, scene handles, the commit the history colouring stands at, and camera framing for a file's block stack or a chosen floor."
     },
     "public/style.css": {
       "system": "browser",
@@ -328,13 +369,28 @@
       "system": "server",
       "layer": "repo",
       "tags": ["core", "io"],
-      "summary": "Reads, validates, and writes a repository's architecture file and the batches applied to it."
+      "summary": "Reads, validates, and writes a repository's architecture file and the batches applied to it.",
+      "notes": {
+        "Architecture.ReadConcepts": "Reads the optional concepts section: things by name, and operations with the files they live in and the things they read and write. A file that does not exist or a thing that is not declared is dropped with a warning."
+      }
     },
     "src/repo/Blocks.ts": {
       "system": "server",
       "layer": "repo",
       "tags": ["core"],
       "summary": "Reads the blocks a file is made of, with a summary, their references, exported names, and the files their own text imports."
+    },
+    "src/repo/Concepts.ts": {
+      "system": "server",
+      "layer": "repo",
+      "tags": ["orchestrate", "core"],
+      "summary": "Hands out the concepts pass: entry points to turn into operations, then the operations and things still missing steps, reads and writes, or a layer."
+    },
+    "src/repo/ConceptsGuide.ts": {
+      "system": "server",
+      "layer": "repo",
+      "tags": ["config"],
+      "summary": "The instructions an agent follows to write things and operations as process sheets, shared by the CLI and the chat."
     },
     "src/repo/DescribeGuide.ts": {
       "system": "server",
@@ -359,6 +415,16 @@
       "layer": "repo",
       "tags": ["core", "data"],
       "summary": "Describes the shape of a codebase and points at what is worth a look: its size, the files nobody described, the imports that go up the layers, the largest files, and values that look like keys."
+    },
+    "src/repo/History.ts": {
+      "system": "server",
+      "layer": "repo",
+      "tags": ["io", "core"],
+      "summary": "Reads the git history of the repository folder into commits with the files each touched, following renames to the name a file has now.",
+      "notes": {
+        "ParseHistory": "Splits the log into commits and walks them newest first, so a file touched before a rename is credited to its current path; deleted files are dropped.",
+        "ReadHistoryAsync": "Runs git log oldest first, relative to the repository folder, and returns no commits outside git or without git."
+      }
     },
     "src/repo/Ingest.ts": {
       "system": "server",
@@ -460,7 +526,7 @@
       "system": "server",
       "layer": "api",
       "tags": ["data"],
-      "summary": "The one list of what an agent can do with the map, including its neighbours, health check, saved flows and tour, each as an HTTP call for hosts and the built-in chat."
+      "summary": "The one list of what an agent can do with the map, including its neighbours, history, health check, saved flows and tour, each as an HTTP call for hosts and the built-in chat."
     },
     "src/server/View.ts": {
       "system": "server",
@@ -510,6 +576,12 @@
       "tags": ["test"],
       "summary": "Tests the describe CLI's commands against temporary repositories, including size limits, generated files, malformed batches, the ledger, and next's move and delete housekeeping."
     },
+    "tests/Concepts.test.ts": {
+      "system": "meta",
+      "layer": "tests",
+      "tags": ["test"],
+      "summary": "Checks concepts are read with layers, rules and steps, edited by apply with validation, followed through renames, and handed out by the concepts pass."
+    },
     "tests/Filter.test.ts": {
       "system": "meta",
       "layer": "tests",
@@ -539,6 +611,12 @@
       "layer": "tests",
       "tags": ["test"],
       "summary": "Checks the health survey counts a codebase and names its largest files and layer breaks, and that the secret scan finds key-shaped values without returning them."
+    },
+    "tests/History.test.ts": {
+      "system": "meta",
+      "layer": "tests",
+      "tags": ["test"],
+      "summary": "Checks renames are followed and deletions dropped, the heat rule, and that a real checkout is read oldest first and served at /api/history."
     },
     "tests/Ingest.test.ts": {
       "system": "meta",
@@ -676,6 +754,220 @@
     },
     "tests": {
       "summary": "Tests for the server side, plus the dependency-free browser helpers."
+    }
+  },
+  "concepts": {
+    "things": {
+      "Your folder": {
+        "summary": "The repository on disk: its text files, as the map is allowed to read them.",
+        "layer": "repo",
+        "rules": [
+          "Files the repository ignores, and anything a link points outside the folder, are never read."
+        ]
+      },
+      "Snapshot": {
+        "summary": "Every readable file with its stamp, line count, declared names, and imports, read in one pass and reused until a file changes.",
+        "layer": "repo",
+        "rules": [
+          "A failed read is never remembered, so the next request reads again."
+        ]
+      },
+      "Architecture file": {
+        "summary": "What each file is for, the layers and systems it sits in, and the things and operations of the design, kept beside the repository.",
+        "layer": "repo",
+        "rules": [
+          "A change is all or nothing: one problem refuses the whole change and writes nothing.",
+          "A system, layer, or thing must be declared before anything uses it, and one still in use cannot be removed.",
+          "Every summary and note is at most 2000 characters.",
+          "It is written whole, so a reader never sees half of it, and only inside the repository."
+        ]
+      },
+      "View": {
+        "summary": "What every open page is showing: a lit set, a route, an isolation, or a selection.",
+        "layer": "api",
+        "rules": [
+          "A new show replaces the last show, a new isolation the last isolation, and a new selection the last selection.",
+          "Clearing takes down the show but leaves an isolation in place."
+        ]
+      },
+      "Flows": {
+        "summary": "Saved walks through the code, kept with the repository.",
+        "layer": "repo",
+        "rules": [
+          "A flow's paths are checked against the repository whenever it is saved or shown.",
+          "A repository keeps at most 50 flows."
+        ]
+      },
+      "Description record": {
+        "summary": "What each described file looked like when its entry was written, so a later edit shows up as changed.",
+        "layer": "repo",
+        "rules": [
+          "It stays on this machine and is not committed."
+        ]
+      },
+      "Chat transcript": {
+        "summary": "The conversation with the built-in agent, kept for each repository so it can be reopened.",
+        "layer": "api",
+        "rules": [
+          "The chat reads only the server's own repository, never one opened with a repo address."
+        ]
+      },
+      "Drawn map": {
+        "summary": "The 3D city on the page: a box per file, layer pads, import wires, and the lit set.",
+        "layer": "render"
+      }
+    },
+    "operations": {
+      "Read a repository": {
+        "summary": "Turns a folder into the snapshot every other operation reads.",
+        "reads": ["Your folder"],
+        "writes": ["Snapshot"],
+        "steps": [
+          { "text": "List the readable text files, leaving out ignored folders and anything outside the repository.", "files": ["src/repo/Repo.ts"] },
+          { "text": "Give every file a stamp from its size and time, and join them into one fingerprint for the whole repository.", "files": ["src/repo/Repo.ts"] },
+          { "text": "Read each code file to count its lines and find the names it declares.", "files": ["src/repo/Snapshot.ts", "public/symbols.ts"] },
+          { "text": "Work out which files import which, and which names each takes from the others.", "files": ["src/repo/Graph.ts"] },
+          { "text": "Keep the result and hand back the same one until the fingerprint changes.", "files": ["src/repo/Snapshot.ts"] }
+        ],
+        "rules": [
+          "The snapshot is rebuilt only when the fingerprint changes."
+        ]
+      },
+      "Describe files": {
+        "summary": "An agent reads the code in batches and writes each file's summary, system, layer, and tags into the architecture file.",
+        "reads": ["Your folder", "Snapshot", "Architecture file", "Description record"],
+        "writes": ["Architecture file", "Description record"],
+        "steps": [
+          { "text": "Move entries along with files that were moved, and drop the entries of files that are gone.", "files": ["src/repo/Sync.ts", "src/repo/Ledger.ts"] },
+          { "text": "Settle generated and vendored files with a fixed summary, so nobody reads them.", "files": ["src/repo/Ingest.ts", "src/repo/Next.ts"] },
+          { "text": "Pick the next files that are new, changed since they were described, or missing a field, and hand them over with their text and imports.", "files": ["src/repo/Ingest.ts", "src/repo/Next.ts", "src/repo/Graph.ts", "src/cli/Cli.ts", "src/cli/Options.ts"] },
+          { "text": "The agent reads each file and writes its summary, system, layer, and tags, folders last.", "files": ["src/repo/DescribeGuide.ts", "src/agent/Instructions.ts"] },
+          { "text": "Check the whole batch against the repository, then write it or refuse all of it with the reasons.", "files": ["src/repo/Architecture.ts", "src/repo/JsonStore.ts", "src/server/Api.ts"] },
+          { "text": "Remember what each described file looked like, so a later edit offers it again.", "files": ["src/repo/Ledger.ts"] },
+          { "text": "Leave the upkeep rules in the repository, so whoever changes it later keeps the file true.", "files": ["src/repo/Install.ts"] },
+          { "text": "Move explanations written as code comments into the file's notes.", "files": ["src/repo/LiftNotes.ts"] }
+        ],
+        "rules": [
+          "A file counts as described only with a summary, a system, a layer, and tags; generated files need only a summary.",
+          "Run again after changes: only what is new, changed, or incomplete is handed back."
+        ]
+      },
+      "Refine layers": {
+        "summary": "Checks the layers and systems against the imports so the picture of the stack is honest.",
+        "reads": ["Snapshot", "Architecture file"],
+        "writes": ["Architecture file"],
+        "steps": [
+          { "text": "Collect imports that point from a lower layer up to a higher one, grouped by pair of layers.", "files": ["src/repo/Refine.ts"] },
+          { "text": "Find files that would sit in fewer breaks on another layer, and files whose neighbours are mostly in another system.", "files": ["src/repo/Refine.ts"] },
+          { "text": "Flag layers and systems that look wrong as a whole.", "files": ["src/repo/Refine.ts"] },
+          { "text": "The agent reads the files named, judges each break, and applies new layers, systems, or moves.", "files": ["src/repo/RefineGuide.ts", "src/repo/Architecture.ts", "src/server/Api.ts"] }
+        ]
+      },
+      "Chat": {
+        "summary": "The built-in agent answers questions and drives the map and the describe commands.",
+        "reads": ["Your folder"],
+        "writes": ["Chat transcript", "Architecture file", "View"],
+        "steps": [
+          { "text": "Open an agent session in the repository, told what the map offers and how to describe code.", "files": ["src/agent/Chat.ts", "src/agent/Instructions.ts", "src/agent/ModelSettings.ts"] },
+          { "text": "Send the person's message and stream the reply and each tool use to every open page.", "files": ["src/agent/Chat.ts", "src/server/Api.ts", "src/server/View.ts", "public/chatwire.ts", "public/chat.ts"] },
+          { "text": "The agent calls the map's endpoints and the describe commands to show code or write descriptions.", "files": ["src/server/Tools.ts", "src/cli/Cli.ts"] },
+          { "text": "Keep each chat for the repository so it can be reopened.", "files": ["src/agent/Chat.ts"] }
+        ],
+        "rules": [
+          "Only this machine may read or change the chat, and a page opened with a repo address has none."
+        ]
+      },
+      "Show on the map": {
+        "summary": "Lights up, isolates, selects, or frames files on every open page, as a route or a set.",
+        "reads": ["Your folder"],
+        "writes": ["View"],
+        "steps": [
+          { "text": "Accept the request only from this machine, unless the server allows writes from anywhere.", "files": ["src/server/Guard.ts"] },
+          { "text": "Keep the paths that are real files and report the rest as unknown.", "files": ["src/server/Api.ts", "src/repo/ShowLimits.ts"] },
+          { "text": "Store the new view in place of the last of its kind and send it to every open page.", "files": ["src/server/View.ts", "src/server/Tools.ts"] },
+          { "text": "Each page lights the files, lifts a route into a lane, draws its wires, or narrows the map.", "files": ["public/view.ts", "public/viewcall.ts", "public/route.ts", "public/highlight.ts", "public/edges.ts"] }
+        ],
+        "rules": [
+          "At most 1000 files, and each note and title within a fixed length, are accepted in one show."
+        ]
+      },
+      "Open a repository": {
+        "summary": "Points the map at another folder and makes every open page follow.",
+        "reads": ["Your folder"],
+        "writes": ["View"],
+        "steps": [
+          { "text": "Accept the request only from this machine, unless the server allows writes from anywhere.", "files": ["src/server/Guard.ts", "src/server/Server.ts"] },
+          { "text": "Resolve the chosen folder to its real path and check that it is a folder.", "files": ["src/server/Workspace.ts", "src/repo/Repo.ts"] },
+          { "text": "Forget what was shown and isolated, and start watching the new folder's architecture file.", "files": ["src/server/Workspace.ts", "src/server/View.ts"] },
+          { "text": "Tell every open page to reload, and list the recent repositories in the Repo panel.", "files": ["src/server/View.ts", "public/view.ts", "public/repo-switch.ts"] }
+        ],
+        "rules": [
+          "A page opened on one repository with a repo address cannot switch to another."
+        ]
+      },
+      "Describe concepts": {
+        "summary": "An agent writes down the design as things and operations, for the person to confirm.",
+        "reads": ["Snapshot", "Architecture file"],
+        "writes": ["Architecture file"],
+        "steps": [
+          { "text": "List the entry points: entry files, endpoints, commands, buttons, and keys.", "files": ["src/repo/Concepts.ts", "src/cli/Cli.ts"] },
+          { "text": "The agent follows what each entry point calls and proposes operations with their steps, inputs, and outputs.", "files": ["src/repo/ConceptsGuide.ts", "src/agent/Instructions.ts"] },
+          { "text": "Hand back the operations still missing steps or inputs and outputs, and things missing a layer, with their files' text.", "files": ["src/repo/Concepts.ts", "src/server/Api.ts"] },
+          { "text": "Check every named thing, file, and layer, then write the batch or refuse all of it.", "files": ["src/repo/Architecture.ts"] }
+        ],
+        "rules": [
+          "A thing that an operation still reads or writes cannot be removed."
+        ]
+      },
+      "Keep flows": {
+        "summary": "Saves named walks through the code with the repository, and drafts a start-here tour from the descriptions.",
+        "reads": ["Architecture file", "Snapshot", "Flows"],
+        "writes": ["Flows", "View"],
+        "steps": [
+          { "text": "Trim a flow's name and notes and check its paths against the repository.", "files": ["src/repo/Flows.ts", "public/flows.ts"] },
+          { "text": "Save it by name in the repository's flows file, replacing one of the same name, or delete it.", "files": ["src/server/Api.ts", "src/repo/Flows.ts", "src/repo/JsonStore.ts"] },
+          { "text": "Draft a tour that starts at the entry files, then follows what they import, one step per file with its summary.", "files": ["src/repo/Flows.ts"] },
+          { "text": "Show a saved flow by sending it to the view.", "files": ["src/server/Api.ts", "public/insight.ts"] }
+        ]
+      },
+      "Report on the codebase": {
+        "summary": "Answers what is large, undescribed, recently changed, or tangled, and what surrounds one file.",
+        "reads": ["Snapshot", "Architecture file", "Your folder"],
+        "steps": [
+          { "text": "Count the files and lines, the files nobody described, the largest files, and the imports that go up the layers.", "files": ["src/repo/Health.ts", "public/health.ts"] },
+          { "text": "Scan the files a browser can read for values that look like keys.", "files": ["src/repo/Health.ts"] },
+          { "text": "List the files changed since the last commit with their line counts.", "files": ["src/server/Server.ts"] },
+          { "text": "Read the last commits and the files each touched, following renames, and colour the map by them.", "files": ["src/repo/History.ts", "public/history.ts"] },
+          { "text": "Walk the imports one or two steps around a file in both directions.", "files": ["src/repo/Neighbours.ts", "public/neighbours.ts", "public/neighbourhood.ts"] },
+          { "text": "Show the answers in the Insights panel.", "files": ["public/insight.ts"] }
+        ],
+        "rules": [
+          "The report decides nothing: the key scan is a pattern, not proof."
+        ]
+      },
+      "Explain a file": {
+        "summary": "Opens a file into its blocks, each with a sentence on what it is for.",
+        "reads": ["Your folder", "Architecture file"],
+        "steps": [
+          { "text": "Read the file's text and split it into declarations and groups, with their line ranges and what they refer to.", "files": ["src/repo/Blocks.ts", "src/server/Server.ts"] },
+          { "text": "Give each block the note written for it in the architecture file, else its own comment, else a plain description of its shape.", "files": ["src/repo/Blocks.ts"] },
+          { "text": "For blocks left with none, ask the configured model for one sentence and keep it for the session.", "files": ["src/agent/BlockSummaries.ts", "src/agent/ModelSettings.ts"] },
+          { "text": "Stack the blocks into floors on the file's box and list them in the rail.", "files": ["public/blocks.ts", "public/floors.ts", "public/panels.ts"] }
+        ]
+      },
+      "Draw the map": {
+        "summary": "Turns the snapshot and the architecture file into the 3D city, and redraws it when they change.",
+        "reads": ["Snapshot", "Architecture file", "View"],
+        "writes": ["Drawn map"],
+        "steps": [
+          { "text": "Ask the server for the whole repository in one answer, and skip the rest if its fingerprint is unchanged.", "files": ["public/repo.ts", "public/endpoint.ts", "src/server/Server.ts"] },
+          { "text": "Fold the folder tree into nodes and lay them out as a treemap.", "files": ["public/city.ts", "public/repo.ts", "public/rules.ts"] },
+          { "text": "Build or reuse a box for each file on its folder's tile, and a ring on its layer's plane.", "files": ["public/meshes.ts", "public/boxes.ts", "public/pads.ts", "public/batch.ts"] },
+          { "text": "Colour and filter the files by tag, system, layer, or history.", "files": ["public/highlight.ts", "public/filter.ts", "public/controls.ts"] },
+          { "text": "Draw the imports between files as wires, and label what is on screen.", "files": ["public/edges.ts", "public/labels.ts"] },
+          { "text": "Redraw when the server says the architecture changed, or when a poll finds a new fingerprint.", "files": ["public/main.ts", "public/state.ts", "public/view.ts"] }
+        ]
+      }
     }
   }
 }

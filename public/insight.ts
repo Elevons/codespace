@@ -5,15 +5,17 @@
 // made in this page alone when the host serves the map read only (see viewcall.ts).
 
 import { api } from "./endpoint.js";
-import { S, copyText, pathIndex } from "./state.js";
+import { S, copyText, pathIndex, render as paintMap } from "./state.js";
 import { escapeHtml, selectFile } from "./panels.js";
 import { MaxFlowName, type IFlow } from "./flows.js";
 import type { IHealthAnswer } from "./health.js";
+import { buildTimeline, historyHeat, type IHistoryCommit } from "./history.js";
 import type { IShownFile } from "./shown.js";
+import type { ColorBy } from "./types.js";
 import { changeView } from "./viewcall.js";
 
 /** The three tabs the panel holds. */
-type Tab = "recent" | "flows" | "health";
+type Tab = "recent" | "flows" | "history" | "health";
 
 function byId<T extends HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 
@@ -28,6 +30,10 @@ let flowName = "";
 let healthReport: IHealthAnswer | null = null;
 /** The flows the Flows tab last listed, so one is drawn from what the page already holds. */
 let listedFlows: IFlow[] = [];
+const colorSelect = byId<HTMLSelectElement>("colorby");
+let commits: IHistoryCommit[] = [];
+let colorBefore = "";
+let playTimer: number | null = null;
 
 /** The number of reads started, so a slow one cannot paint over a newer tab. */
 let wanted = 0;
@@ -88,6 +94,7 @@ export function openInsight(next: Tab = tab): void
 
 function close(): void
 {
+  leaveHistory();
   panel.hidden = true;
   paintOpeners();
   window.dispatchEvent(new CustomEvent("codespace:panel-closed", { detail: "insight" }));
@@ -114,11 +121,13 @@ async function render(): Promise<void>
 {
   const mine = ++wanted;
   paintTabs();
+  if (tab !== "history") leaveHistory();
   body.innerHTML = '<p class="hint">Reading…</p>';
   try
   {
     if (tab === "recent") renderRecent();
     else if (tab === "flows") await renderFlows(mine);
+    else if (tab === "history") await renderHistory(mine);
     else await renderHealth(mine);
   }
   catch (error)
@@ -156,6 +165,101 @@ function renderRecent(): void
     '<button type="button" class="iact" data-act="only-changes">Only changed files</button></div>' +
     '<div class="ilist">' + changes.map(([path, count]) => fileRow(path, "+" + count)).join("") + "</div>" +
     '<p class="hint">Counted against HEAD with git, so an uncommitted file shows and a committed one does not.</p>';
+}
+
+/* ---- history ---- */
+
+function useColor(value: ColorBy): void
+{
+  S.colorBy = value;
+  colorSelect.value = value;
+  paintMap();
+}
+
+// The map is coloured by history only while its tab is open, so the colouring never outlives its controls.
+function leaveHistory(): void
+{
+  stopPlaying();
+  if (S.colorBy === "history") useColor((colorBefore || "tag") as ColorBy);
+  colorBefore = "";
+}
+
+function stopPlaying(): void
+{
+  if (playTimer !== null) window.clearInterval(playTimer);
+  playTimer = null;
+  const button = document.getElementById("history-play");
+  if (button) button.textContent = "Play";
+}
+
+async function renderHistory(mine: number): Promise<void>
+{
+  const answer = await getJson("history");
+  if (mine !== wanted) return;
+  commits = answer.commits as IHistoryCommit[];
+  if (commits.length === 0)
+  {
+    body.innerHTML = '<p class="hint">No git history here. The map reads it from git log, so a folder outside git has none.</p>';
+    return;
+  }
+  S.history = buildTimeline(commits);
+  S.historyAt = commits.length - 1;
+  if (S.colorBy !== "history") { colorBefore = S.colorBy; useColor("history"); }
+  const most = Math.max(...commits.map((commit) => commit.files.length), 1);
+  body.innerHTML =
+    '<div class="istats" id="history-stats"></div>' +
+    '<div class="hbars" id="history-bars">' + commits.map((commit, index) =>
+      '<button type="button" class="hbar" data-at="' + index + '" style="height:' + Math.max(6, Math.round(Math.sqrt(commit.files.length / most) * 100)) + '%" title="' +
+      escapeHtml(commit.date + " · " + commit.subject + " · " + commit.files.length + " files") + '"></button>').join("") + "</div>" +
+    '<div class="hscrub"><button type="button" class="iact" id="history-play" data-act="history-play">Play</button>' +
+    '<input type="range" id="history-at" min="0" max="' + (commits.length - 1) + '" value="' + S.historyAt + '"></div>' +
+    '<div class="hnow" id="history-now"></div>' +
+    '<div class="iacts"><button type="button" class="iact" data-act="show-commit">Show this commit\'s files</button></div>' +
+    '<p class="hint">Files not yet born are dark; a file the commit touched is red, cooling to blue over ten commits. Renamed files keep their history under the name they have now.</p>';
+  paintHistory();
+}
+
+function paintHistory(): void
+{
+  const commit = commits[S.historyAt];
+  if (!commit || !S.history) return;
+  const known = pathIndex().files;
+  let existing = 0;
+  for (const path of known.keys()) if (historyHeat(S.history, path, S.historyAt) >= 0) existing++;
+  const touched = commit.files.filter((path) => known.has(path)).length;
+  byId("history-stats").innerHTML = stat(S.historyAt + 1 + " / " + commits.length, "commit") + stat(existing, "files exist") + stat(touched, "touched");
+  byId("history-now").innerHTML = "<b>" + escapeHtml(commit.date) + "</b>" + escapeHtml(commit.subject);
+  byId<HTMLInputElement>("history-at").value = String(S.historyAt);
+  byId("history-bars").querySelectorAll<HTMLElement>(".hbar").forEach((bar, index) =>
+  {
+    bar.classList.toggle("now", index === S.historyAt);
+    bar.classList.toggle("past", index < S.historyAt);
+  });
+}
+
+function goToCommit(index: number): void
+{
+  S.historyAt = Math.max(0, Math.min(commits.length - 1, index));
+  paintHistory();
+  paintMap();
+}
+
+function togglePlay(): void
+{
+  if (playTimer !== null) { stopPlaying(); return; }
+  if (S.historyAt >= commits.length - 1) goToCommit(0);
+  byId("history-play").textContent = "Pause";
+  playTimer = window.setInterval(() =>
+  {
+    if (S.historyAt >= commits.length - 1) { stopPlaying(); return; }
+    goToCommit(S.historyAt + 1);
+  }, 450);
+}
+
+async function showCommit(): Promise<void>
+{
+  const commit = commits[S.historyAt];
+  if (commit) await draw(commit.subject, commit.files.map((path) => ({ path, note: "" })), false, commit.date);
 }
 
 /* ---- flows ---- */
@@ -315,6 +419,9 @@ body.addEventListener("click", (event) =>
     return;
   }
 
+  const bar = target.closest("[data-at]") as HTMLElement | null;
+  if (bar) { goToCommit(Number(bar.dataset.at)); return; }
+
   const action = target.closest("[data-act]") as HTMLElement | null;
   if (!action) return;
   const name = action.dataset.act;
@@ -323,6 +430,8 @@ body.addEventListener("click", (event) =>
   else if (name === "only-undescribed") void onlyUndescribed();
   else if (name === "save-flow") void saveShowing();
   else if (name === "tour") void showTour();
+  else if (name === "history-play") togglePlay();
+  else if (name === "show-commit") void showCommit();
   else if (name === "copy-health") void copyHealth(action);
 });
 
@@ -330,6 +439,7 @@ body.addEventListener("input", (event) =>
 {
   const input = event.target as HTMLInputElement;
   if (input.id === "flow-name") flowName = input.value;
+  else if (input.id === "history-at") goToCommit(Number(input.value));
 });
 
 function changedPaths(): string[]
@@ -405,6 +515,7 @@ for (const opener of openers)
 window.addEventListener("codespace:pane", (event) => { if ((event as CustomEvent).detail === "insight" && panel.hidden) openInsight(); });
 window.addEventListener("codespace:panels-changed", () => paintOpeners());
 // The repository's first panel offers the tour too.
+window.addEventListener("codespace:open-history", (event) => { colorBefore = String((event as CustomEvent).detail ?? ""); openInsight("history"); });
 window.addEventListener("codespace:tour", () => { openInsight("flows"); void showTour(); });
 closeButton.addEventListener("click", close);
 tabs.addEventListener("click", (event) =>

@@ -241,6 +241,7 @@ async function loadGraph(since: string | null = null): Promise<Graph | null>
   const layerOrder = architecture.layers.length > 0 ? architecture.layers : null;
   const systemOrder = Object.keys(architecture.systems);
   const notes = architecture.error ? [architecture.error] : architecture.warnings;
+  const concepts = architecture.concepts ?? { things: {}, operations: {} };
 
   // How many lines each file has changed since HEAD, for the changes colouring. A repository that
   // is not under git, or has no git on the machine, simply has no changes.
@@ -255,7 +256,7 @@ async function loadGraph(since: string | null = null): Promise<Graph | null>
     return [parts[0], parts[1], count];
   });
 
-  return { fingerprint: data.fingerprint, nodes, edges, fileEdges, lines, tags, layers, systems, systemOrder, summaries, symbols, changes, layerOrder, notes };
+  return { fingerprint: data.fingerprint, nodes, edges, fileEdges, lines, tags, layers, systems, systemOrder, summaries, symbols, changes, layerOrder, notes, concepts };
 }
 // Reads one file's text from the server, refusing a stale cached copy.
 async function readSource(path: string): Promise<string>

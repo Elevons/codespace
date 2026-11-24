@@ -61,6 +61,8 @@ const SizeArgument = (fallback: number): Record<string, unknown> => ({
     type: 'integer', minimum: 1, maximum: MaxBatchSize, description: `The number of items to return. The default is ${fallback}. The maximum is ${MaxBatchSize}.`,
 })
 
+const ConceptEntry = { type: ['object', 'null'] }
+
 /** A summary entry, for a system or a folder. Null removes it. */
 const SummaryEntry = { type: ['object', 'null'], properties: { summary: { type: ['string', 'null'] } }, additionalProperties: false }
 
@@ -121,6 +123,12 @@ export const MapTools: readonly IMapTool[] = [
     {
         name: 'changes', method: 'GET', path: '/api/changes', writes: false, parameters: NoArguments,
         description: 'Returns each file that changed after the last commit, with the number of changed lines. Outside git, the list is empty.',
+    },
+    {
+        name: 'history', method: 'GET', path: '/api/history', writes: false, parameters: NoArguments,
+        description: `Returns the repository's git history, oldest commit first, up to the last 400 commits: each has a hash, a date,
+a subject, and the files it touched, named as they are today (a file that was renamed is credited to its current path).
+Outside git the list is empty. Use it to see when a file appeared, what changed together, and where work has been going.`,
     },
     {
         name: 'health', method: 'GET', path: '/api/health', writes: false, parameters: NoArguments,
@@ -304,6 +312,14 @@ The answer has the full architecture file and a list of notes.`,
                 systems: { type: 'object', additionalProperties: SummaryEntry, description: 'The systems to declare or change, by name. Null removes a system that no file uses.' },
                 files: { type: 'object', additionalProperties: FileEntry, description: 'The entry changes, by file path.' },
                 folders: { type: 'object', additionalProperties: SummaryEntry, description: 'The folder summaries, by folder path. Null removes a summary.' },
+                concepts: {
+                    type: 'object', additionalProperties: false,
+                    description: 'The things and operations to add, change, or remove, merged by name. Null removes one. A field set to null is removed. A list replaces the old list.',
+                    properties: {
+                        things: { type: 'object', additionalProperties: ConceptEntry, description: 'The data that is kept or passed, by name: summary, layer, and rules.' },
+                        operations: { type: 'object', additionalProperties: ConceptEntry, description: 'What changes data, by name: summary, reads and writes (thing names), steps (each with text and files), files, and rules.' },
+                    },
+                },
                 renames: {
                     type: 'array', description: 'The entries to move to a new path, for a moved file. The tool applies these first.',
                     items: { type: 'object', properties: { from: { type: 'string' }, to: { type: 'string' } }, required: ['from', 'to'], additionalProperties: false },
@@ -319,5 +335,12 @@ The answer has the full architecture file and a list of notes.`,
 It also returns files that can go on a better layer, files that can go in a better system, and layer problems.
 It does not change the architecture file. Read the files that it names. Write the changes with apply, and then use it again.`,
         parameters: { type: 'object', properties: { size: SizeArgument(DefaultRefineSize) }, additionalProperties: false },
+    },
+    {
+        name: 'concepts', method: 'GET', path: '/api/concepts', writes: false,
+        description: `The concepts pass. It returns what concept work is left: entry points to turn into operations when there are none.
+It also returns operations that need steps, reads, or writes, and things that need a layer, with the source of their files.
+The answer has a guide for how to write them. It does not change the architecture file. Write the concepts with apply, and then use it again.`,
+        parameters: { type: 'object', properties: { size: SizeArgument(6) }, additionalProperties: false },
     },
 ]

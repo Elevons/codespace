@@ -15,6 +15,7 @@ import { ReadJsonAsync, RefuseOutside, RefuseRemoteRead, RefuseWrite, SendJson }
 import { Architecture } from '../repo/Architecture.ts'
 import { Blocks } from '../repo/Blocks.ts'
 import { Graph } from '../repo/Graph.ts'
+import { ReadHistoryAsync } from '../repo/History.ts'
 import { CodespaceFolder } from '../repo/JsonStore.ts'
 import { Snapshot } from '../repo/Snapshot.ts'
 import { Workspace, Workspaces, type IWorkspaceInfo } from './Workspace.ts'
@@ -182,6 +183,12 @@ export class Server
         if (url.pathname === '/api/changes')
         {
             SendJson(response, 200, await Server.ReadChangesAsync(workspace.repo.Root))
+            return
+        }
+
+        if (url.pathname === '/api/history')
+        {
+            SendJson(response, 200, { commits: await ReadHistoryAsync(workspace.repo.Root) })
             return
         }
 

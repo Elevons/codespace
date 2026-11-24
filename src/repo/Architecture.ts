@@ -41,9 +41,62 @@ interface ISystemEntry
     summary?: string
 }
 
+export interface IThing
+{
+    summary?: string
+    layer?: string
+    rules?: string[]
+}
+
+export interface IStep
+{
+    text: string
+    files: string[]
+}
+
+export interface IOperation
+{
+    summary?: string
+    files: string[]
+    reads: string[]
+    writes: string[]
+    steps: IStep[]
+    rules: string[]
+}
+
+export interface IConcepts
+{
+    things: Record<string, IThing>
+    operations: Record<string, IOperation>
+}
+
+export interface IThingPatch
+{
+    summary?: string | null
+    layer?: string | null
+    rules?: string[] | null
+}
+
+export interface IOperationPatch
+{
+    summary?: string | null
+    files?: string[] | null
+    reads?: string[] | null
+    writes?: string[] | null
+    steps?: Array<{ text: string, files?: string[] }> | null
+    rules?: string[] | null
+}
+
+export interface IConceptsPatch
+{
+    things?: Record<string, IThingPatch | null>
+    operations?: Record<string, IOperationPatch | null>
+}
+
 /** A repository's architecture, as the map reads it. */
 export interface IArchitecture
 {
+    concepts: IConcepts
     /** The layer names, bottom plane first. Layers are shared by every system. */
     layers: string[]
     /** The systems, by name. A system groups files without owning its own layers. */
@@ -70,6 +123,8 @@ export interface IArchitecturePatch
         notes?: Record<string, string | null> | null, replaceNotes?: boolean }>
     /** Changes to folder summaries by path. Null removes one. */
     folders?: Record<string, { summary?: string | null }>
+    /** Things and operations to add, change, or remove, merged by name. Null removes one; a field set to null is removed. */
+    concepts?: IConceptsPatch
     /** Entries to move to a new path, for a file that was moved or renamed. Applied first. */
     renames?: Array<{ from: string, to: string }>
     /** Entries to delete for files and folders that are gone. A path that still exists is refused. */
@@ -95,7 +150,7 @@ export class Architecture
      */
     public static async ReadAsync(root: string, known: readonly string[]): Promise<IArchitecture>
     {
-        const result: IArchitecture = { layers: [], systems: {}, files: {}, folders: {}, warnings: [], error: '' }
+        const result: IArchitecture = { layers: [], systems: {}, files: {}, folders: {}, concepts: { things: {}, operations: {} }, warnings: [], error: '' }
 
         // First we read the file, making sure a link cannot point it outside the repository.
         let text: string | null
@@ -176,7 +231,92 @@ export class Architecture
             }
         }
         else if (sections.folders !== undefined) result.warnings.push('"folders" should be an object keyed by folder path.')
+
+        if (sections.concepts !== undefined) Architecture.ReadConcepts(sections.concepts, exists, result)
         return result
+    }
+
+    private static ReadConcepts(raw: unknown, exists: ReadonlySet<string>, result: IArchitecture): void
+    {
+        if (!IsObject(raw)) { result.warnings.push('"concepts" should be an object with "things" and "operations".'); return }
+        const summaryOf = (entry: Record<string, unknown>, what: string): string | undefined =>
+        {
+            if (typeof entry.summary === 'string' && entry.summary.trim() !== '') return entry.summary.trim().slice(0, MaxSummary)
+            if (entry.summary !== undefined) result.warnings.push(`${what} should have a text summary.`)
+            return undefined
+        }
+        const textList = (entry: Record<string, unknown>, key: string, what: string): string[] =>
+        {
+            const value = entry[key]
+            if (value === undefined) return []
+            if (!Array.isArray(value)) { result.warnings.push(`${what} should list its ${key} as text.`); return [] }
+            return value.filter((item): item is string => typeof item === 'string' && item.trim() !== '').map((item) => item.trim().slice(0, MaxSummary))
+        }
+
+        const things = IsObject(raw.things) ? raw.things : {}
+        if (raw.things !== undefined && !IsObject(raw.things)) result.warnings.push('"concepts.things" should be an object keyed by name.')
+        for (const [rawName, entry] of Object.entries(things))
+        {
+            const name = rawName.trim()
+            if (name === '' || !IsObject(entry)) { result.warnings.push(`The thing "${rawName}" should be an object with a summary.`); continue }
+            const thing: IThing = {}
+            const summary = summaryOf(entry, `The thing "${name}"`)
+            if (summary !== undefined) thing.summary = summary
+            if (typeof entry.layer === 'string' && entry.layer.trim() !== '')
+            {
+                if (result.layers.includes(entry.layer.trim())) thing.layer = entry.layer.trim()
+                else result.warnings.push(`The thing "${name}" is on layer "${entry.layer}", which "layers" does not list.`)
+            }
+            else if (entry.layer !== undefined) result.warnings.push(`The thing "${name}": layer should be a name.`)
+            const rules = textList(entry, 'rules', `The thing "${name}"`)
+            if (rules.length > 0) thing.rules = rules
+            result.concepts.things[name] = thing
+        }
+
+        const operations = IsObject(raw.operations) ? raw.operations : {}
+        if (raw.operations !== undefined && !IsObject(raw.operations)) result.warnings.push('"concepts.operations" should be an object keyed by name.')
+        for (const [rawName, entry] of Object.entries(operations))
+        {
+            const name = rawName.trim()
+            if (name === '' || !IsObject(entry)) { result.warnings.push(`The operation "${rawName}" should be an object.`); continue }
+            const list = (key: 'files' | 'reads' | 'writes'): string[] =>
+            {
+                const value = entry[key]
+                if (value === undefined) return []
+                if (!Array.isArray(value)) { result.warnings.push(`The operation "${name}" should list its ${key}.`); return [] }
+                const kept: string[] = []
+                for (const item of value)
+                {
+                    if (typeof item !== 'string') continue
+                    if (key === 'files' && !exists.has(item)) { result.warnings.push(`The operation "${name}" names "${item}", which is not a file in the repository.`); continue }
+                    if (key !== 'files' && result.concepts.things[item] === undefined) { result.warnings.push(`The operation "${name}" ${key} "${item}", which is not a declared thing.`); continue }
+                    if (!kept.includes(item)) kept.push(item)
+                }
+                return kept
+            }
+            const operation: IOperation = { files: list('files'), reads: list('reads'), writes: list('writes'), steps: [], rules: textList(entry, 'rules', `The operation "${name}"`) }
+            if (Array.isArray(entry.steps))
+            {
+                for (const step of entry.steps)
+                {
+                    if (!IsObject(step) || typeof step.text !== 'string' || step.text.trim() === '') { result.warnings.push(`A step of the operation "${name}" should be an object with text.`); continue }
+                    const stepFiles: string[] = []
+                    for (const item of Array.isArray(step.files) ? step.files : [])
+                    {
+                        if (typeof item !== 'string') continue
+                        if (!exists.has(item)) { result.warnings.push(`A step of the operation "${name}" names "${item}", which is not a file in the repository.`); continue }
+                        if (!stepFiles.includes(item)) stepFiles.push(item)
+                    }
+                    operation.steps.push({ text: step.text.trim().slice(0, MaxSummary), files: stepFiles })
+                    // A step's files are evidence, so the operation holds them too.
+                    for (const item of stepFiles) if (!operation.files.includes(item)) operation.files.push(item)
+                }
+            }
+            else if (entry.steps !== undefined) result.warnings.push(`The operation "${name}" should list its steps.`)
+            const summary = summaryOf(entry, `The operation "${name}"`)
+            if (summary !== undefined) operation.summary = summary
+            result.concepts.operations[name] = operation
+        }
     }
 
     /**
@@ -257,7 +397,7 @@ export class Architecture
         {
             throw new Error(`${ArchitecturePath} cannot be changed until it is fixed: ${(error as Error).message}`)
         }
-        const { layers: oldLayers, systems: oldSystems, files: oldFiles, folders: oldFolders, ...others } = raw
+        const { layers: oldLayers, systems: oldSystems, files: oldFiles, folders: oldFolders, concepts: oldConcepts, ...others } = raw
         let layers = Array.isArray(oldLayers) ? oldLayers.filter((layer): layer is string => typeof layer === 'string') : []
         const systems: Record<string, Record<string, unknown>> = {}
         if (typeof oldSystems === 'object' && oldSystems !== null && !Array.isArray(oldSystems))
@@ -280,6 +420,16 @@ export class Architecture
             for (const [path, entry] of Object.entries(oldFolders)) if (typeof entry === 'object' && entry !== null && !Array.isArray(entry)) folders[path] = { ...entry }
         }
 
+        const concepts = { things: {} as Record<string, Record<string, unknown>>, operations: {} as Record<string, Record<string, unknown>> }
+        if (IsObject(oldConcepts))
+        {
+            for (const kind of ['things', 'operations'] as const)
+            {
+                const section = oldConcepts[kind]
+                if (IsObject(section)) for (const [name, entry] of Object.entries(section)) if (IsObject(entry)) concepts[kind][name] = { ...entry }
+            }
+        }
+
         // Then we apply the change in memory, collecting every problem rather than stopping at the first.
         const exists = new Set(known)
         const problems: string[] = []
@@ -290,7 +440,11 @@ export class Architecture
             if (files[from] === undefined) problems.push(`Cannot rename "${from}": it has no entry.`)
             else if (!exists.has(to)) problems.push(`Cannot rename "${from}" to "${to}": "${to}" is not a file in the repository.`)
             else if (files[to] !== undefined) problems.push(`Cannot rename "${from}" to "${to}": "${to}" already has an entry.`)
-            else { files[to] = files[from]!; delete files[from] }
+            else
+            {
+                files[to] = files[from]!; delete files[from]
+                for (const operation of Object.values(concepts.operations)) Architecture.RenameInOperation(operation, from, to)
+            }
         }
 
         for (const path of patch.forget ?? [])
@@ -401,10 +555,11 @@ export class Architecture
             else if (summary.length > MaxSummary) problems.push(`"${path}": summary is over ${MaxSummary} characters.`)
             else folders[path] = { ...folders[path], summary: summary.trim() }
         }
+        Architecture.ApplyConcepts(patch.concepts, concepts, layers, exists, problems)
         if (problems.length > 0) throw new Error(problems.join('\n'))
 
         // Finally we write it whole, so a reader never sees half of it.
-        await JsonStore.WriteAsync(root, ArchitecturePath, Architecture.Serialize(layers, systems, files, folders, others))
+        await JsonStore.WriteAsync(root, ArchitecturePath, Architecture.Serialize(layers, systems, files, folders, concepts, others))
         return { architecture: await Architecture.ReadAsync(root, known), notes }
     }
 
@@ -416,7 +571,7 @@ export class Architecture
      * @param folders each folder's entry, by path
      * @param others any other top-level fields the file had, which are kept
      */
-    private static Serialize(layers: readonly string[], systems: Record<string, Record<string, unknown>>, files: Record<string, Record<string, unknown>>, folders: Record<string, Record<string, unknown>>, others: Record<string, unknown>): string
+    private static Serialize(layers: readonly string[], systems: Record<string, Record<string, unknown>>, files: Record<string, Record<string, unknown>>, folders: Record<string, Record<string, unknown>>, concepts: { things: Record<string, Record<string, unknown>>, operations: Record<string, Record<string, unknown>> }, others: Record<string, unknown>): string
     {
         const order = ['system', 'layer', 'tags', 'summary']
         const section = (entries: Record<string, Record<string, unknown>>, declared = false): string =>
@@ -438,8 +593,9 @@ export class Architecture
         // Systems keep the order they were declared in, so the map's deck of cards stays stable.
         const systemSection = Object.keys(systems).length === 0 ? '' : `,\n  "systems": ${section(systems, true)}`
         const folderSection = Object.keys(folders).length === 0 ? '' : `,\n  "folders": ${section(folders)}`
+        const conceptSection = Object.keys(concepts.things).length + Object.keys(concepts.operations).length === 0 ? '' : `,\n  "concepts": ${Architecture.ConceptsBlock(concepts)}`
         const extra = Object.entries(others).map(([key, value]) => `,\n  ${JSON.stringify(key)}: ${JSON.stringify(value, null, 2).replace(/\n/g, '\n  ')}`).join('')
-        return `{\n  "layers": ${Architecture.Inline(layers)}${systemSection},\n  "files": ${section(files)}${folderSection}${extra}\n}\n`
+        return `{\n  "layers": ${Architecture.Inline(layers)}${systemSection},\n  "files": ${section(files)}${folderSection}${conceptSection}${extra}\n}\n`
     }
 
     /**
@@ -493,6 +649,8 @@ export class Architecture
             }
         }
 
+        if (patch.concepts !== undefined) problems.push(...Architecture.ConceptShapeProblems(patch.concepts as IConceptsPatch))
+
         if (patch.renames !== undefined && (!Array.isArray(patch.renames) || patch.renames.some((rename) => !IsObject(rename) || typeof rename.from !== 'string' || typeof rename.to !== 'string')))
             problems.push('"renames" must be a list of {"from", "to"} paths.')
 
@@ -500,6 +658,180 @@ export class Architecture
             problems.push('"forget" must be a list of paths.')
 
         return problems
+    }
+
+    private static RenameInOperation(operation: Record<string, unknown>, from: string, to: string): void
+    {
+        const swap = (list: unknown): unknown => Array.isArray(list) ? list.map((item) => (item === from ? to : item)) : list
+        if (operation.files !== undefined) operation.files = swap(operation.files)
+        if (Array.isArray(operation.steps))
+            operation.steps = operation.steps.map((step) => (IsObject(step) && step.files !== undefined ? { ...step, files: swap(step.files) } : step))
+    }
+
+    private static ConceptShapeProblems(change: IConceptsPatch): string[]
+    {
+        if (!IsObject(change)) return ['"concepts" must be an object with "things" and "operations".']
+        const problems: string[] = []
+        const isText = (value: unknown): boolean => value === undefined || value === null || typeof value === 'string'
+        const isTextList = (value: unknown): boolean => value === undefined || value === null || (Array.isArray(value) && value.every((item) => typeof item === 'string'))
+        for (const kind of ['things', 'operations'] as const)
+        {
+            const section = change[kind]
+            if (section === undefined) continue
+            if (!IsObject(section)) { problems.push(`"concepts.${kind}" must be an object keyed by name.`); continue }
+            for (const [name, entry] of Object.entries(section))
+            {
+                if (entry === null) continue
+                if (!IsObject(entry)) { problems.push(`The ${kind === 'things' ? 'thing' : 'operation'} "${name}" must be an object, or null to remove it.`); continue }
+                const fields = entry as Record<string, unknown>
+                if (!isText(fields.summary)) problems.push(`"${name}": summary must be text.`)
+                if (!isTextList(fields.rules)) problems.push(`"${name}": rules must be a list of text.`)
+                if (kind === 'things')
+                {
+                    if (!isText(fields.layer)) problems.push(`"${name}": layer must be a layer name.`)
+                    continue
+                }
+                for (const key of ['files', 'reads', 'writes']) if (!isTextList(fields[key])) problems.push(`"${name}": ${key} must be a list of text.`)
+                const steps = fields.steps
+                if (steps === undefined || steps === null) continue
+                if (!Array.isArray(steps)) { problems.push(`"${name}": steps must be a list of {"text", "files"}.`); continue }
+                for (const step of steps)
+                    if (!IsObject(step) || typeof step.text !== 'string' || !isTextList(step.files) || step.files === null) problems.push(`"${name}": each step needs "text" and an optional list of "files".`)
+            }
+        }
+        return problems
+    }
+
+    private static ApplyConcepts(change: IConceptsPatch | undefined, concepts: { things: Record<string, Record<string, unknown>>, operations: Record<string, Record<string, unknown>> }, layers: readonly string[], exists: ReadonlySet<string>, problems: string[]): void
+    {
+        if (change === undefined) return
+        const removedThings = new Set<string>()
+        const touched = new Set<string>()
+
+        const rulesOf = (name: string, value: string[], into: Record<string, unknown>): void =>
+        {
+            const rules = value.map((rule) => rule.trim())
+            if (rules.some((rule) => rule === '' || rule.length > MaxSummary)) problems.push(`"${name}": each rule needs 1 to ${MaxSummary} characters.`)
+            else if (rules.length === 0) delete into.rules
+            else into.rules = rules
+        }
+        const summaryOf = (name: string, value: string | null, into: Record<string, unknown>): void =>
+        {
+            if (value === null || value.trim() === '') delete into.summary
+            else if (value.length > MaxSummary) problems.push(`"${name}": summary is over ${MaxSummary} characters.`)
+            else into.summary = value.trim()
+        }
+
+        for (const [rawName, entry] of Object.entries(change.things ?? {}))
+        {
+            const name = rawName.trim()
+            if (name === '') { problems.push('A thing needs a non-empty name.'); continue }
+            if (entry === null)
+            {
+                if (name in concepts.things) removedThings.add(name)
+                else problems.push(`Cannot remove the thing "${name}": it is not declared.`)
+                delete concepts.things[name]
+                continue
+            }
+            const thing = concepts.things[name] ?? {}
+            if (entry.summary !== undefined) summaryOf(name, entry.summary, thing)
+            if (entry.layer !== undefined)
+            {
+                if (entry.layer === null) delete thing.layer
+                else if (!layers.includes(entry.layer)) problems.push(`The thing "${name}": layer "${entry.layer}" is not in layers (${layers.join(', ') || 'none'}).`)
+                else thing.layer = entry.layer
+            }
+            if (entry.rules !== undefined) { if (entry.rules === null) delete thing.rules; else rulesOf(name, entry.rules, thing) }
+            concepts.things[name] = thing
+        }
+
+        for (const [rawName, entry] of Object.entries(change.operations ?? {}))
+        {
+            const name = rawName.trim()
+            if (name === '') { problems.push('An operation needs a non-empty name.'); continue }
+            if (entry === null)
+            {
+                if (!(name in concepts.operations)) problems.push(`Cannot remove the operation "${name}": it is not declared.`)
+                delete concepts.operations[name]
+                continue
+            }
+            touched.add(name)
+            const operation = concepts.operations[name] ?? {}
+            if (entry.summary !== undefined) summaryOf(name, entry.summary, operation)
+            if (entry.files !== undefined)
+            {
+                if (entry.files === null || entry.files.length === 0) delete operation.files
+                else
+                {
+                    for (const path of entry.files) if (!exists.has(path)) problems.push(`The operation "${name}": "${path}" is not a file in the repository.`)
+                    operation.files = [...new Set(entry.files)]
+                }
+            }
+            for (const key of ['reads', 'writes'] as const)
+            {
+                const value = entry[key]
+                if (value === undefined) continue
+                if (value === null || value.length === 0) delete operation[key]
+                else operation[key] = [...new Set(value)]
+            }
+            if (entry.steps !== undefined)
+            {
+                if (entry.steps === null || entry.steps.length === 0) delete operation.steps
+                else
+                {
+                    const steps: Array<{ text: string, files: string[] }> = []
+                    for (const step of entry.steps)
+                    {
+                        const text = step.text.trim()
+                        if (text === '' || text.length > MaxSummary) { problems.push(`The operation "${name}": each step needs text of 1 to ${MaxSummary} characters.`); continue }
+                        const stepFiles = [...new Set(step.files ?? [])]
+                        for (const path of stepFiles) if (!exists.has(path)) problems.push(`The operation "${name}": step "${text.slice(0, 40)}" names "${path}", which is not a file in the repository.`)
+                        steps.push({ text, files: stepFiles })
+                    }
+                    operation.steps = steps
+                }
+            }
+            if (entry.rules !== undefined) { if (entry.rules === null) delete operation.rules; else rulesOf(name, entry.rules, operation) }
+            concepts.operations[name] = operation
+        }
+
+        // A thing an operation still reads or writes cannot go; and an operation this change touched may only name declared things.
+        for (const [name, operation] of Object.entries(concepts.operations))
+        {
+            for (const key of ['reads', 'writes'] as const)
+            {
+                for (const item of Array.isArray(operation[key]) ? operation[key] as unknown[] : [])
+                {
+                    if (typeof item !== 'string' || item in concepts.things) continue
+                    if (removedThings.has(item)) problems.push(`Cannot remove the thing "${item}": the operation "${name}" still ${key === 'reads' ? 'reads' : 'writes'} it.`)
+                    else if (touched.has(name)) problems.push(`The operation "${name}" ${key === 'reads' ? 'reads' : 'writes'} "${item}", which is not a declared thing.`)
+                }
+            }
+        }
+    }
+
+    private static ConceptsBlock(concepts: { things: Record<string, Record<string, unknown>>, operations: Record<string, Record<string, unknown>> }): string
+    {
+        const order = ['summary', 'layer', 'reads', 'writes', 'files', 'steps', 'rules']
+        const entryText = (entry: Record<string, unknown>): string =>
+        {
+            const keys = [...order.filter((key) => key in entry), ...Object.keys(entry).filter((key) => !order.includes(key))]
+            if (keys.length === 0) return '{}'
+            const value = (key: string): string =>
+            {
+                const item = entry[key]
+                if ((key === 'steps' || key === 'rules') && Array.isArray(item) && item.length > 0)
+                    return `[\n${item.map((one) => `          ${IsObject(one) ? `{ "text": ${JSON.stringify(one.text)}, "files": ${Architecture.Inline(one.files ?? [])} }` : JSON.stringify(one)}`).join(',\n')}\n        ]`
+                return Architecture.Inline(item)
+            }
+            return `{\n${keys.map((key) => `        ${JSON.stringify(key)}: ${value(key)}`).join(',\n')}\n      }`
+        }
+        const section = (entries: Record<string, Record<string, unknown>>): string =>
+        {
+            const lines = Object.entries(entries).map(([name, entry]) => `      ${JSON.stringify(name)}: ${entryText(entry)}`)
+            return lines.length === 0 ? '{}' : `{\n${lines.join(',\n')}\n    }`
+        }
+        return `{\n    "things": ${section(concepts.things)},\n    "operations": ${section(concepts.operations)}\n  }`
     }
 
     /**

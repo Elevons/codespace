@@ -1,6 +1,6 @@
 import { S, camera, canvas, DEFAULT_ALPHA, filePath, frameBlock, frameFile, frameFolder, glow, hasFilters, isFileVisible, matchesTagFilter, render, renderEdges, fileIndex, pathIndex, sliceValue } from "./state.js";
 import { api } from "./endpoint.js";
-import { build } from "./city.js";
+import { build, restack } from "./city.js";
 import { centerView, recenterTarget, pulseFile } from "./meshes.js";
 import { collapseAllOutliner, folderNode, select, selectFile, setOutlinerFocus, openSymbol, openFile, renderOutliner, renderSelection, revealOutliner, sliceSet, toggleFileSelection, toggleFold } from "./panels.js";
 import { buildChanged, loadGraph } from "./repo.js";
@@ -38,7 +38,7 @@ async function refreshGraph(force = false): Promise<void>
       JSON.stringify([...graph.tags]) + JSON.stringify([...graph.summaries]) + JSON.stringify([...graph.layers]) +
       JSON.stringify([...graph.systems]) + JSON.stringify(graph.systemOrder) +
       JSON.stringify([...graph.symbols]) + JSON.stringify([...graph.changes]) +
-      JSON.stringify(graph.layerOrder) + JSON.stringify(graph.notes) +
+      JSON.stringify(graph.layerOrder) + JSON.stringify(graph.notes) + JSON.stringify(graph.concepts) +
       ":" + S.undescribed;
     if (signature === S.graphSignature) return;
     S.graphSignature = signature;
@@ -61,6 +61,7 @@ async function refreshGraph(force = false): Promise<void>
     S.FILE_SYMBOLS = graph.symbols;
     S.FILE_CHANGES = graph.changes;
     S.ARCH_NOTES = graph.notes;
+    S.CONCEPTS = graph.concepts;
     S.LAYERS = graph.layerOrder !== null ? graph.layerOrder : [...new Set(graph.layers.values())].sort();
     spreadSlider.value = String(S.layerGap);
     spreadCaption.hidden = spreadSlider.hidden = S.LAYERS.length === 0;
@@ -347,7 +348,7 @@ document.addEventListener("keydown", (event) =>
     return;
   }
   if (event.key === "/") { event.preventDefault(); openSearch(); return; }
-  if (event.key === " ") { event.preventDefault(); setSpin(!S.autoSpin); return; }
+  if (event.key === " ") { event.preventDefault(); window.dispatchEvent(new Event("codespace:concept-zoom")); return; }
   if (event.key === "r" || event.key === "R") { resetView(); return; }
   if (event.key === "f" || event.key === "F") { frameSelection(); return; }
   if (event.key === "[") { stepFile(-1); return; }
@@ -364,7 +365,8 @@ document.addEventListener("keydown", (event) =>
 /* ------------------------------------------------- bottom controls ---- */
 
 // The spread slider: the gap between layer planes. It only shows when the repository has layers.
-// The builds it triggers are heavy, so a burst of slider events redraws once per frame at most.
+// Only heights move with the gap, so it re-stacks the boxes in place instead of rebuilding the
+// city, and a burst of slider events redraws once per frame at most.
 const spreadSlider = document.getElementById("spread") as HTMLInputElement;
 const spreadCaption = document.querySelector('label[for="spread"]') as HTMLElement;
 let spreadFrame = 0;
@@ -375,7 +377,7 @@ spreadSlider.addEventListener("input", () =>
   spreadFrame = requestAnimationFrame(() =>
   {
     spreadFrame = 0;
-    build();
+    restack();
     recenterTarget();
   });
 });
@@ -384,7 +386,10 @@ spreadSlider.addEventListener("input", () =>
 const colorSelect = document.getElementById("colorby") as HTMLSelectElement;
 colorSelect.addEventListener("change", () =>
 {
+  const before = S.colorBy;
   S.colorBy = colorSelect.value as ColorBy;
+  // Choosing History here opens its tab, which reads the commits it colours by.
+  if (S.colorBy === "history" && before !== "history") window.dispatchEvent(new CustomEvent("codespace:open-history", { detail: before }));
   render();
 });
 
