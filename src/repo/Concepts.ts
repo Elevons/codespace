@@ -7,18 +7,26 @@ import type { Repo } from './Repo.ts'
 
 export const DefaultConceptsSize = 8
 
-const MaxSourceChars = 24_000
-const MinFileSourceChars = 2_000
-const MaxFileSourceChars = 8_000
-const MaxExcerptChars = 2_500
-const MaxCandidates = 60
+// Budgets keep every response comfortably under host tool caps (e.g. 40 KB) even on large repos.
+const MaxBatchSourceChars = 12_000
+const MinFileSourceChars = 400
+const MaxFileSourceChars = 5_000
+const MaxEntrySourceTotal = 4_000
+const MaxEntryExcerptChars = 1_200
+const MaxEntryFiles = 4
+const MaxOperationsPerBatch = 3
+const MaxFilesPerOperation = 8
+const MaxCandidates = 35
 const MaxCandidatesPerFile = 8
-const MaxThingCandidates = 15
-const MaxThingLinks = 6
-const MaxOverviewFiles = 150
-const MaxReaches = 20
-const MaxNearby = 16
-const MaxUncoveredImportsPerOp = 8
+const MaxThingCandidates = 8
+const MaxThingLinks = 3
+const MaxOverviewFolders = 30
+const MaxOverviewFiles = 50
+const MaxOverviewSummaryChars = 90
+const MaxFileLinks = 16
+const MaxReaches = 10
+const MaxNearby = 8
+const MaxUncoveredImportsPerOp = 6
 const MinAppFilesForCoverageCheck = 8
 const MinCoverageRatio = 0.6
 const MinSystemFilesForCoverageCheck = 3
@@ -173,6 +181,12 @@ const Finders: Array<{ kind: IConceptCandidate['kind'], pattern: RegExp, test: (
     { kind: 'handler', pattern: /^\s*(?:pub\s+)?(?:async\s+)?fn\s+(main|run|tick|step|update|execute|simulate|process|handle)\s*\(/g, test: (path) => path.endsWith('.rs') },
 ]
 
+function ShortSummary(text: string | undefined, cap = MaxOverviewSummaryChars): string
+{
+    if (text === undefined || text.length <= cap) return text ?? ''
+    return text.slice(0, cap - 1).trimEnd() + '…'
+}
+
 export function IsAppFile(path: string, entry?: { layer?: string, tags?: string[] }): boolean
 {
     if (SkippedSummary(path) !== null) return false
@@ -264,7 +278,7 @@ function OverviewFile(path: string, architecture: IArchitecture, appImports: Rea
         system: entry?.system ?? '',
         layer: entry?.layer ?? '',
         tags: entry?.tags ?? [],
-        summary: entry?.summary ?? '',
+        summary: ShortSummary(entry?.summary),
         imports: (appImports.get(path) ?? []).length,
         usedBy: (appUsedBy.get(path) ?? []).length,
     }
@@ -287,7 +301,7 @@ function BuildOverview(architecture: IArchitecture, appFiles: readonly string[],
     const systemLayers = new Map<string, Set<string>>()
     for (const [name, entry] of Object.entries(architecture.systems))
     {
-        systems[name] = { summary: entry.summary ?? '', files: 0, layers: [] }
+        systems[name] = { summary: ShortSummary(entry.summary, 140), files: 0, layers: [] }
         systemLayers.set(name, new Set())
     }
     const folderCounts = new Map<string, number>()
@@ -305,9 +319,13 @@ function BuildOverview(architecture: IArchitecture, appFiles: readonly string[],
         if (folder !== '') folderCounts.set(folder, (folderCounts.get(folder) ?? 0) + 1)
     }
     for (const [name, layers] of systemLayers) systems[name]!.layers = architecture.layers.filter((layer) => layers.has(layer))
-    const folders = [...folderCounts.entries()]
+    const allFolders = [...folderCounts.entries()]
+    const keptFolders = allFolders.length <= MaxOverviewFolders
+        ? allFolders
+        : [...allFolders].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, MaxOverviewFolders)
+    const folders = keptFolders
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([path, files]) => ({ path, summary: architecture.folders[path] ?? '', files }))
+        .map(([path, files]) => ({ path, summary: ShortSummary(architecture.folders[path]), files }))
     const files = allFiles.length <= MaxOverviewFiles
         ? allFiles
         : [...allFiles].sort((a, b) => FilePriority(b) - FilePriority(a) || a.path.localeCompare(b.path))
@@ -350,7 +368,7 @@ function FindThingCandidates(architecture: IArchitecture, appFiles: readonly str
         scored.push({
             score,
             candidate: {
-                path, layer, system: entry?.system ?? '', tags, summary,
+                path, layer, system: entry?.system ?? '', tags, summary: ShortSummary(summary),
                 usedByCount: usedBy.length,
                 usedBy: usedBy.slice(0, MaxThingLinks),
                 imports: imports.slice(0, MaxThingLinks),
@@ -403,7 +421,7 @@ export function ReviewConcepts(architecture: IArchitecture, graph: Graph, known:
         .filter((path) => !coveredSet.has(path))
         .map((path) => OverviewFile(path, architecture, appImports, appUsedBy))
         .sort((a, b) => FilePriority(b) - FilePriority(a) || a.path.localeCompare(b.path))
-        .slice(0, Math.max(size, 15))
+        .slice(0, Math.min(Math.max(size, 12), 15))
 
     const systemCounts = new Map<string, { total: number, covered: number }>()
     for (const path of appFiles)
@@ -418,7 +436,7 @@ export function ReviewConcepts(architecture: IArchitecture, graph: Graph, known:
     const uncoveredSystems = [...systemCounts.entries()]
         .filter(([, counts]) => counts.total >= MinSystemFilesForCoverageCheck && counts.covered === 0)
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([name, counts]) => ({ name, appFiles: counts.total, summary: architecture.systems[name]?.summary ?? '' }))
+        .map(([name, counts]) => ({ name, appFiles: counts.total, summary: ShortSummary(architecture.systems[name]?.summary) }))
 
     const orphanThings: string[] = []
     const externalInputs: string[] = []
@@ -512,14 +530,15 @@ export function ReviewConcepts(architecture: IArchitecture, graph: Graph, known:
     }
     overlaps.sort((a, b) => b.similarity - a.similarity || a.operations[0].localeCompare(b.operations[0]))
 
+    const reviewLimit = Math.min(size, 6)
     return {
         coverage: { appFiles: appFiles.length, coveredFiles, ratio, uncovered, uncoveredSystems },
         orphanThings,
         externalInputs,
         finalOutputs,
-        overlaps: overlaps.slice(0, size),
-        divergences: divergences.slice(0, size),
-        issues: issues.slice(0, Math.max(size * 2, 20)),
+        overlaps: overlaps.slice(0, reviewLimit),
+        divergences: divergences.slice(0, reviewLimit),
+        issues: issues.slice(0, Math.min(Math.max(size * 2, 16), 20)),
         blocking,
     }
 }
@@ -531,21 +550,21 @@ export async function ConceptsNextAsync(repo: Repo, architecture: IArchitecture,
     const appSet = new Set(appFiles)
     const { usedBy, appImports, appUsedBy } = BuildGraphIndex(graph, appSet)
 
-    const describe = async (path: string, cap: number): Promise<IConceptFile> =>
+    const describe = async (path: string, cap: number, includeReaches: boolean): Promise<IConceptFile> =>
     {
         const full = await repo.ReadFileAsync(path).catch(() => '')
         const entry = architecture.files[path]
         return {
             path,
-            summary: entry?.summary ?? '',
+            summary: ShortSummary(entry?.summary),
             layer: entry?.layer ?? '',
             system: entry?.system ?? '',
             tags: entry?.tags ?? [],
             source: full.slice(0, cap),
             truncated: full.length > cap,
-            imports: graph.ImportsOf(path),
-            usedBy: usedBy.get(path) ?? [],
-            reaches: ReachesOf(path, appImports),
+            imports: graph.ImportsOf(path).slice(0, MaxFileLinks),
+            usedBy: (usedBy.get(path) ?? []).slice(0, MaxFileLinks),
+            reaches: includeReaches ? ReachesOf(path, appImports) : [],
         }
     }
 
@@ -590,18 +609,20 @@ export async function ConceptsNextAsync(repo: Repo, architecture: IArchitecture,
     const review = hasOperations ? ReviewConcepts(architecture, graph, known, size) : undefined
     const remaining = !hasOperations ? 1 : operationsLeft.length + thingsLeft.length + review!.blocking.length
 
+    // Keep overview near the top of the serialized JSON so it is never clipped if a host truncates long tool replies.
     const batch: IConceptsBatch = {
         mode: 'done',
         remaining,
         guide: ConceptsGuide(cli, repo.Root),
         layers: architecture.layers,
+        overview: undefined,
         things: thingRows,
         thingCandidates: [],
         candidates: [],
         entryFiles: [],
         operations: [],
+        review: undefined,
     }
-    if (review !== undefined) batch.review = review
 
     if (!hasOperations)
     {
@@ -612,11 +633,23 @@ export async function ConceptsNextAsync(repo: Repo, architecture: IArchitecture,
         const seenCandidate = new Set<string>()
         const pushCandidate = (candidate: IConceptCandidate): void =>
         {
+            if (batch.candidates.length >= MaxCandidates) return
             const key = `${candidate.kind}\u0000${candidate.path}\u0000${candidate.name}`
             if (seenCandidate.has(key)) return
             seenCandidate.add(key)
             batch.candidates.push(candidate)
         }
+
+        const taggedEntries = appFiles.filter((path) => architecture.files[path]?.tags?.includes('entry'))
+        const orchestrators = appFiles.filter((path) => !taggedEntries.includes(path) && architecture.files[path]?.tags?.includes('orchestrate'))
+        const graphRoots = appFiles
+            .filter((path) => !taggedEntries.includes(path) && !orchestrators.includes(path) && (appUsedBy.get(path)?.length ?? 0) === 0 && (appImports.get(path)?.length ?? 0) >= 2)
+            .sort((a, b) => (appImports.get(b)?.length ?? 0) - (appImports.get(a)?.length ?? 0) || a.localeCompare(b))
+
+        // Add structural entry candidates first so high-signal entry points are never crowded out by regex matches.
+        for (const path of taggedEntries.slice(0, 10)) pushCandidate({ kind: 'entry file', name: path, path, line: 1 })
+        for (const path of orchestrators.slice(0, Math.min(size, 6))) pushCandidate({ kind: 'orchestrator', name: path, path, line: 1 })
+        for (const path of graphRoots.slice(0, Math.min(size, 6))) pushCandidate({ kind: 'root', name: path, path, line: 1 })
 
         const matchedFiles = new Set<string>()
         for (const path of appFiles)
@@ -641,11 +674,6 @@ export async function ConceptsNextAsync(repo: Repo, architecture: IArchitecture,
             }
         }
 
-        const taggedEntries = appFiles.filter((path) => architecture.files[path]?.tags?.includes('entry'))
-        const orchestrators = appFiles.filter((path) => !taggedEntries.includes(path) && architecture.files[path]?.tags?.includes('orchestrate'))
-        const graphRoots = appFiles
-            .filter((path) => !taggedEntries.includes(path) && !orchestrators.includes(path) && (appUsedBy.get(path)?.length ?? 0) === 0 && (appImports.get(path)?.length ?? 0) >= 2)
-            .sort((a, b) => (appImports.get(b)?.length ?? 0) - (appImports.get(a)?.length ?? 0) || a.localeCompare(b))
         const fallbacks = appFiles
             .filter((path) => !taggedEntries.includes(path) && !orchestrators.includes(path) && !graphRoots.includes(path))
             .sort((a, b) =>
@@ -653,24 +681,27 @@ export async function ConceptsNextAsync(repo: Repo, architecture: IArchitecture,
                 || (appImports.get(b)?.length ?? 0) - (appImports.get(a)?.length ?? 0)
                 || a.localeCompare(b))
 
-        for (const path of taggedEntries) pushCandidate({ kind: 'entry file', name: path, path, line: 1 })
-        for (const path of orchestrators.slice(0, size)) pushCandidate({ kind: 'orchestrator', name: path, path, line: 1 })
-        for (const path of graphRoots.slice(0, size)) pushCandidate({ kind: 'root', name: path, path, line: 1 })
-
-        const chosenEntries = [...taggedEntries, ...orchestrators, ...graphRoots, ...fallbacks].slice(0, size)
-        for (const path of chosenEntries) batch.entryFiles.push(await describe(path, MaxExcerptChars))
+        const chosenEntries = [...taggedEntries, ...orchestrators, ...graphRoots, ...fallbacks].slice(0, Math.min(size, MaxEntryFiles))
+        const excerptCap = chosenEntries.length === 0
+            ? MaxEntryExcerptChars
+            : Math.max(MinFileSourceChars, Math.min(MaxEntryExcerptChars, Math.floor(MaxEntrySourceTotal / chosenEntries.length)))
+        for (const path of chosenEntries) batch.entryFiles.push(await describe(path, excerptCap, true))
         return batch
     }
 
     if (operationsLeft.length > 0)
     {
         batch.mode = 'operations'
-        for (const row of operationsLeft.slice(0, size))
+        const selected = operationsLeft.slice(0, Math.min(size, MaxOperationsPerBatch))
+        const totalFiles = selected.reduce((sum, row) => sum + Math.min(MaxFilesPerOperation, row.operation.files.length), 0)
+        const perFile = totalFiles === 0
+            ? MaxFileSourceChars
+            : Math.max(MinFileSourceChars, Math.min(MaxFileSourceChars, Math.floor(MaxBatchSourceChars / totalFiles)))
+        for (const row of selected)
         {
-            const opFiles = row.operation.files.slice(0, 12)
-            const perFile = opFiles.length === 0 ? MaxFileSourceChars : Math.max(MinFileSourceChars, Math.min(MaxFileSourceChars, Math.floor(MaxSourceChars / opFiles.length)))
+            const opFiles = row.operation.files.slice(0, MaxFilesPerOperation)
             const files: IConceptFile[] = []
-            for (const path of opFiles) files.push(await describe(path, perFile))
+            for (const path of opFiles) files.push(await describe(path, perFile, false))
 
             const inOp = new Set(row.operation.files)
             const nearbyMap = new Map<string, 'imports' | 'usedBy'>()
@@ -687,7 +718,7 @@ export async function ConceptsNextAsync(repo: Repo, architecture: IArchitecture,
                 .map(([path, relation]) =>
                 {
                     const entry = architecture.files[path]
-                    return { path, relation, layer: entry?.layer ?? '', system: entry?.system ?? '', tags: entry?.tags ?? [], summary: entry?.summary ?? '' }
+                    return { path, relation, layer: entry?.layer ?? '', system: entry?.system ?? '', tags: entry?.tags ?? [], summary: ShortSummary(entry?.summary) }
                 })
 
             const optional: string[] = []
@@ -715,6 +746,7 @@ export async function ConceptsNextAsync(repo: Repo, architecture: IArchitecture,
         return batch
     }
 
+    batch.review = review
     if (review!.blocking.length > 0)
     {
         batch.mode = 'review'

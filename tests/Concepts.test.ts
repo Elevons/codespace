@@ -389,3 +389,64 @@ test('ReviewConcepts blocks on low coverage, uncovered systems, and orphan thing
     }
     finally { await removeTemp(root) }
 })
+
+test('ConceptsNextAsync keeps payloads under 40 KB and serializes overview before entryFiles', async () =>
+{
+    const files: Record<string, string> = {}
+    const archFiles: Record<string, { system: string, layer: string, tags: string[], summary: string }> = {}
+    const body = `${'export const line = "payload padding for large source files"\n'.repeat(120)}`
+    for (let i = 0; i < 70; i++)
+    {
+        const folder = `src/mod${String(i % 35).padStart(2, '0')}`
+        const path = `${folder}/File${i}Store.ts`
+        files[path] = `if (path === '/api/route-${i}') {}\n${body}`
+        archFiles[path] = {
+            system: 'core',
+            layer: i < 10 ? 'entry' : 'data',
+            tags: i < 6 ? ['entry'] : ['data', 'core'],
+            summary: `Handles workflow and stored records for module ${i} with a long enough summary to exercise truncation cleanly.`,
+        }
+    }
+    const root = await makeRepo({
+        ...files,
+        '.codespace/architecture.json': JSON.stringify({
+            layers: ['data', 'entry'],
+            systems: { core: { summary: 'Core system.' } },
+            files: archFiles,
+        }),
+    }, 'codespace-budget-')
+    try
+    {
+        const opened = await Repo.OpenAsync(root)
+        const known = await opened.ListFilesAsync()
+        const graph = await Graph.BuildAsync(opened)
+
+        const candidates = await ConceptsNextAsync(opened, await Architecture.ReadAsync(root, known), graph, 8, 'cli.ts')
+        const candidatesJson = JSON.stringify(candidates)
+        assert.equal(candidates.mode, 'candidates')
+        assert.ok(candidatesJson.indexOf('"overview"') > 0 && candidatesJson.indexOf('"overview"') < candidatesJson.indexOf('"entryFiles"'), 'overview serializes before entryFiles')
+        assert.ok((candidates.overview?.files.length ?? 0) <= 50, 'caps overview files')
+        assert.ok((candidates.overview?.folders.length ?? 0) <= 30, 'caps overview folders')
+        assert.ok(candidates.candidates.length <= 35, 'caps total candidates')
+        assert.ok(candidates.entryFiles.length <= 4, 'caps entry file excerpts')
+        assert.ok(candidatesJson.length < 40_000, `candidates payload ${candidatesJson.length} stays under 40 KB`)
+
+        const allPaths = Object.keys(files)
+        await Architecture.UpdateAsync(root, known, { concepts: {
+            operations: {
+                Op1: { files: allPaths.slice(0, 10) },
+                Op2: { files: allPaths.slice(10, 20) },
+                Op3: { files: allPaths.slice(20, 30) },
+                Op4: { files: allPaths.slice(30, 40) },
+                Op5: { files: allPaths.slice(40, 50) },
+            },
+        } })
+        const operations = await ConceptsNextAsync(opened, await Architecture.ReadAsync(root, known), graph, 8, 'cli.ts')
+        const operationsJson = JSON.stringify(operations)
+        assert.equal(operations.mode, 'operations')
+        assert.equal(operations.operations.length, 3, 'caps operations per batch')
+        assert.equal(operations.review, undefined, 'omits review while operations are still being filled')
+        assert.ok(operationsJson.length < 40_000, `operations payload ${operationsJson.length} stays under 40 KB`)
+    }
+    finally { await removeTemp(root) }
+})
