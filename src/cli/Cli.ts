@@ -39,7 +39,7 @@ const Usage = `Usage: node src/cli/Cli.ts <command> [--repo <folder>]
   next [--size N]            the next files or folders to describe or review, with their source
   refine [--size N]          the second pass, once everything is described: the imports that point up the layers,
                              files that would sit better on another layer or in another system, and layering problems
-  concepts [--size N] [--page N]  the concepts pass: every described file (paged), operations and things
+  concepts [--size N] [--page N]  the concepts pass: every described file (paged), operations and data
                              still missing steps, reads and writes, or a layer, and a review check against the imports
   install                    write the upkeep rules into the repository (a note in AGENTS.md, the rules in .codespace/README.md),
                              so whoever changes the code later keeps its architecture file true

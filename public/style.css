@@ -896,7 +896,7 @@
   #mpane-view #controls input[type="range"] { width: 100%; min-height: 40px; }
   #mpane-view #glow { min-height: 56px; }
 
-  /* The chosen thing, as a strip above the tabs while the map is showing. */
+  /* The chosen datum, as a strip above the tabs while the map is showing. */
   body.phone #mpeek { display: flex; align-items: center; gap: 4px; position: fixed; z-index: 6;
     left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); bottom: calc(var(--tabs-h, 67px) + 8px);
     padding: 4px; background: rgba(22,27,34,.95); border: 1px solid #30363d; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,.45);
@@ -936,7 +936,7 @@ body.no-chat #chat-btn, body.no-chat #chat-panel, body.no-chat #mtabs [data-tab=
 body.no-chat #repo-ingest-run, body.no-chat #repo-ingest-refine, body.no-chat #repo-ingest-saved { display: none !important; }
 body.pinned #repo-form, body.pinned #repo-browse, body.pinned #repo-recent { display: none !important; }
 
-/* The concept zoom: operations and things in place of the city, named by their own labels. */
+/* The concept zoom: operations and data in place of the city, named by their own labels. */
 body.concept-zoom #labels { display: none; }
 #concept-labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
 #concept-labels > * { position: absolute; left: 0; top: 0; white-space: nowrap; }
@@ -946,17 +946,17 @@ body.concept-zoom #labels { display: none; }
 #concept-labels .concept-op:hover { background: rgba(31,41,55,.95); }
 #concept-labels .concept-op small { display: block; font: 400 10px ui-sans-serif, system-ui, sans-serif; color: #9aa7b4; }
 #concept-labels .concept-op.unmapped { border-style: dashed; color: #9aa7b4; }
-#concept-labels .concept-thing { pointer-events: auto; cursor: pointer; padding: 1px 7px; border-radius: 4px; border: 1px solid #6e5a22;
+#concept-labels .concept-data { pointer-events: auto; cursor: pointer; padding: 1px 7px; border-radius: 4px; border: 1px solid #6e5a22;
   font: 11px ui-sans-serif, system-ui, sans-serif; color: #e3b341; background: rgba(13,17,23,.78); }
-#concept-labels .concept-thing:hover, #concept-labels .concept-thing.chosen { background: rgba(53,42,12,.95); color: #f2cc60; }
-#concept-labels .concept-thing.faded { opacity: .3; }
+#concept-labels .concept-data:hover, #concept-labels .concept-data.chosen { background: rgba(53,42,12,.95); color: #f2cc60; }
+#concept-labels .concept-data.faded { opacity: .3; }
 #concept-hint { position: fixed; left: 50%; top: 60px; transform: translateX(-50%); padding: 8px 12px; border-radius: 6px;
   background: rgba(13,17,23,.92); color: #e6edf3; font: 13px ui-sans-serif, system-ui, sans-serif; z-index: 50; }
 #concept-labels .concept-op.faded { opacity: .35; }
 #concept-leaders { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 4; }
 #concept-leaders line { stroke-width: 1; opacity: .5; }
 #concept-leaders line.hot { stroke-width: 2; opacity: 1; }
-#concept-list { position: fixed; left: 346px; top: 14px; width: 250px; max-height: calc(100vh - 140px); overflow: auto; z-index: 5;
+#concept-list { position: fixed; left: 388px; top: 14px; width: 250px; max-height: calc(100vh - 140px); overflow: auto; z-index: 5;
   padding: 10px; border-radius: 8px; background: rgba(13,17,23,.92); border: 1px solid #30363d; color: #c9d1d9;
   font: 12px ui-sans-serif, system-ui, sans-serif; }
 #concept-list header { display: flex; align-items: center; gap: 6px; }
@@ -968,7 +968,7 @@ body.concept-zoom #labels { display: none; }
 #concept-list h4 { margin: 0 0 4px; font: 600 10px ui-sans-serif, system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #7d8a97; }
 #concept-list .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 #concept-list .chip { padding: 1px 7px; border-radius: 10px; font-size: 11px; }
-#concept-list .chip.thing { color: #e3b341; border-color: #6e5a22; }
+#concept-list .chip.datum { color: #e3b341; border-color: #6e5a22; }
 #concept-list ol { margin: 0; padding: 0; list-style: none; counter-reset: step; }
 #concept-list ol > li { counter-increment: step; position: relative; padding: 4px 6px 4px 22px; border-radius: 4px; cursor: pointer; color: #c9d1d9; }
 #concept-list ol > li::before { content: counter(step); position: absolute; left: 6px; top: 4px; font-size: 10px; color: #7d8a97; }
@@ -991,14 +991,14 @@ body.concept-zoom #labels { display: none; }
 #concept-list .index-op.unmapped { border-left-style: dashed; color: #9aa7b4; }
 body.phone #concept-labels .concept-op { font-size: 11px; padding: 2px 7px; max-width: 42vw; overflow: hidden; text-overflow: ellipsis; }
 body.phone #concept-labels .concept-op small { display: none; }
-body.phone #concept-labels .concept-thing { font-size: 10px; padding: 1px 5px; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; }
+body.phone #concept-labels .concept-data { font-size: 10px; padding: 1px 5px; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; }
 body.phone #concept-list { left: max(6px, env(safe-area-inset-left)); right: max(6px, env(safe-area-inset-right)); top: auto; width: auto;
   bottom: calc(var(--tabs-h, 67px) + 6px); max-height: 46dvh; font-size: 13px; border-radius: 14px; }
 body.phone #concept-list.index { padding: 6px; }
 body.phone #concept-list button { min-height: 36px; }
 body.phone #concept-leaders { display: none; }
 
-#concept-labels .concept-thing small { display: block; font: 400 9px ui-sans-serif, system-ui, sans-serif; color: #a8853a; }
+#concept-labels .concept-data small { display: block; font: 400 9px ui-sans-serif, system-ui, sans-serif; color: #a8853a; }
 #concept-key { position: fixed; left: 14px; bottom: 150px; z-index: 4; max-width: 300px; padding: 8px 10px; border-radius: 8px; pointer-events: none;
   background: rgba(13,17,23,.85); border: 1px solid #30363d; color: #9aa7b4; font: 11px/1.5 ui-sans-serif, system-ui, sans-serif; }
 #concept-key[hidden] { display: none; }
@@ -1008,5 +1008,5 @@ body.phone #concept-leaders { display: none; }
 #concept-key i.op { border: 1px solid #8b98a8; border-radius: 3px; }
 #concept-key i.read, #concept-key i.write { height: 0; border-top: 2px dashed #8b98a8; vertical-align: 3px; }
 #concept-key i.write { border-top-style: solid; }
-body.phone #concept-labels .concept-thing small { display: none; }
+body.phone #concept-labels .concept-data small { display: none; }
 body.phone #concept-key { display: none; }

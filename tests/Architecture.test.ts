@@ -68,7 +68,7 @@ test('Architecture is empty without a file, and says so for a broken one', async
     try
     {
         const absent = await Architecture.ReadAsync(none, ['src/a.ts'])
-        assert.deepEqual(absent, { layers: [], systems: {}, files: {}, folders: {}, concepts: { things: {}, operations: {} }, warnings: [], error: '' })
+        assert.deepEqual(absent, { layers: [], systems: {}, files: {}, folders: {}, concepts: { data: {}, operations: {} }, warnings: [], error: '' })
         assert.match((await Architecture.ReadAsync(broken, ['src/a.ts'])).error, /not valid JSON/)
         assert.match((await Architecture.ReadAsync(wrongShape, ['src/a.ts'])).error, /must be a JSON object/)
     }

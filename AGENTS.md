@@ -41,18 +41,23 @@ The file has:
   notes by name (null removes one; `replaceNotes: true` replaces them all). Every summary and note is at most
   2000 characters.
 - `folders` — keyed by folder path: optional `summary`.
-- `concepts` (optional) — what the code does, above the files: `things` (the data, keyed by name, each with a
-  `summary`) and `operations` (what changes the data, keyed by a plain name such as "Read a repository", each
-  with a `summary`, the `files` it lives in, the things it `reads` and `writes`, ordered plain-word `steps`
-  `{text, files}`, and `rules`; a thing also has the `layer` it is held on, the `files` that hold it (its tables or saved state, drawn in the column of the operation that writes it), and `rules`). Space, or the Concepts
-  button, zooms the map out to them: each operation's files gather into one column, and each thing floats at
-  its layer's height, wired to the operations that read (dashed) and write (solid) it. Clicking an operation
-  opens its process sheet (In, Steps, Out, Rules); a step points at its files. Files no operation names
-  gather under "Not in an operation". `apply` edits the section (merged by name, `null` removes, same
-  validation), and `concepts` hands out the work, like `next`: first every described file, paged (`--page N`),
-  with nothing picked out, so the agent decides what the things and operations are; then the operations and
-  things still missing steps, reads/writes, a layer, or files; then every described file nothing names yet,
-  until each is in an operation's steps or a thing's files; then a review. There is no separate button for
+- `concepts` (optional) — what the code does, above the files: `data` (what is kept or passed, keyed by name)
+  and `operations` (what changes the data, keyed by a plain name such as "Read a repository", each with a
+  `summary`, the `files` it lives in, the data it `reads` and `writes`, ordered plain-word `steps`
+  `{text, files}`, and `rules`). Each data entry has a `summary`, the `layer` it is held on, the few `files` that
+  define or hold it (drawn in a cluster under its hexagon), and `rules`. A file written before the rename that
+  still says `things` is read as `data`, and is rewritten with the new key on the next apply. Space, or the
+  Concepts button, zooms the map out to them: each operation's files gather into one column, and each data
+  entry is a hexagon floating at its layer's height, wired to the operations that read (dashed) and write
+  (solid) it. A key in the corner says which shape is which. Clicking an operation opens its process sheet
+  (In, Steps, Out, Rules); a step points at its files. With nothing chosen the sheet is a folded index of every
+  operation and data entry, since labels that would overlap are hidden. Choosing a file in this view opens its
+  details without leaving it. Files nothing names gather under "Not in an operation". `apply` edits the section
+  (merged by name, `null` removes, same validation), and `concepts` hands out the work, like `next`: first
+  every described file, paged (`--page N`), with nothing picked out, so the agent decides what the data and
+  operations are; then the operations and data still missing steps, reads/writes, a layer, or files; then
+  every described file nothing names yet, until each is in an operation's steps or a data entry's files; then
+  a review. There is no separate button for
   it: Ingest Codebase (and Update Map) writes the files, refines the layers, then runs this pass, and the
   Repo panel's status counts what is left of the design.
 

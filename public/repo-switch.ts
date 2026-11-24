@@ -99,12 +99,12 @@ async function refreshStatus(): Promise<void>
     if (status.incomplete > 0) parts.push(status.incomplete + " to fill in");
     if (status.folders > 0) parts.push(status.folders + (status.folders === 1 ? " folder" : " folders"));
     // Once everything is described, the second pass says how many imports still point up the layers,
-    // and the design pass says what is left of the operations and things, all of which the ingest runs.
+    // and the design pass says what is left of the operations and data, all of which the ingest runs.
     const breaks = refine.breaks;
     const design = status.concepts;
     const designLeft: string[] = [];
     if (design.operations > 0) designLeft.push(design.operations + (design.operations === 1 ? " operation" : " operations"));
-    if (design.things > 0) designLeft.push(design.things + (design.things === 1 ? " thing" : " things"));
+    if (design.data > 0) designLeft.push(design.data + (design.data === 1 ? " data entry" : " data entries"));
     if (design.unplaced > 0) designLeft.push(design.unplaced + (design.unplaced === 1 ? " file to place" : " files to place"));
     const designNote = !design.started
       ? "No operations written yet."

@@ -180,6 +180,6 @@ export interface Graph
 
 export interface Concepts
 {
-    things: Record<string, { summary?: string; layer?: string; files?: string[]; rules?: string[] }>;
+    data: Record<string, { summary?: string; layer?: string; files?: string[]; rules?: string[] }>;
     operations: Record<string, { summary?: string; files: string[]; reads: string[]; writes: string[]; steps: { text: string; files: string[] }[]; rules: string[] }>;
 }

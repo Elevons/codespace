@@ -289,7 +289,7 @@ Every path must be a file in the repository. Use show_flow to draw it on the map
     },
     {
         name: 'ingest_status', method: 'GET', path: '/api/ingest/status', writes: false, parameters: NoArguments,
-        description: 'Returns the number of files and folders that need a description, the number of layer breaks to refine, and what the design pass still needs (whether operations are written, and how many operations and things lack steps, inputs and outputs, or a layer). It also returns the prompt that runs the whole ingest.',
+        description: 'Returns the number of files and folders that need a description, the number of layer breaks to refine, and what the design pass still needs (whether operations are written, and how many operations and data entries lack steps, inputs and outputs, a layer, or files, and how many files nothing names yet). It also returns the prompt that runs the whole ingest.',
     },
     {
         name: 'next', method: 'POST', path: '/api/ingest/next', writes: true,
@@ -315,10 +315,10 @@ The answer has the full architecture file and a list of notes.`,
                 folders: { type: 'object', additionalProperties: SummaryEntry, description: 'The folder summaries, by folder path. Null removes a summary.' },
                 concepts: {
                     type: 'object', additionalProperties: false,
-                    description: 'The things and operations to add, change, or remove, merged by name. Null removes one. A field set to null is removed. A list replaces the old list.',
+                    description: 'The data and operations to add, change, or remove, merged by name. Null removes one. A field set to null is removed. A list replaces the old list.',
                     properties: {
-                        things: { type: 'object', additionalProperties: ConceptEntry, description: 'The data that is kept or passed, by name: summary, layer, and rules.' },
-                        operations: { type: 'object', additionalProperties: ConceptEntry, description: 'What changes data, by name: summary, reads and writes (thing names), steps (each with text and files), files, and rules.' },
+                        data: { type: 'object', additionalProperties: ConceptEntry, description: 'The data that is kept or passed, by name: summary, layer, files (the few that define or hold it), and rules.' },
+                        operations: { type: 'object', additionalProperties: ConceptEntry, description: 'What changes data, by name: summary, reads and writes (data names), steps (each with text and files), files, and rules.' },
                     },
                 },
                 renames: {
@@ -340,7 +340,7 @@ It does not change the architecture file. Read the files that it names. Write th
     {
         name: 'concepts', method: 'GET', path: '/api/concepts', writes: false,
         description: `The concepts pass. When no operations exist, it returns an overview of every described file (system, layer, tags, summary, import counts), paged; read every page before you write the design.
-When operations exist, it returns operations missing steps, step files, reads, or writes (with source and nearby imports), then things missing a layer or files, then the files no operation or thing names yet ("place"), then a review of orphan things, overlaps, import divergences, and issues.
+When operations exist, it returns operations missing steps, step files, reads, or writes (with source and nearby imports), then data missing a layer or files, then the files no operation or data entry names yet ("place"), then a review of orphan data, overlaps, import divergences, and issues.
 It does not change the architecture file. Write the concepts with apply, and then use it again.`,
         parameters: { type: 'object', properties: { size: SizeArgument(DefaultConceptsSize), page: { type: 'integer', minimum: 1, description: 'Which page of the file overview to return; given, the overview is returned at any stage.' } }, additionalProperties: false },
     },

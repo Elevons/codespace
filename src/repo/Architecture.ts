@@ -41,7 +41,7 @@ interface ISystemEntry
     summary?: string
 }
 
-export interface IThing
+export interface IDataEntry
 {
     summary?: string
     layer?: string
@@ -67,11 +67,11 @@ export interface IOperation
 
 export interface IConcepts
 {
-    things: Record<string, IThing>
+    data: Record<string, IDataEntry>
     operations: Record<string, IOperation>
 }
 
-export interface IThingPatch
+export interface IDataPatch
 {
     summary?: string | null
     layer?: string | null
@@ -91,7 +91,7 @@ export interface IOperationPatch
 
 export interface IConceptsPatch
 {
-    things?: Record<string, IThingPatch | null>
+    data?: Record<string, IDataPatch | null>
     operations?: Record<string, IOperationPatch | null>
 }
 
@@ -125,7 +125,7 @@ export interface IArchitecturePatch
         notes?: Record<string, string | null> | null, replaceNotes?: boolean }>
     /** Changes to folder summaries by path. Null removes one. */
     folders?: Record<string, { summary?: string | null }>
-    /** Things and operations to add, change, or remove, merged by name. Null removes one; a field set to null is removed. */
+    /** Data and operations to add, change, or remove, merged by name. Null removes one; a field set to null is removed. */
     concepts?: IConceptsPatch
     /** Entries to move to a new path, for a file that was moved or renamed. Applied first. */
     renames?: Array<{ from: string, to: string }>
@@ -143,6 +143,14 @@ interface IUpdated
 }
 
 /** Reads the one file that says how a repository is laid out: its layers, tags, and summaries. */
+// Data was first called "things": a file or a patch that still says so is read as data.
+function LegacyConcepts(value: unknown): unknown
+{
+    if (!IsObject(value) || value.things === undefined) return value
+    const { things, ...rest } = value
+    return rest.data === undefined ? { ...rest, data: things } : rest
+}
+
 export class Architecture
 {
     /**
@@ -152,7 +160,7 @@ export class Architecture
      */
     public static async ReadAsync(root: string, known: readonly string[]): Promise<IArchitecture>
     {
-        const result: IArchitecture = { layers: [], systems: {}, files: {}, folders: {}, concepts: { things: {}, operations: {} }, warnings: [], error: '' }
+        const result: IArchitecture = { layers: [], systems: {}, files: {}, folders: {}, concepts: { data: {}, operations: {} }, warnings: [], error: '' }
 
         // First we read the file, making sure a link cannot point it outside the repository.
         let text: string | null
@@ -238,9 +246,10 @@ export class Architecture
         return result
     }
 
-    private static ReadConcepts(raw: unknown, exists: ReadonlySet<string>, result: IArchitecture): void
+    private static ReadConcepts(given: unknown, exists: ReadonlySet<string>, result: IArchitecture): void
     {
-        if (!IsObject(raw)) { result.warnings.push('"concepts" should be an object with "things" and "operations".'); return }
+        const raw = LegacyConcepts(given)
+        if (!IsObject(raw)) { result.warnings.push('"concepts" should be an object with "data" and "operations".'); return }
         const summaryOf = (entry: Record<string, unknown>, what: string): string | undefined =>
         {
             if (typeof entry.summary === 'string' && entry.summary.trim() !== '') return entry.summary.trim().slice(0, MaxSummary)
@@ -255,36 +264,36 @@ export class Architecture
             return value.filter((item): item is string => typeof item === 'string' && item.trim() !== '').map((item) => item.trim().slice(0, MaxSummary))
         }
 
-        const things = IsObject(raw.things) ? raw.things : {}
-        if (raw.things !== undefined && !IsObject(raw.things)) result.warnings.push('"concepts.things" should be an object keyed by name.')
-        for (const [rawName, entry] of Object.entries(things))
+        const data = IsObject(raw.data) ? raw.data : {}
+        if (raw.data !== undefined && !IsObject(raw.data)) result.warnings.push('"concepts.data" should be an object keyed by name.')
+        for (const [rawName, entry] of Object.entries(data))
         {
             const name = rawName.trim()
-            if (name === '' || !IsObject(entry)) { result.warnings.push(`The thing "${rawName}" should be an object with a summary.`); continue }
-            const thing: IThing = {}
-            const summary = summaryOf(entry, `The thing "${name}"`)
-            if (summary !== undefined) thing.summary = summary
+            if (name === '' || !IsObject(entry)) { result.warnings.push(`The data "${rawName}" should be an object with a summary.`); continue }
+            const datum: IDataEntry = {}
+            const summary = summaryOf(entry, `The data "${name}"`)
+            if (summary !== undefined) datum.summary = summary
             if (typeof entry.layer === 'string' && entry.layer.trim() !== '')
             {
-                if (result.layers.includes(entry.layer.trim())) thing.layer = entry.layer.trim()
-                else result.warnings.push(`The thing "${name}" is on layer "${entry.layer}", which "layers" does not list.`)
+                if (result.layers.includes(entry.layer.trim())) datum.layer = entry.layer.trim()
+                else result.warnings.push(`The data "${name}" is on layer "${entry.layer}", which "layers" does not list.`)
             }
-            else if (entry.layer !== undefined) result.warnings.push(`The thing "${name}": layer should be a name.`)
+            else if (entry.layer !== undefined) result.warnings.push(`The data "${name}": layer should be a name.`)
             if (Array.isArray(entry.files))
             {
                 const held: string[] = []
                 for (const item of entry.files)
                 {
                     if (typeof item !== 'string') continue
-                    if (!exists.has(item)) { result.warnings.push(`The thing "${name}" names "${item}", which is not a file in the repository.`); continue }
+                    if (!exists.has(item)) { result.warnings.push(`The data "${name}" names "${item}", which is not a file in the repository.`); continue }
                     if (!held.includes(item)) held.push(item)
                 }
-                if (held.length > 0) thing.files = held
+                if (held.length > 0) datum.files = held
             }
-            else if (entry.files !== undefined) result.warnings.push(`The thing "${name}" should list its files.`)
-            const rules = textList(entry, 'rules', `The thing "${name}"`)
-            if (rules.length > 0) thing.rules = rules
-            result.concepts.things[name] = thing
+            else if (entry.files !== undefined) result.warnings.push(`The data "${name}" should list its files.`)
+            const rules = textList(entry, 'rules', `The data "${name}"`)
+            if (rules.length > 0) datum.rules = rules
+            result.concepts.data[name] = datum
         }
 
         const operations = IsObject(raw.operations) ? raw.operations : {}
@@ -303,7 +312,7 @@ export class Architecture
                 {
                     if (typeof item !== 'string') continue
                     if (key === 'files' && !exists.has(item)) { result.warnings.push(`The operation "${name}" names "${item}", which is not a file in the repository.`); continue }
-                    if (key !== 'files' && result.concepts.things[item] === undefined) { result.warnings.push(`The operation "${name}" ${key} "${item}", which is not a declared thing.`); continue }
+                    if (key !== 'files' && result.concepts.data[item] === undefined) { result.warnings.push(`The operation "${name}" ${key} "${item}", which is not declared data.`); continue }
                     if (!kept.includes(item)) kept.push(item)
                 }
                 return kept
@@ -434,12 +443,13 @@ export class Architecture
             for (const [path, entry] of Object.entries(oldFolders)) if (typeof entry === 'object' && entry !== null && !Array.isArray(entry)) folders[path] = { ...entry }
         }
 
-        const concepts = { things: {} as Record<string, Record<string, unknown>>, operations: {} as Record<string, Record<string, unknown>> }
+        const concepts = { data: {} as Record<string, Record<string, unknown>>, operations: {} as Record<string, Record<string, unknown>> }
         if (IsObject(oldConcepts))
         {
-            for (const kind of ['things', 'operations'] as const)
+            const old = LegacyConcepts(oldConcepts) as Record<string, unknown>
+            for (const kind of ['data', 'operations'] as const)
             {
-                const section = oldConcepts[kind]
+                const section = old[kind]
                 if (IsObject(section)) for (const [name, entry] of Object.entries(section)) if (IsObject(entry)) concepts[kind][name] = { ...entry }
             }
         }
@@ -458,7 +468,7 @@ export class Architecture
             {
                 files[to] = files[from]!; delete files[from]
                 for (const operation of Object.values(concepts.operations)) Architecture.RenameInOperation(operation, from, to)
-                for (const thing of Object.values(concepts.things)) Architecture.RenameInOperation(thing, from, to)
+                for (const datum of Object.values(concepts.data)) Architecture.RenameInOperation(datum, from, to)
             }
         }
 
@@ -570,7 +580,7 @@ export class Architecture
             else if (summary.length > MaxSummary) problems.push(`"${path}": summary is over ${MaxSummary} characters.`)
             else folders[path] = { ...folders[path], summary: summary.trim() }
         }
-        Architecture.ApplyConcepts(patch.concepts, concepts, layers, exists, problems)
+        Architecture.ApplyConcepts(LegacyConcepts(patch.concepts) as IConceptsPatch | undefined, concepts, layers, exists, problems)
         if (problems.length > 0) throw new Error(problems.join('\n'))
 
         // Finally we write it whole, so a reader never sees half of it.
@@ -586,7 +596,7 @@ export class Architecture
      * @param folders each folder's entry, by path
      * @param others any other top-level fields the file had, which are kept
      */
-    private static Serialize(layers: readonly string[], systems: Record<string, Record<string, unknown>>, files: Record<string, Record<string, unknown>>, folders: Record<string, Record<string, unknown>>, concepts: { things: Record<string, Record<string, unknown>>, operations: Record<string, Record<string, unknown>> }, others: Record<string, unknown>): string
+    private static Serialize(layers: readonly string[], systems: Record<string, Record<string, unknown>>, files: Record<string, Record<string, unknown>>, folders: Record<string, Record<string, unknown>>, concepts: { data: Record<string, Record<string, unknown>>, operations: Record<string, Record<string, unknown>> }, others: Record<string, unknown>): string
     {
         const order = ['system', 'layer', 'tags', 'summary']
         const section = (entries: Record<string, Record<string, unknown>>, declared = false): string =>
@@ -608,7 +618,7 @@ export class Architecture
         // Systems keep the order they were declared in, so the map's deck of cards stays stable.
         const systemSection = Object.keys(systems).length === 0 ? '' : `,\n  "systems": ${section(systems, true)}`
         const folderSection = Object.keys(folders).length === 0 ? '' : `,\n  "folders": ${section(folders)}`
-        const conceptSection = Object.keys(concepts.things).length + Object.keys(concepts.operations).length === 0 ? '' : `,\n  "concepts": ${Architecture.ConceptsBlock(concepts)}`
+        const conceptSection = Object.keys(concepts.data).length + Object.keys(concepts.operations).length === 0 ? '' : `,\n  "concepts": ${Architecture.ConceptsBlock(concepts)}`
         const extra = Object.entries(others).map(([key, value]) => `,\n  ${JSON.stringify(key)}: ${JSON.stringify(value, null, 2).replace(/\n/g, '\n  ')}`).join('')
         return `{\n  "layers": ${Architecture.Inline(layers)}${systemSection},\n  "files": ${section(files)}${folderSection}${conceptSection}${extra}\n}\n`
     }
@@ -664,7 +674,7 @@ export class Architecture
             }
         }
 
-        if (patch.concepts !== undefined) problems.push(...Architecture.ConceptShapeProblems(patch.concepts as IConceptsPatch))
+        if (patch.concepts !== undefined) problems.push(...Architecture.ConceptShapeProblems(LegacyConcepts(patch.concepts) as IConceptsPatch))
 
         if (patch.renames !== undefined && (!Array.isArray(patch.renames) || patch.renames.some((rename) => !IsObject(rename) || typeof rename.from !== 'string' || typeof rename.to !== 'string')))
             problems.push('"renames" must be a list of {"from", "to"} paths.')
@@ -685,11 +695,11 @@ export class Architecture
 
     private static ConceptShapeProblems(change: IConceptsPatch): string[]
     {
-        if (!IsObject(change)) return ['"concepts" must be an object with "things" and "operations".']
+        if (!IsObject(change)) return ['"concepts" must be an object with "data" and "operations".']
         const problems: string[] = []
         const isText = (value: unknown): boolean => value === undefined || value === null || typeof value === 'string'
         const isTextList = (value: unknown): boolean => value === undefined || value === null || (Array.isArray(value) && value.every((item) => typeof item === 'string'))
-        for (const kind of ['things', 'operations'] as const)
+        for (const kind of ['data', 'operations'] as const)
         {
             const section = change[kind]
             if (section === undefined) continue
@@ -697,11 +707,11 @@ export class Architecture
             for (const [name, entry] of Object.entries(section))
             {
                 if (entry === null) continue
-                if (!IsObject(entry)) { problems.push(`The ${kind === 'things' ? 'thing' : 'operation'} "${name}" must be an object, or null to remove it.`); continue }
+                if (!IsObject(entry)) { problems.push(`The ${kind === 'data' ? 'data' : 'operation'} "${name}" must be an object, or null to remove it.`); continue }
                 const fields = entry as Record<string, unknown>
                 if (!isText(fields.summary)) problems.push(`"${name}": summary must be text.`)
                 if (!isTextList(fields.rules)) problems.push(`"${name}": rules must be a list of text.`)
-                if (kind === 'things')
+                if (kind === 'data')
                 {
                     if (!isText(fields.layer)) problems.push(`"${name}": layer must be a layer name.`)
                     if (!isTextList(fields.files)) problems.push(`"${name}": files must be a list of text.`)
@@ -718,10 +728,10 @@ export class Architecture
         return problems
     }
 
-    private static ApplyConcepts(change: IConceptsPatch | undefined, concepts: { things: Record<string, Record<string, unknown>>, operations: Record<string, Record<string, unknown>> }, layers: readonly string[], exists: ReadonlySet<string>, problems: string[]): void
+    private static ApplyConcepts(change: IConceptsPatch | undefined, concepts: { data: Record<string, Record<string, unknown>>, operations: Record<string, Record<string, unknown>> }, layers: readonly string[], exists: ReadonlySet<string>, problems: string[]): void
     {
         if (change === undefined) return
-        const removedThings = new Set<string>()
+        const removedData = new Set<string>()
         const touched = new Set<string>()
 
         const rulesOf = (name: string, value: string[], into: Record<string, unknown>): void =>
@@ -738,36 +748,36 @@ export class Architecture
             else into.summary = value.trim()
         }
 
-        for (const [rawName, entry] of Object.entries(change.things ?? {}))
+        for (const [rawName, entry] of Object.entries(change.data ?? {}))
         {
             const name = rawName.trim()
-            if (name === '') { problems.push('A thing needs a non-empty name.'); continue }
+            if (name === '') { problems.push('A data entry needs a non-empty name.'); continue }
             if (entry === null)
             {
-                if (name in concepts.things) removedThings.add(name)
-                else problems.push(`Cannot remove the thing "${name}": it is not declared.`)
-                delete concepts.things[name]
+                if (name in concepts.data) removedData.add(name)
+                else problems.push(`Cannot remove the data "${name}": it is not declared.`)
+                delete concepts.data[name]
                 continue
             }
-            const thing = concepts.things[name] ?? {}
-            if (entry.summary !== undefined) summaryOf(name, entry.summary, thing)
+            const datum = concepts.data[name] ?? {}
+            if (entry.summary !== undefined) summaryOf(name, entry.summary, datum)
             if (entry.layer !== undefined)
             {
-                if (entry.layer === null) delete thing.layer
-                else if (!layers.includes(entry.layer)) problems.push(`The thing "${name}": layer "${entry.layer}" is not in layers (${layers.join(', ') || 'none'}).`)
-                else thing.layer = entry.layer
+                if (entry.layer === null) delete datum.layer
+                else if (!layers.includes(entry.layer)) problems.push(`The data "${name}": layer "${entry.layer}" is not in layers (${layers.join(', ') || 'none'}).`)
+                else datum.layer = entry.layer
             }
             if (entry.files !== undefined)
             {
-                if (entry.files === null || entry.files.length === 0) delete thing.files
+                if (entry.files === null || entry.files.length === 0) delete datum.files
                 else
                 {
-                    for (const path of entry.files) if (!exists.has(path)) problems.push(`The thing "${name}": "${path}" is not a file in the repository.`)
-                    thing.files = [...new Set(entry.files)]
+                    for (const path of entry.files) if (!exists.has(path)) problems.push(`The data "${name}": "${path}" is not a file in the repository.`)
+                    datum.files = [...new Set(entry.files)]
                 }
             }
-            if (entry.rules !== undefined) { if (entry.rules === null) delete thing.rules; else rulesOf(name, entry.rules, thing) }
-            concepts.things[name] = thing
+            if (entry.rules !== undefined) { if (entry.rules === null) delete datum.rules; else rulesOf(name, entry.rules, datum) }
+            concepts.data[name] = datum
         }
 
         for (const [rawName, entry] of Object.entries(change.operations ?? {}))
@@ -820,22 +830,22 @@ export class Architecture
             concepts.operations[name] = operation
         }
 
-        // A thing an operation still reads or writes cannot go; and an operation this change touched may only name declared things.
+        // A data entry an operation still reads or writes cannot go; and an operation this change touched may only name declared data.
         for (const [name, operation] of Object.entries(concepts.operations))
         {
             for (const key of ['reads', 'writes'] as const)
             {
                 for (const item of Array.isArray(operation[key]) ? operation[key] as unknown[] : [])
                 {
-                    if (typeof item !== 'string' || item in concepts.things) continue
-                    if (removedThings.has(item)) problems.push(`Cannot remove the thing "${item}": the operation "${name}" still ${key === 'reads' ? 'reads' : 'writes'} it.`)
-                    else if (touched.has(name)) problems.push(`The operation "${name}" ${key === 'reads' ? 'reads' : 'writes'} "${item}", which is not a declared thing.`)
+                    if (typeof item !== 'string' || item in concepts.data) continue
+                    if (removedData.has(item)) problems.push(`Cannot remove the data "${item}": the operation "${name}" still ${key === 'reads' ? 'reads' : 'writes'} it.`)
+                    else if (touched.has(name)) problems.push(`The operation "${name}" ${key === 'reads' ? 'reads' : 'writes'} "${item}", which is not declared data.`)
                 }
             }
         }
     }
 
-    private static ConceptsBlock(concepts: { things: Record<string, Record<string, unknown>>, operations: Record<string, Record<string, unknown>> }): string
+    private static ConceptsBlock(concepts: { data: Record<string, Record<string, unknown>>, operations: Record<string, Record<string, unknown>> }): string
     {
         const order = ['summary', 'layer', 'reads', 'writes', 'files', 'steps', 'rules']
         const entryText = (entry: Record<string, unknown>): string =>
@@ -856,7 +866,7 @@ export class Architecture
             const lines = Object.entries(entries).map(([name, entry]) => `      ${JSON.stringify(name)}: ${entryText(entry)}`)
             return lines.length === 0 ? '{}' : `{\n${lines.join(',\n')}\n    }`
         }
-        return `{\n    "things": ${section(concepts.things)},\n    "operations": ${section(concepts.operations)}\n  }`
+        return `{\n    "data": ${section(concepts.data)},\n    "operations": ${section(concepts.operations)}\n  }`
     }
 
     /**

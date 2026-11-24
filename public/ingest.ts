@@ -18,8 +18,8 @@ export interface IIngestStatus
   /** What the second pass still finds: layer breaks and anything else worth a look. */
   refine: { remaining: number; breaks: number };
   /** The design pass: whether operations are written at all, and what still lacks
-   * steps, inputs and outputs, or the layer a thing is held on. */
-  concepts: { started: boolean; operations: number; things: number; unplaced: number };
+   * steps, inputs and outputs, or the layer a data entry is held on. */
+  concepts: { started: boolean; operations: number; data: number; unplaced: number };
   /** The prompt handed to an agent, as the server words it. */
   prompt: string;
 }

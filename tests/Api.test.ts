@@ -208,7 +208,7 @@ test('The agent prompt names the CLI, the repository, the commands, and the four
             assert.ok(prompt.includes(command), `the prompt names the ${command} command`)
         // The design pass rides along with the ingest, so the copied prompt carries its guide too.
         assert.match(prompt, /An operation is something that changes data/)
-        assert.deepEqual(status.concepts, { started: false, operations: 0, things: 0, unplaced: 0 })
+        assert.deepEqual(status.concepts, { started: false, operations: 0, data: 0, unplaced: 0 })
         for (const field of ['"summary"', '"system"', '"layer"', '"tags"'])
             assert.ok(prompt.includes(field), `the prompt names the ${field} field`)
 

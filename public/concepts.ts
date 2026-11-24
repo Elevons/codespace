@@ -40,7 +40,7 @@ interface Marker
 interface Layout
 {
   operations: Spot[];
-  things: Marker[];
+  data: Marker[];
   home: Map<string, BABYLON.Vector3>;
   center: BABYLON.Vector3;
   spine: { minX: number; maxX: number; z: number; halfDepth: number } | null;
@@ -52,9 +52,9 @@ interface Layout
   trayRim?: BABYLON.Mesh;
 }
 
-interface Link { op: string; thing: string; kind: "reads" | "writes"; mesh: BABYLON.Mesh }
+interface Link { op: string; datum: string; kind: "reads" | "writes"; mesh: BABYLON.Mesh }
 
-const ThingColor = new BABYLON.Color3(0.89, 0.7, 0.26);
+const DataColor = new BABYLON.Color3(0.89, 0.7, 0.26);
 
 let layout: Layout | null = null;
 let layoutKey = "";
@@ -94,8 +94,8 @@ function stackY(path: string): number
   return (rank < 0 ? 0 : rank * S.layerGap) + DotSize / 2;
 }
 
-// Operations line up in two banks flanking a central data spine of shared things; single-owner
-// things dock beside their parent column, and unmapped files sit in a quiet tray to the side.
+// Operations line up in two banks flanking a central data spine of shared data; single-owner
+// data dock beside their parent column, and unmapped files sit in a quiet tray to the side.
 function buildLayout(): Layout | null
 {
   const records = [...S.fileRecords.values()];
@@ -108,7 +108,7 @@ function buildLayout(): Layout | null
   const plan = conceptSpineLayout({
     center: { x: center.x, z: center.z },
     files: records.map((rec) => ({ path: rec.path, y: stackY(rec.path) })),
-    things: S.CONCEPTS.things,
+    data: S.CONCEPTS.data,
     operations: S.CONCEPTS.operations,
     unmappedName: Unmapped,
   });
@@ -131,15 +131,15 @@ function buildLayout(): Layout | null
     return { name: op.name, at: new V3(op.x, 0, op.z), color, files: op.files, radius: op.radius, unmapped: op.unmapped, lowY: low, highY: high };
   });
 
-  const things: Marker[] = plan.things.map((thing) => ({
-    name: thing.name,
-    at: new V3(thing.x, 0, thing.z),
-    dockedTo: thing.dockedTo,
+  const data: Marker[] = plan.data.map((datum) => ({
+    name: datum.name,
+    at: new V3(datum.x, 0, datum.z),
+    dockedTo: datum.dockedTo,
     y: stackMid,
-    files: thing.files,
+    files: datum.files,
   }));
 
-  return { operations, things, home, center, spine: plan.spine, tray: plan.tray, routes: plan.routes };
+  return { operations, data, home, center, spine: plan.spine, tray: plan.tray, routes: plan.routes };
 }
 
 // Updates the extra bounds passed to meshes.ts so layer planes and camera framing cover docked
@@ -158,7 +158,7 @@ function updateBounds(at: Layout): void
     expand(spot.at.x, spot.lowY, spot.at.z, spot.radius + 0.4, spot.radius + 0.4);
     expand(spot.at.x, spot.highY, spot.at.z, spot.radius + 0.4, spot.radius + 0.4);
   }
-  for (const marker of at.things) expand(marker.at.x, marker.y, marker.at.z, 1.1, 1.1);
+  for (const marker of at.data) expand(marker.at.x, marker.y, marker.at.z, 1.1, 1.1);
   if (at.spine)
   {
     const cx = (at.spine.minX + at.spine.maxX) / 2;
@@ -209,7 +209,7 @@ function disposeLinks(): void
   linkKey = "";
 }
 
-// Builds the translucent column sleeves, hexagonal thing plates, central spine corridor, and unmapped tray.
+// Builds the translucent column sleeves, hexagonal data plates, central spine corridor, and unmapped tray.
 function buildMeshes(at: Layout): void
 {
   disposeMeshes();
@@ -284,22 +284,22 @@ function buildMeshes(at: Layout): void
     meshes.push(pill);
   }
 
-  // Shared spine things are full-sized hexagonal hubs; single-owner docked things are slightly smaller badges.
-  for (const marker of at.things)
+  // Shared spine data are full-sized hexagonal hubs; single-owner docked data entries are slightly smaller badges.
+  for (const marker of at.data)
   {
     const docked = marker.dockedTo !== null;
-    const plate = BABYLON.MeshBuilder.CreateCylinder("concept-thing", {
+    const plate = BABYLON.MeshBuilder.CreateCylinder("concept-data", {
       height: docked ? 0.24 : 0.32,
       diameter: docked ? 0.94 : 1.16,
       tessellation: 6,
     }, scene);
-    const material = new BABYLON.StandardMaterial("concept-thing", scene);
-    material.emissiveColor = ThingColor;
+    const material = new BABYLON.StandardMaterial("concept-data", scene);
+    material.emissiveColor = DataColor;
     material.diffuseColor = BABYLON.Color3.Black();
     material.alpha = 0.95;
     plate.material = material;
     plate.isPickable = true;
-    plate.metadata = { thing: marker.name };
+    plate.metadata = { datum: marker.name };
     marker.mesh = plate;
     meshes.push(plate);
   }
@@ -333,8 +333,8 @@ function fitPills(at: Layout): void
   }
 }
 
-// Each thing floats at the height of its layer, and the central spine deck hugs beneath the shared things.
-function fitThings(at: Layout): void
+// Each data entry floats at the height of its layer, and the central spine deck hugs beneath the shared data.
+function fitData(at: Layout): void
 {
   const sum = new Map<string, number>(), count = new Map<string, number>();
   let all = 0, total = 0;
@@ -349,9 +349,9 @@ function fitThings(at: Layout): void
   }
   const middle = total === 0 ? 0 : all / total;
   let minSpineY = Infinity;
-  for (const marker of at.things)
+  for (const marker of at.data)
   {
-    const layer = S.CONCEPTS.things[marker.name]?.layer;
+    const layer = S.CONCEPTS.data[marker.name]?.layer;
     marker.y = layer !== undefined && count.has(layer) ? sum.get(layer)! / count.get(layer)! : middle;
     if (marker.dockedTo === null) minSpineY = Math.min(minSpineY, marker.y);
     marker.mesh?.position.set(marker.at.x, marker.y, marker.at.z);
@@ -372,10 +372,10 @@ function fitThings(at: Layout): void
   fitLinks(at);
 }
 
-// Anchors any shared thing that floats on a higher layer down to its slot on the spine deck.
+// Anchors any shared data entry that floats on a higher layer down to its slot on the spine deck.
 function fitSpineRisers(at: Layout, deckY: number): void
 {
-  const key = Math.round(deckY * 20) + "|" + at.things.filter((m) => m.dockedTo === null).map((m) => Math.round(m.y * 20)).join(",");
+  const key = Math.round(deckY * 20) + "|" + at.data.filter((m) => m.dockedTo === null).map((m) => Math.round(m.y * 20)).join(",");
   if (key === riserKey) return;
   riserKey = key;
   if (at.spineRisers)
@@ -389,7 +389,7 @@ function fitSpineRisers(at: Layout, deckY: number): void
   const colors: BABYLON.Color4[][] = [];
   const stemCol = new BABYLON.Color4(0.89, 0.7, 0.26, 0.35);
   const ringCol = new BABYLON.Color4(0.89, 0.7, 0.26, 0.45);
-  for (const marker of at.things)
+  for (const marker of at.data)
   {
     if (marker.dockedTo !== null || marker.y - deckY < 0.42) continue;
     lines.push([new V3(marker.at.x, deckY + 0.02, marker.at.z), new V3(marker.at.x, marker.y - 0.16, marker.at.z)]);
@@ -446,22 +446,22 @@ function dashPolyline(points: BABYLON.Vector3[], dash: number, gap: number): BAB
   return result;
 }
 
-// Orthogonal bus tracks run flat along each thing's layer inside the central spine, rising or
+// Orthogonal bus tracks run flat along each data entry's layer inside the central spine, rising or
 // dropping only on the stem outside the operation's column.
 function fitLinks(at: Layout): void
 {
-  const key = at.things.map((marker) => Math.round(marker.y * 20)).join(",") + "|" + at.operations.map((spot) => Math.round(spot.lowY * 20) + ":" + Math.round(spot.highY * 20)).join(",");
+  const key = at.data.map((marker) => Math.round(marker.y * 20)).join(",") + "|" + at.operations.map((spot) => Math.round(spot.lowY * 20) + ":" + Math.round(spot.highY * 20)).join(",");
   if (key === linkKey) return;
   disposeLinks();
   linkKey = key;
 
   const spotByName = new Map(at.operations.map((s) => [s.name, s]));
-  const markerByName = new Map(at.things.map((m) => [m.name, m]));
+  const markerByName = new Map(at.data.map((m) => [m.name, m]));
 
   for (const route of at.routes)
   {
     const spot = spotByName.get(route.op);
-    const marker = markerByName.get(route.thing);
+    const marker = markerByName.get(route.datum);
     if (!spot || !marker || route.points.length < 2) continue;
 
     const lines: BABYLON.Vector3[][] = [];
@@ -470,7 +470,7 @@ function fitLinks(at: Layout): void
     const mesh = BABYLON.MeshBuilder.CreateLineSystem("concept-link", { lines }, scene);
     mesh.color = spot.color;
     mesh.isPickable = false;
-    links.push({ op: spot.name, thing: marker.name, kind: route.kind, mesh });
+    links.push({ op: spot.name, datum: marker.name, kind: route.kind, mesh });
   }
   applyActive();
 }
@@ -491,7 +491,7 @@ function addRouteLink(lines: BABYLON.Vector3[][], spot: Spot, marker: Marker, ro
   if (route.kind === "writes") lines.push(pts3D);
   else lines.push(...dashPolyline(pts3D, 0.3, 0.24));
 
-  // The head sits where the data lands: on the thing for a write, on the operation for a read.
+  // The head sits where the data lands: on the data for a write, on the operation for a read.
   const tip = route.kind === "writes" ? pts3D[pts3D.length - 1] : pts3D[0];
   const prev = route.kind === "writes" ? pts3D[pts3D.length - 2] : pts3D[1];
   const bx = prev.x - tip.x, by = prev.y - tip.y, bz = prev.z - tip.z;
@@ -536,27 +536,27 @@ function label(spot: Spot): HTMLElement
   return element;
 }
 
-function thingLabel(marker: Marker): HTMLElement
+function dataLabel(marker: Marker): HTMLElement
 {
   const element = document.createElement("button");
   element.type = "button";
-  element.className = "concept-thing" + (marker.dockedTo !== null ? " docked" : " spine");
+  element.className = "concept-data" + (marker.dockedTo !== null ? " docked" : " spine");
   element.textContent = marker.name;
-  const thing = S.CONCEPTS.things[marker.name];
-  const held = thing?.files?.length ?? 0;
+  const datum = S.CONCEPTS.data[marker.name];
+  const held = datum?.files?.length ?? 0;
   const small = document.createElement("small");
-  small.textContent = [thing?.layer ? thing.layer + " layer" : "data", held > 0 ? held + (held === 1 ? " file" : " files") : ""].filter((part) => part !== "").join(" \u00b7 ");
+  small.textContent = [datum?.layer ? datum.layer + " layer" : "data", held > 0 ? held + (held === 1 ? " file" : " files") : ""].filter((part) => part !== "").join(" \u00b7 ");
   element.appendChild(small);
-  element.title = thing?.summary ?? "";
-  element.addEventListener("pointerenter", () => setHovered({ kind: "thing", name: marker.name }));
-  element.addEventListener("pointerleave", () => clearHovered("thing", marker.name));
-  element.addEventListener("click", (event) => { event.stopPropagation(); choose("thing", marker.name); });
+  element.title = datum?.summary ?? "";
+  element.addEventListener("pointerenter", () => setHovered({ kind: "datum", name: marker.name }));
+  element.addEventListener("pointerleave", () => clearHovered("datum", marker.name));
+  element.addEventListener("click", (event) => { event.stopPropagation(); choose("datum", marker.name); });
   return element;
 }
 
-// Choosing an operation or a thing does not unpack the city: a small sheet opens beside the map,
+// Choosing an operation or a data entry does not unpack the city: a small sheet opens beside the map,
 // and everything that does not touch the choice fades back.
-type Choice = { kind: "op" | "thing"; name: string } | null;
+type Choice = { kind: "op" | "datum"; name: string } | null;
 let active: Choice = null;
 let hovered: Choice = null;
 const expanded = new Set<number>();
@@ -577,7 +577,7 @@ function setHovered(next: Choice): void
   if (active === null) applyActive();
 }
 
-function clearHovered(kind: "op" | "thing", name: string): void
+function clearHovered(kind: "op" | "datum", name: string): void
 {
   if (hovered !== null && hovered.kind === kind && hovered.name === name)
   {
@@ -586,7 +586,7 @@ function clearHovered(kind: "op" | "thing", name: string): void
   }
 }
 
-function choose(kind: "op" | "thing", name: string): void
+function choose(kind: "op" | "datum", name: string): void
 {
   setActive(active !== null && active.kind === kind && active.name === name ? null : { kind, name });
 }
@@ -607,12 +607,12 @@ function section(title: string): HTMLElement
   return block;
 }
 
-function chips(parent: HTMLElement, kind: "op" | "thing", names: string[]): void
+function chips(parent: HTMLElement, kind: "op" | "datum", names: string[]): void
 {
   const row = el("div", "", "chips");
   for (const name of names)
   {
-    const chip = el("button", name, kind === "thing" ? "chip thing" : "chip");
+    const chip = el("button", name, kind === "datum" ? "chip datum" : "chip");
     chip.type = "button";
     chip.addEventListener("click", () => setActive({ kind, name }));
     row.appendChild(chip);
@@ -661,6 +661,31 @@ function setActive(next: Choice): void
   active = next;
   expanded.clear();
   renderSheet();
+  if (next !== null && document.body.classList.contains("phone")) frameChoice(next);
+}
+
+// On a phone the sheet covers the lower half, so the chosen column or hexagon is brought into the
+// upper half: the camera aims a quarter of the screen below it, at the distance it already has.
+function frameChoice(choice: NonNullable<Choice>): void
+{
+  if (!layout) return;
+  let point: BABYLON.Vector3 | null = null;
+  if (choice.kind === "op")
+  {
+    const spot = layout.operations.find((candidate) => candidate.name === choice.name);
+    if (spot) point = new V3(spot.at.x, (spot.lowY + spot.highY) / 2, spot.at.z);
+  }
+  else
+  {
+    const marker = layout.data.find((candidate) => candidate.name === choice.name);
+    if (marker) point = new V3(marker.at.x, marker.y, marker.at.z);
+  }
+  if (!point) return;
+  // The screen's up direction for an orbiting camera at (alpha, beta).
+  const a = camera.alpha, b = camera.beta;
+  const up = new V3(-Math.cos(a) * Math.cos(b), Math.sin(b), -Math.sin(a) * Math.cos(b));
+  const lift = camera.radius * Math.tan(camera.fov / 2) * 0.5;
+  S.camGoal = { target: point.subtract(up.scale(lift)), radius: camera.radius };
 }
 
 function toggleStep(index: number): void
@@ -676,24 +701,25 @@ function renderSheet(): void
   list.replaceChildren();
   leaders.replaceChildren();
   const spot = active?.kind === "op" ? layout?.operations.find((candidate) => candidate.name === active!.name) : undefined;
-  const marker = active?.kind === "thing" ? layout?.things.find((candidate) => candidate.name === active!.name) : undefined;
-  const phoneIndex = !spot && !marker && S.conceptZoom && layout !== null && document.body.classList.contains("phone");
-  list.hidden = !spot && !marker && !phoneIndex;
+  const marker = active?.kind === "datum" ? layout?.data.find((candidate) => candidate.name === active!.name) : undefined;
+  // With nothing chosen the sheet is the index, so a name whose label is hidden is still one click away.
+  const showIndex = !spot && !marker && S.conceptZoom && layout !== null;
+  list.hidden = !spot && !marker && !showIndex;
   if (!spot && !marker) leaders.setAttribute("hidden", ""); else leaders.removeAttribute("hidden");
-  list.classList.toggle("index", phoneIndex);
+  list.classList.toggle("index", showIndex);
   if (spot) renderOperation(spot);
-  else if (marker) renderThing(marker.name);
-  else { active = null; if (phoneIndex) renderIndex(layout!); }
+  else if (marker) renderData(marker.name);
+  else { active = null; if (showIndex) renderIndex(layout!); }
   applyActive();
 }
 
-// On a phone the labels cannot all fit, so the sheet lists every operation and thing to choose from,
+// The labels cannot all fit, so the sheet lists every operation and data entry to choose from,
 // folded to one row until it is opened.
 let indexOpen = false;
 function renderIndex(at: Layout): void
 {
   const ops = at.operations.filter((spot) => !spot.unmapped);
-  const toggle = el("button", ops.length + " operations · " + at.things.length + " things " + (indexOpen ? "▾" : "▴"), "index-toggle");
+  const toggle = el("button", ops.length + " operations · " + at.data.length + " data " + (indexOpen ? "▾" : "▴"), "index-toggle");
   toggle.type = "button";
   toggle.addEventListener("click", () => { indexOpen = !indexOpen; renderSheet(); });
   list.appendChild(toggle);
@@ -711,7 +737,7 @@ function renderIndex(at: Layout): void
     opList.appendChild(row);
   }
   list.appendChild(opList);
-  chips(section("Things"), "thing", at.things.map((marker) => marker.name));
+  chips(section("Data"), "datum", at.data.map((marker) => marker.name));
 }
 
 // An operation reads as a process sheet: what comes in, the steps, what goes out, and the rules.
@@ -721,7 +747,7 @@ function renderOperation(spot: Spot): void
   const color = cssColor(spot.color);
   head(spot.name, color, () => openOperation(spot));
   if (op?.summary) list.appendChild(el("p", op.summary));
-  if (op && op.reads.length > 0) chips(section("In"), "thing", op.reads);
+  if (op && op.reads.length > 0) chips(section("In"), "datum", op.reads);
 
   if (op && op.steps.length > 0)
   {
@@ -775,7 +801,7 @@ function renderOperation(spot: Spot): void
     block.appendChild(rows);
   }
 
-  if (op && op.writes.length > 0) chips(section("Out"), "thing", op.writes);
+  if (op && op.writes.length > 0) chips(section("Out"), "datum", op.writes);
   if (op && op.rules.length > 0)
   {
     const rules = el("ul", "", "rules");
@@ -784,18 +810,18 @@ function renderOperation(spot: Spot): void
   }
 }
 
-function renderThing(name: string): void
+function renderData(name: string): void
 {
-  const thing = S.CONCEPTS.things[name];
-  head(name, cssColor(ThingColor), null);
-  if (thing?.summary) list.appendChild(el("p", thing.summary));
-  if (thing?.layer) list.appendChild(el("p", "Held in the " + thing.layer + " layer", "meta"));
+  const datum = S.CONCEPTS.data[name];
+  head(name, cssColor(DataColor), null);
+  if (datum?.summary) list.appendChild(el("p", datum.summary));
+  if (datum?.layer) list.appendChild(el("p", "Held in the " + datum.layer + " layer", "meta"));
   const operations = Object.entries(S.CONCEPTS.operations);
   const writers = operations.filter(([, op]) => op.writes.includes(name)).map(([key]) => key);
   const readers = operations.filter(([, op]) => op.reads.includes(name)).map(([key]) => key);
   if (writers.length > 0) chips(section("Written by"), "op", writers);
   if (readers.length > 0) chips(section("Read by"), "op", readers);
-  const held = thing?.files ?? [];
+  const held = datum?.files ?? [];
   if (held.length > 0)
   {
     const rows = el("ul", "", "files shown");
@@ -806,14 +832,14 @@ function renderThing(name: string): void
       row.addEventListener("click", () => openFile(path));
       rows.appendChild(row);
       emphasised.add(path);
-      if (S.fileRecords.has(path)) addLeader(row, path, cssColor(ThingColor));
+      if (S.fileRecords.has(path)) addLeader(row, path, cssColor(DataColor));
     }
     section("Files").appendChild(rows);
   }
-  if (thing && (thing.rules?.length ?? 0) > 0)
+  if (datum && (datum.rules?.length ?? 0) > 0)
   {
     const rules = el("ul", "", "rules");
-    for (const rule of thing.rules!) rules.appendChild(el("li", rule));
+    for (const rule of datum.rules!) rules.appendChild(el("li", rule));
     section("Rules").appendChild(rules);
   }
 }
@@ -850,12 +876,12 @@ function applyActive(): void
     if (spot.pill?.material) spot.pill.material.alpha = !on ? 0.04 : focus === null ? base : focus.kind === "op" ? 0.3 : 0.22;
     spot.tag?.classList.toggle("faded", !on);
   }
-  for (const marker of layout.things)
+  for (const marker of layout.data)
   {
     const on = touches(marker.name);
     if (marker.mesh?.material) marker.mesh.material.alpha = on ? 0.95 : 0.18;
     marker.tag?.classList.toggle("faded", !on);
-    marker.tag?.classList.toggle("chosen", focus?.kind === "thing" && focus.name === marker.name);
+    marker.tag?.classList.toggle("chosen", focus?.kind === "datum" && focus.name === marker.name);
   }
   for (const link of links)
   {
@@ -864,7 +890,7 @@ function applyActive(): void
       link.mesh.alpha = link.kind === "writes" ? 0.84 : 0.28;
       continue;
     }
-    const on = focus.kind === "op" ? link.op === focus.name : link.thing === focus.name;
+    const on = focus.kind === "op" ? link.op === focus.name : link.datum === focus.name;
     link.mesh.alpha = on ? (link.kind === "writes" ? 1 : 0.9) : 0.05;
   }
 }
@@ -900,9 +926,9 @@ function buildLabels(at: Layout): void
     spot.tag = element;
     overlay.appendChild(element);
   }
-  for (const marker of at.things)
+  for (const marker of at.data)
   {
-    const element = thingLabel(marker);
+    const element = dataLabel(marker);
     element.dataset.x = String(marker.at.x);
     element.dataset.z = String(marker.at.z);
     marker.tag = element;
@@ -941,7 +967,7 @@ export function placeConceptLabels(): void
     const point = new V3(Number(element.dataset.x), Number(element.dataset.y ?? 0), Number(element.dataset.z));
     const p = V3.Project(point, BABYLON.Matrix.IdentityReadOnly, transform, viewport);
     element.style.transform = "translate(" + p.x.toFixed(1) + "px," + p.y.toFixed(1) + "px) translate(-50%, -100%)";
-    // The chosen label and what it touches come first, then operations by size, then things.
+    // The chosen label and what it touches come first, then operations by size, then data.
     const isOp = element.classList.contains("concept-op");
     const lit = element.classList.contains("chosen") || (active !== null && !element.classList.contains("faded"));
     const rank = (lit ? 0 : 2e6) + (isOp ? 0 : 1e6) - Number(element.dataset.weight ?? 0);
@@ -971,7 +997,7 @@ export function conceptTargets(): void
   for (const [path, spot] of layout.home) if (S.fileRecords.has(path)) spot.y = stackY(path);
   setScenery(false);
   fitPills(layout);
-  fitThings(layout);
+  fitData(layout);
   for (const rec of S.fileRecords.values())
   {
     const spot = layout.home.get(rec.path);
@@ -1054,8 +1080,8 @@ function openOperation(spot: Spot): void
 export function conceptTap(): boolean
 {
   if (!S.conceptZoom) return false;
-  const plate = scene.pick(scene.pointerX, scene.pointerY, (mesh) => (mesh.metadata as { thing?: string } | null)?.thing !== undefined);
-  if (plate.hit) { choose("thing", (plate.pickedMesh.metadata as { thing: string }).thing); return true; }
+  const plate = scene.pick(scene.pointerX, scene.pointerY, (mesh) => (mesh.metadata as { datum?: string } | null)?.datum !== undefined);
+  if (plate.hit) { choose("datum", (plate.pickedMesh.metadata as { datum: string }).datum); return true; }
   const hit = pickFile(scene.pointerX, scene.pointerY);
   if (!hit) { if (active !== null) setActive(null); return true; }
   selectFile(hit.node, hit.file);

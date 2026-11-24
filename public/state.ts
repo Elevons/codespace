@@ -41,7 +41,7 @@ export const S = {
   } | null, // where the opened file's wires join its floors, and the chosen floor's box
   FILE_CHANGES: new Map<string, number>(),     // path -> changed lines since HEAD, for the changes colouring
   ARCH_NOTES: [] as string[],                  // problems found in the architecture file, to show
-  CONCEPTS: { things: {}, operations: {} } as Concepts, // the operations and things the architecture file declares
+  CONCEPTS: { data: {}, operations: {} } as Concepts, // the operations and things the architecture file declares
   conceptZoom: false,                          // whether the map is zoomed out to operations and things
   FILE_LAYERS: new Map<string, string>(),      // path -> the layer the architecture file puts it in
   FILE_SYSTEMS: new Map<string, string>(),     // path -> the system the architecture file puts it in

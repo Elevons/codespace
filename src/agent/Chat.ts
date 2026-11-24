@@ -43,11 +43,11 @@ const DescribePrompt = 'Describe this repository for the map, or bring its descr
     'instructions, applying each batch as you go, until next reports "remaining": 0, folders last. Declare the systems ' +
     'and layers first if there are none. Then do the second pass from your instructions: run refine, and improve the ' +
     'layers and systems from what it finds, unless nothing changed. Then write the design, the way your instructions ' +
-    'say: run the concepts pass, read every page of its overview and decide from the files themselves what the things ' +
-    'and operations are, covering every working system, apply operations and things until it reports "remaining": 0, and address any real gaps or issues reported ' +
+    'say: run the concepts pass, read every page of its overview and decide from the files themselves what the data ' +
+    'and operations are, covering every working system, apply operations and data until it reports "remaining": 0, and address any real gaps or issues reported ' +
     'in "review" (at most two review passes). Do not stop to ask me anything; when it is done, tell me in a few lines ' +
     'how you split it into systems and layers, the final breakCount, what the second pass changed, and the operations ' +
-    'and things you wrote.'
+    'and data you wrote.'
 
 /** What the chat is asked when the Repo panel's Refine button is pressed, on a repository already described. */
 const RefinePrompt = 'This repository is already described. Do the second pass from your instructions: run refine, ' +

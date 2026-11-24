@@ -60,7 +60,7 @@ ${DescribeGuide(cli, root)}
 
 ${RefineGuide(cli, root)}
 
-## Writing down the design: things and operations
+## Writing down the design: data and operations
 
 ${ConceptsGuide(cli, root)}`
 }

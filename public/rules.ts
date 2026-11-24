@@ -87,7 +87,7 @@ export interface IConceptLayoutInput
 {
   center: { x: number; z: number }
   files: readonly { path: string; y: number }[]
-  things: Record<string, { layer?: string; files?: readonly string[] }>
+  data: Record<string, { layer?: string; files?: readonly string[] }>
   operations: Record<string, { files: readonly string[]; reads: readonly string[]; writes: readonly string[]; steps?: readonly { files: readonly string[] }[] }>
   unmappedName: string
 }
@@ -104,7 +104,7 @@ export interface IConceptOpSpot
   index: number
 }
 
-export interface IConceptThingSpot
+export interface IConceptDataSpot
 {
   name: string
   x: number
@@ -118,7 +118,7 @@ export interface IConceptThingSpot
 export interface IConceptRoute
 {
   op: string
-  thing: string
+  datum: string
   kind: "reads" | "writes"
   docked: boolean
   track: number
@@ -128,7 +128,7 @@ export interface IConceptRoute
 export interface IConceptSpineLayout
 {
   operations: IConceptOpSpot[]
-  things: IConceptThingSpot[]
+  data: IConceptDataSpot[]
   home: Map<string, { x: number; y: number; z: number }>
   spine: { minX: number; maxX: number; z: number; halfDepth: number } | null
   tray: { x: number; z: number; width: number; depth: number } | null
@@ -161,8 +161,8 @@ function gridPack(count: number): { offsets: { dx: number; dz: number }[]; radiu
   return { offsets, radius: Math.max(0.95, maxDist + 0.58) };
 }
 
-// Orders shared spine things from upstream inputs on the left to downstream outputs on the right.
-function orderSpineThings(
+// Orders shared spine data from upstream inputs on the left to downstream outputs on the right.
+function orderSpineData(
   names: readonly string[],
   operations: Record<string, { reads: readonly string[]; writes: readonly string[] }>): string[]
 {
@@ -283,12 +283,12 @@ function roundOrthogonalCorners(raw: readonly { x: number; z: number }[]): { x: 
   return out;
 }
 
-// Lays out operations in two banks flanking a central shared-state spine, docks single-owner things
+// Lays out operations in two banks flanking a central shared-state spine, docks single-owner data
 // beside their parent column, quarantines unmapped files in a corner tray, and routes orthogonal bus tracks.
-// A thing's files stand under its hexagon, except one an operation names that would leave that operation
+// A data entry's files stand under its hexagon, except one an operation names that would leave that operation
 // with no file of its own: that one stays in the operation's column so no column draws empty.
-export function conceptThingClaims(
-  things: Record<string, { files?: readonly string[] }>,
+export function conceptDataClaims(
+  data: Record<string, { files?: readonly string[] }>,
   ops: readonly { name: string; files: readonly string[]; steps: readonly { files: readonly string[] }[] }[],
   known: ReadonlySet<string>): Map<string, string>
 {
@@ -301,13 +301,13 @@ export function conceptThingClaims(
     for (const path of own) naming.set(path, [...(naming.get(path) ?? []), op.name]);
   }
   const claims = new Map<string, string>();
-  for (const [thing, entry] of Object.entries(things))
+  for (const [datum, entry] of Object.entries(data))
     for (const path of entry.files ?? [])
     {
       if (!known.has(path) || claims.has(path)) continue;
       const names = naming.get(path) ?? [];
       if (names.some((name) => remaining.get(name)! <= 1)) continue;
-      claims.set(path, thing);
+      claims.set(path, datum);
       for (const name of names) remaining.set(name, remaining.get(name)! - 1);
     }
   return claims;
@@ -364,39 +364,39 @@ export function conceptSpineLayout(input: IConceptLayoutInput): IConceptSpineLay
   for (const file of input.files) known.set(file.path, file.y);
 
   const opEntries = Object.entries(input.operations);
-  const claims = conceptThingClaims(input.things, opEntries.map(([name, op]) => ({ name, files: op.files, steps: op.steps ?? [] })), new Set(known.keys()));
+  const claims = conceptDataClaims(input.data, opEntries.map(([name, op]) => ({ name, files: op.files, steps: op.steps ?? [] })), new Set(known.keys()));
   const owner = conceptFileOwners(opEntries.map(([name, op]) => ({
     name,
     files: op.files.filter((path) => known.has(path) && !claims.has(path)),
     steps: (op.steps ?? []).map((step) => ({ files: step.files.filter((path) => !claims.has(path)) })),
   })));
   for (const path of claims.keys()) owner.set(path, "\u0000thing");
-  const thingPacks = new Map<string, { files: string[]; offsets: { dx: number; dz: number }[]; radius: number }>();
+  const dataPacks = new Map<string, { files: string[]; offsets: { dx: number; dz: number }[]; radius: number }>();
 
   const sortFiles = (paths: string[]): string[] =>
     paths.sort((a, b) => (known.get(a)! - known.get(b)!) || a.localeCompare(b));
 
-  const thingNames = Object.keys(input.things);
-  for (const name of thingNames)
+  const dataNames = Object.keys(input.data);
+  for (const name of dataNames)
   {
-    const files = sortFiles([...claims.entries()].filter(([, thing]) => thing === name).map(([path]) => path));
+    const files = sortFiles([...claims.entries()].filter(([, datum]) => datum === name).map(([path]) => path));
     const { offsets, radius } = gridPack(files.length);
-    thingPacks.set(name, { files, offsets, radius: files.length === 0 ? 0.6 : radius });
+    dataPacks.set(name, { files, offsets, radius: files.length === 0 ? 0.6 : radius });
   }
-  const thingWidth = (name: string): number => Math.max(1.85, thingPacks.get(name)!.radius * 2 + 0.7);
+  const dataWidth = (name: string): number => Math.max(1.85, dataPacks.get(name)!.radius * 2 + 0.7);
   const dockedByOp = new Map<string, string[]>();
   for (const [name] of opEntries) dockedByOp.set(name, []);
   const spineCandidates: string[] = [];
-  for (const thingName of thingNames)
+  for (const dataName of dataNames)
   {
     const touching = opEntries
-      .filter(([, op]) => op.reads.includes(thingName) || op.writes.includes(thingName))
+      .filter(([, op]) => op.reads.includes(dataName) || op.writes.includes(dataName))
       .map(([opName]) => opName);
-    if (touching.length === 1) dockedByOp.get(touching[0])!.push(thingName);
-    else spineCandidates.push(thingName);
+    if (touching.length === 1) dockedByOp.get(touching[0])!.push(dataName);
+    else spineCandidates.push(dataName);
   }
 
-  const orderedSpine = orderSpineThings(spineCandidates, input.operations);
+  const orderedSpine = orderSpineData(spineCandidates, input.operations);
   const spineIndexMap = new Map(orderedSpine.map((name, i) => [name, i]));
   const spineCount = orderedSpine.length;
 
@@ -420,7 +420,7 @@ export function conceptSpineLayout(input: IConceptLayoutInput): IConceptSpineLay
   {
     const files = sortFiles([...owner.keys()].filter((path) => owner.get(path) === name));
     const { offsets, radius } = gridPack(files.length);
-    const dockedWidth = (dockedByOp.get(name) ?? []).reduce((sum, thing) => sum + thingWidth(thing), 0);
+    const dockedWidth = (dockedByOp.get(name) ?? []).reduce((sum, datum) => sum + dataWidth(datum), 0);
     const halfW = Math.max(radius, dockedWidth > 1.85 ? dockedWidth / 2 : 0);
 
     let xSum = 0, wSum = 0;
@@ -489,19 +489,19 @@ export function conceptSpineLayout(input: IConceptLayoutInput): IConceptSpineLay
 
   const topSpan = placeRowX(topBank, null);
   const bottomSpan = placeRowX(bottomBank, trayDraft);
-  const spineR = orderedSpine.reduce((m, name) => Math.max(m, thingPacks.get(name)!.radius), 0.6);
+  const spineR = orderedSpine.reduce((m, name) => Math.max(m, dataPacks.get(name)!.radius), 0.6);
   const spineStep = Math.max(4.5, spineR * 2 + 1);
   const minSpineSpan = Math.max(0, (spineCount - 1) * spineStep);
   const activeSpan = Math.max(topSpan, bottomSpan, minSpineSpan);
   const spineSpan = spineCount <= 1 ? 0 : Math.max(minSpineSpan, activeSpan * 0.68);
 
-  const spineSpots = new Map<string, IConceptThingSpot>();
+  const spineSpots = new Map<string, IConceptDataSpot>();
   orderedSpine.forEach((name, i) =>
   {
     const x = spineCount === 1
       ? input.center.x
       : input.center.x - spineSpan / 2 + (i / (spineCount - 1)) * spineSpan;
-    spineSpots.set(name, { name, x, z: input.center.z, dockedTo: null, spineIndex: i, files: thingPacks.get(name)!.files, radius: thingPacks.get(name)!.radius });
+    spineSpots.set(name, { name, x, z: input.center.z, dockedTo: null, spineIndex: i, files: dataPacks.get(name)!.files, radius: dataPacks.get(name)!.radius });
   });
 
   // Plan spine links per bank in X first so horizontal lane counts set the exact spine corridor depth.
@@ -509,7 +509,7 @@ export function conceptSpineLayout(input: IConceptLayoutInput): IConceptSpineLay
   {
     id: number;
     op: OpDraft;
-    thing: IConceptThingSpot;
+    datum: IConceptDataSpot;
     kind: "reads" | "writes";
     portDx: number;
     portX: number;
@@ -524,31 +524,31 @@ export function conceptSpineLayout(input: IConceptLayoutInput): IConceptSpineLay
     {
       const op = input.operations[opDraft.name];
       if (!op) continue;
-      const mine: { thing: IConceptThingSpot; kind: "reads" | "writes" }[] = [];
+      const mine: { datum: IConceptDataSpot; kind: "reads" | "writes" }[] = [];
       for (const kind of ["writes", "reads"] as const)
         for (const tName of new Set(op[kind]))
         {
           const spot = spineSpots.get(tName);
-          if (spot) mine.push({ thing: spot, kind });
+          if (spot) mine.push({ datum: spot, kind });
         }
-      mine.sort((a, b) => (a.thing.x - b.thing.x) || (a.kind === "writes" ? -1 : 1));
+      mine.sort((a, b) => (a.datum.x - b.datum.x) || (a.kind === "writes" ? -1 : 1));
       const portStep = Math.min(0.28, (opDraft.radius * 1.25) / Math.max(1, mine.length));
       mine.forEach((entry, idx) =>
       {
         const portDx = (idx - (mine.length - 1) / 2) * portStep;
         links.push({
-          id: links.length, op: opDraft, thing: entry.thing, kind: entry.kind,
-          portDx, portX: opDraft.x + portDx, endX: entry.thing.x, lane: 0,
+          id: links.length, op: opDraft, datum: entry.datum, kind: entry.kind,
+          portDx, portX: opDraft.x + portDx, endX: entry.datum.x, lane: 0,
         });
       });
     }
 
-    for (const thingSpot of spineSpots.values())
+    for (const dataSpot of spineSpots.values())
     {
-      const arriving = links.filter((l) => l.thing.name === thingSpot.name);
+      const arriving = links.filter((l) => l.datum.name === dataSpot.name);
       arriving.sort((a, b) => (a.portX - b.portX) || (a.kind === "writes" ? -1 : 1));
       const endStep = Math.min(0.22, 0.84 / Math.max(1, arriving.length));
-      arriving.forEach((l, idx) => { l.endX = thingSpot.x + (idx - (arriving.length - 1) / 2) * endStep; });
+      arriving.forEach((l, idx) => { l.endX = dataSpot.x + (idx - (arriving.length - 1) / 2) * endStep; });
     }
 
     const { lanes, count } = assignChannelLanes(links.map((l) => ({
@@ -583,19 +583,19 @@ export function conceptSpineLayout(input: IConceptLayoutInput): IConceptSpineLay
       home.set(path, { x: d.x + off.dx, y: known.get(path)!, z: d.z + off.dz });
     });
 
-  // Place single-owner docked things on the outer side of their parent column, away from the spine.
-  const dockedSpots = new Map<string, IConceptThingSpot>();
+  // Place single-owner docked data on the outer side of their parent column, away from the spine.
+  const dockedSpots = new Map<string, IConceptDataSpot>();
   for (const d of drafts)
   {
     const list = dockedByOp.get(d.name) ?? [];
     if (list.length === 0) continue;
     const bankSign = d.bank === "bottom" ? -1 : 1;
-    const total = list.reduce((sum, thing) => sum + thingWidth(thing), 0);
+    const total = list.reduce((sum, datum) => sum + dataWidth(datum), 0);
     let cursor = d.x - total / 2;
     for (const tName of list)
     {
-      const pack = thingPacks.get(tName)!;
-      const width = thingWidth(tName);
+      const pack = dataPacks.get(tName)!;
+      const width = dataWidth(tName);
       const z = d.z + bankSign * (d.radius + 0.65 + Math.max(0.6, pack.radius));
       dockedSpots.set(tName, { name: tName, x: cursor + width / 2, z, dockedTo: d.name, spineIndex: -1, files: pack.files, radius: pack.radius });
       cursor += width;
@@ -617,7 +617,7 @@ export function conceptSpineLayout(input: IConceptLayoutInput): IConceptSpineLay
         ? [{ x: l.endX, z: startZ }, { x: l.endX, z: endZ }]
         : [{ x: l.portX, z: startZ }, { x: l.portX, z: laneZ }, { x: l.endX, z: laneZ }, { x: l.endX, z: endZ }];
       routes.push({
-        op: l.op.name, thing: l.thing.name, kind: l.kind, docked: false,
+        op: l.op.name, datum: l.datum.name, kind: l.kind, docked: false,
         track: trackCounter++, points: roundOrthogonalCorners(waypoints),
       });
     }
@@ -649,7 +649,7 @@ export function conceptSpineLayout(input: IConceptLayoutInput): IConceptSpineLay
           ? [{ x: endX, z: startZ }, { x: endX, z: endZ }]
           : [{ x: startX, z: startZ }, { x: startX, z: midZ }, { x: endX, z: midZ }, { x: endX, z: endZ }];
         routes.push({
-          op: d.name, thing: tName, kind, docked: true,
+          op: d.name, datum: tName, kind, docked: true,
           track: 0, points: roundOrthogonalCorners(waypoints),
         });
       }
@@ -677,12 +677,12 @@ export function conceptSpineLayout(input: IConceptLayoutInput): IConceptSpineLay
   const operations: IConceptOpSpot[] = allOpDrafts.map((d) => ({
     name: d.name, x: d.x, z: d.z, radius: d.radius, files: d.files, bank: d.bank, unmapped: d.unmapped, index: d.index,
   }));
-  const things: IConceptThingSpot[] = thingNames.map((name) => spineSpots.get(name) ?? dockedSpots.get(name)!);
-  for (const spot of things)
+  const data: IConceptDataSpot[] = dataNames.map((name) => spineSpots.get(name) ?? dockedSpots.get(name)!);
+  for (const spot of data)
   {
-    const pack = thingPacks.get(spot.name)!;
+    const pack = dataPacks.get(spot.name)!;
     pack.files.forEach((path, k) => home.set(path, { x: spot.x + pack.offsets[k].dx, y: known.get(path)!, z: spot.z + pack.offsets[k].dz }));
   }
 
-  return { operations, things, home, spine, tray, routes };
+  return { operations, data, home, spine, tray, routes };
 }

@@ -14,7 +14,7 @@ function architecture(): IArchitecture
             'src/ui.ts': { system: 'app', layer: 'ui', tags: ['ui'], summary: 'The screen.' },
             'src/orphan.ts': { system: 'app', layer: 'ui', tags: ['ui'] },
         },
-        folders: {}, concepts: { things: {}, operations: {} },
+        folders: {}, concepts: { data: {}, operations: {} },
         warnings: [],
         error: '',
     }

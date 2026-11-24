@@ -115,16 +115,17 @@
       "system": "browser",
       "layer": "render",
       "tags": ["ui"],
-      "summary": "Zooms the map out from files to operations as columns with the things they read and write floating at their layers, and opens each operation as a process sheet.",
+      "summary": "Zooms the map out from files to operations as columns, with the data they read and write as hexagons floating at their layers, and opens each operation as a process sheet.",
       "notes": {
-        "buildLayout": "Places each operation in one of the two banks with a spine of shared things between them, docks the things only one operation touches beside its column, and gives every file a spot in its owning operation's column. Files no operation names gather under 'Not in an operation'.",
+        "buildLayout": "Places each operation in one of the two banks with a spine of shared data between them, docks the data only one operation touches beside its column, and gives every file a spot in its owning operation's column. Files no operation names gather under 'Not in an operation'.",
         "conceptTargets": "Runs each frame after the route has set its targets, so while the zoom is on every file glides to its operation and shrinks to a dot; the size it had is kept so zooming back restores it.",
         "setZoom": "Turns the zoom on or off: puts away the city's ground, layer planes, labels, rings, and wires, frames the camera from above, and on the way back restores every file to its terrace.",
         "conceptTap": "A tap in the concept view stays in it: a file opens its details and empty space puts the sheet away.",
         "openOperation": "Clicking an operation's name zooms back in and shows its files lit in place, with the operation's summary as the note.",
-        "declutter": "Hides labels that would cover a more important one (the chosen one and what it touches, then operations by size, then things).",
-        "renderIndex": "On a phone, lists every operation and thing in the sheet, folded to one row, so hidden labels stay reachable.",
-        "thingLabel": "Names a hexagon with its layer and how many files stand under it."
+        "declutter": "Hides labels that would cover a more important one (the chosen one and what it touches, then operations by size, then data).",
+        "renderIndex": "With nothing chosen, lists every operation and data entry in the sheet, folded to one row, so hidden labels stay reachable.",
+        "frameChoice": "On a phone, aims the camera so the chosen column or hexagon sits in the upper half, above the sheet.",
+        "dataLabel": "Names a hexagon with its layer and how many files stand under it."
       }
     },
     "public/controls.ts": {
@@ -285,7 +286,7 @@
       "summary": "The map's pure folder, colour, layer-rank, visibility, ray-picking, and concept-spine layout rules, kept testable away from the scene.",
       "notes": {
         "conceptFileOwners": "Picks one column per file: the operation whose steps cite it most, the smaller on a tie, then gives any operation left empty a file back from the biggest column sharing it.",
-        "conceptThingClaims": "Picks the files that stand under a thing's hexagon: each file the thing lists, unless an operation needs it to keep a column of its own."
+        "conceptDataClaims": "Picks the files that stand under a data entry's hexagon: each file it lists, unless an operation needs it to keep a column of its own."
       }
     },
     "public/shown.ts": {
@@ -381,7 +382,8 @@
       "tags": ["core", "io"],
       "summary": "Reads, validates, and writes a repository's architecture file and the batches applied to it.",
       "notes": {
-        "Architecture.ReadConcepts": "Reads the optional concepts section: things by name, and operations with the files they live in and the things they read and write. A file that does not exist or a thing that is not declared is dropped with a warning."
+        "Architecture.ReadConcepts": "Reads the optional concepts section: data by name, and operations with the files they live in and the data they read and write. A file that does not exist or a thing that is not declared is dropped with a warning.",
+        "LegacyConcepts": "Reads a file or patch written when data was called \"things\" as data, so older maps keep working."
       }
     },
     "src/repo/Blocks.ts": {
@@ -394,21 +396,21 @@
       "system": "server",
       "layer": "repo",
       "tags": ["orchestrate", "core"],
-      "summary": "Hands out the concepts pass: every described file as a paged overview, then operations and things still missing fields, then a review of what the design leaves unplaced.",
+      "summary": "Hands out the concepts pass: every described file as a paged overview, then operations and data still missing fields, then the files nothing names, then a review of what the design leaves.",
       "notes": {
-        "ReviewConcepts": "Checks the design against the files and imports: files no operation or thing names, systems with nothing placed, orphan things, near-duplicate operations, unplaced imports, and writing issues.",
-        "ConceptsNextAsync": "Drives the staged pass (overview, operations, things, place, review, done); the place stage hands back files no operation or thing names, with where their neighbours sit, until none is left. A page number returns that page of the overview at any stage.",
+        "ReviewConcepts": "Checks the design against the files and imports: systems with nothing placed, data no operation reads or writes, data holding more than 15 files, near-duplicate operations, unplaced imports, and writing issues.",
+        "ConceptsNextAsync": "Drives the staged pass (overview, operations, data, place, review, done); the place stage hands back files no operation or data entry names, with where their neighbours sit, until none is left. A page number returns that page of the overview at any stage.",
         "DesignFiles": "Every file the design can name: all but the generated and vendored ones, so the agent judges tests, docs, and data tables itself.",
         "BuildOverview": "Lists every design file with its system, layer, tags, summary, and import counts, cut into pages by size so nothing is trimmed.",
-        "ThingMissing": "A thing is finished once it has a layer and names the files that define or hold it.",
-        "FilesToPlace": "The described files the design must place: every one but the generated and vendored ones."
+        "FilesToPlace": "The described files the design must place: every one but the generated and vendored ones.",
+        "DataMissing": "A data entry is finished once it has a layer and names the files that define or hold it."
       }
     },
     "src/repo/ConceptsGuide.ts": {
       "system": "server",
       "layer": "repo",
       "tags": ["config"],
-      "summary": "The instructions an agent follows to write things and operations as process sheets, shared by the CLI and the chat."
+      "summary": "The instructions an agent follows to write data and operations as process sheets, shared by the CLI and the chat."
     },
     "src/repo/DescribeGuide.ts": {
       "system": "server",
@@ -775,7 +777,7 @@
     }
   },
   "concepts": {
-    "things": {
+    "data": {
       "Your folder": {
         "summary": "The repository on disk: its text files, as the map is allowed to read them.",
         "layer": "repo",
@@ -924,15 +926,15 @@
         ]
       },
       "Describe concepts": {
-        "summary": "An agent writes down the design as things and operations, for the person to confirm.",
+        "summary": "An agent writes down the design as data and operations, for the person to confirm.",
         "reads": ["Snapshot", "Architecture file"],
         "writes": ["Architecture file"],
         "steps": [
           { "text": "Hand out every described file with its system, layer, summary, and import counts, page by page, with nothing picked out.", "files": ["src/repo/Concepts.ts", "src/cli/Cli.ts"] },
-          { "text": "The agent reads the files, finds where work starts, and proposes things, the files that hold them, and operations with their steps, inputs, and outputs.", "files": ["src/repo/ConceptsGuide.ts", "src/agent/Instructions.ts"] },
-          { "text": "Hand back operations still missing steps, step files, or inputs and outputs (with nearby imports), and things missing a layer.", "files": ["src/repo/Concepts.ts", "src/server/Api.ts"] },
-          { "text": "Review the design for files nothing names, uncovered systems, orphan things, overlaps, and unplaced imports.", "files": ["src/repo/Concepts.ts"] },
-          { "text": "Check every named thing, file, and layer, then write the batch or refuse all of it.", "files": ["src/repo/Architecture.ts"] }
+          { "text": "The agent reads the files, finds where work starts, and proposes data, the files that hold it, and operations with their steps, inputs, and outputs.", "files": ["src/repo/ConceptsGuide.ts", "src/agent/Instructions.ts"] },
+          { "text": "Hand back operations still missing steps, step files, or inputs and outputs (with nearby imports), and data missing a layer or files.", "files": ["src/repo/Concepts.ts", "src/server/Api.ts"] },
+          { "text": "Review the design for files nothing names, uncovered systems, orphan data, overlaps, and unplaced imports.", "files": ["src/repo/Concepts.ts"] },
+          { "text": "Check every named data entry, file, and layer, then write the batch or refuse all of it.", "files": ["src/repo/Architecture.ts"] }
         ],
         "rules": [
           "A thing that an operation still reads or writes cannot be removed."

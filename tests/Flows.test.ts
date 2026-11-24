@@ -16,7 +16,7 @@ function architecture(): IArchitecture
             'src/server.ts': { layer: 'api', tags: ['io'], summary: 'Answers requests.' },
             'src/store.ts': { layer: 'model', tags: ['data'], summary: 'Keeps the records.' },
         },
-        folders: {}, concepts: { things: {}, operations: {} },
+        folders: {}, concepts: { data: {}, operations: {} },
         warnings: [],
         error: '',
     }

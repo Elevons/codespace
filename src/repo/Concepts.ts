@@ -20,6 +20,7 @@ const MaxNearby = 8
 const MaxUncoveredImportsPerOp = 6
 const MaxUnplacedListed = 150
 const MaxPlaceBatch = 20
+const MaxDataFiles = 15
 const MinSystemFilesForCoverageCheck = 3
 const CodeFileMention = /\b[\w-]+\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs|cs|py|go|rs|java|kt|rb|php|swift|cpp|hpp|c|h|vue|svelte)\b/
 
@@ -104,7 +105,7 @@ export interface IConceptDivergence
 export interface IConceptsReview
 {
     coverage: IConceptCoverage
-    orphanThings: string[]
+    orphanData: string[]
     externalInputs: string[]
     finalOutputs: string[]
     overlaps: IConceptOverlap[]
@@ -115,12 +116,12 @@ export interface IConceptsReview
 
 export interface IConceptsBatch
 {
-    mode: 'overview' | 'operations' | 'things' | 'place' | 'review' | 'done'
+    mode: 'overview' | 'operations' | 'data' | 'place' | 'review' | 'done'
     remaining: number
     guide: string
     layers: string[]
     overview?: IConceptOverview
-    things: Array<{ name: string, summary?: string, layer?: string, files: string[], missing: string[], readBy: string[], writtenBy: string[], suggestedLayers: string[] }>
+    data: Array<{ name: string, summary?: string, layer?: string, files: string[], missing: string[], readBy: string[], writtenBy: string[], suggestedLayers: string[] }>
     operations: Array<{
         name: string
         summary?: string
@@ -159,7 +160,7 @@ function FilesToPlace(architecture: IArchitecture): string[]
 function PlacedFiles(architecture: IArchitecture): Set<string>
 {
     const placed = new Set<string>()
-    for (const thing of Object.values(architecture.concepts.things)) for (const path of thing.files ?? []) placed.add(path)
+    for (const datum of Object.values(architecture.concepts.data)) for (const path of datum.files ?? []) placed.add(path)
     for (const op of Object.values(architecture.concepts.operations))
     {
         for (const path of op.files) placed.add(path)
@@ -168,11 +169,11 @@ function PlacedFiles(architecture: IArchitecture): Set<string>
     return placed
 }
 
-export function ThingMissing(thing: { layer?: string, files?: string[] }): string[]
+export function DataMissing(datum: { layer?: string, files?: string[] }): string[]
 {
     const missing: string[] = []
-    if (thing.layer === undefined) missing.push('layer')
-    if ((thing.files ?? []).length === 0) missing.push('files')
+    if (datum.layer === undefined) missing.push('layer')
+    if ((datum.files ?? []).length === 0) missing.push('files')
     return missing
 }
 
@@ -189,18 +190,18 @@ export interface IConceptsLeft
 {
     started: boolean
     operations: number
-    things: number
+    data: number
     unplaced: number
 }
 
 export function ConceptsLeft(architecture: IArchitecture): IConceptsLeft
 {
     const operations = Object.values(architecture.concepts.operations).filter((operation) => OperationMissing(operation).length > 0).length
-    const things = Object.values(architecture.concepts.things).filter((thing) => ThingMissing(thing).length > 0).length
+    const data = Object.values(architecture.concepts.data).filter((datum) => DataMissing(datum).length > 0).length
     const started = Object.keys(architecture.concepts.operations).length > 0
     const placed = PlacedFiles(architecture)
     const unplaced = started ? FilesToPlace(architecture).filter((path) => !placed.has(path)).length : 0
-    return { started, operations, things, unplaced }
+    return { started, operations, data, unplaced }
 }
 
 function BuildGraphIndex(graph: Graph, inDesign: ReadonlySet<string>): { imports: Map<string, string[]>, usedBy: Map<string, string[]> }
@@ -283,24 +284,24 @@ export function ReviewConcepts(architecture: IArchitecture, graph: Graph, known:
     const inDesign = new Set(files)
     const { imports } = BuildGraphIndex(graph, inDesign)
 
-    const { things, operations } = architecture.concepts
+    const { data, operations } = architecture.concepts
     const opEntries = Object.entries(operations)
     const placed = new Set<string>()
     const opFiles = new Map<string, Set<string>>()
     const readers = new Map<string, string[]>()
     const writers = new Map<string, string[]>()
-    for (const [name, thing] of Object.entries(things))
+    for (const [name, datum] of Object.entries(data))
     {
         readers.set(name, []); writers.set(name, [])
-        for (const path of thing.files ?? []) placed.add(path)
+        for (const path of datum.files ?? []) placed.add(path)
     }
     for (const [name, op] of opEntries)
     {
         const set = new Set<string>([...op.files, ...op.steps.flatMap((step) => step.files)].filter((path) => inDesign.has(path)))
         for (const path of set) placed.add(path)
         opFiles.set(name, set)
-        for (const thing of op.reads) readers.get(thing)?.push(name)
-        for (const thing of op.writes) writers.get(thing)?.push(name)
+        for (const datum of op.reads) readers.get(datum)?.push(name)
+        for (const datum of op.writes) writers.get(datum)?.push(name)
     }
 
     const placedFiles = files.filter((path) => placed.has(path)).length
@@ -322,33 +323,35 @@ export function ReviewConcepts(architecture: IArchitecture, graph: Graph, known:
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([name, counts]) => ({ name, files: counts.total, summary: architecture.systems[name]?.summary ?? '' }))
 
-    const orphanThings: string[] = []
+    const orphanData: string[] = []
     const externalInputs: string[] = []
     const finalOutputs: string[] = []
     const issues: string[] = []
     const blocking: string[] = []
     const systemNames = new Set(Object.keys(architecture.systems).map((name) => name.toLowerCase()))
 
-    for (const [name, thing] of Object.entries(things))
+    for (const [name, datum] of Object.entries(data))
     {
         const readCount = (readers.get(name) ?? []).length
         const writeCount = (writers.get(name) ?? []).length
         if (readCount === 0 && writeCount === 0)
         {
-            orphanThings.push(name)
-            if (opEntries.length > 0) blocking.push(`The thing "${name}" is neither read nor written by any operation; connect it to an operation or remove it.`)
+            orphanData.push(name)
+            if (opEntries.length > 0) blocking.push(`The data "${name}" is neither read nor written by any operation; connect it to an operation or remove it.`)
         }
         else if (writeCount === 0) externalInputs.push(name)
         else if (readCount === 0) finalOutputs.push(name)
-        if (thing.summary === undefined) issues.push(`The thing "${name}" has no summary.`)
+        if (datum.summary === undefined) issues.push(`The data "${name}" has no summary.`)
+        if ((datum.files ?? []).length > MaxDataFiles)
+            issues.push(`The data "${name}" holds ${(datum.files ?? []).length} files; keep the few that define or store it, move code that uses it into operation steps, or split it into several entries.`)
         if (systemNames.has(name.toLowerCase()) || name.includes('/') || CodeFileMention.test(name))
-            issues.push(`The thing "${name}" looks like a system, folder, or file path; check that it names data kept or passed, not a module.`)
+            issues.push(`The data "${name}" looks like a system, folder, or file path; check that it names data kept or passed, not a module.`)
     }
 
     for (const system of uncoveredSystems)
-        blocking.push(`The system "${system.name}" (${system.files} files) has no file in any operation or thing; decide where its files belong.`)
+        blocking.push(`The system "${system.name}" (${system.files} files) has no file in any operation or data; decide where its files belong.`)
     if (opEntries.length > 0 && unplaced.length > 0)
-        issues.push(`${unplaced.length} of ${files.length} files are in no operation and no thing (listed in "coverage.unplaced"); for each, decide whether it does work in an operation, holds a thing, or is rightly left out.`)
+        issues.push(`${unplaced.length} of ${files.length} files are in no operation and no data (listed in "coverage.unplaced"); for each, decide whether it does work in an operation or holds data.`)
 
     const divergences: IConceptDivergence[] = []
     for (const [name, op] of opEntries)
@@ -410,7 +413,7 @@ export function ReviewConcepts(architecture: IArchitecture, graph: Graph, known:
     const reviewLimit = Math.min(size, 6)
     return {
         coverage: { files: files.length, placedFiles, ratio, unplaced: unplaced.slice(0, MaxUnplacedListed), uncoveredSystems },
-        orphanThings,
+        orphanData,
         externalInputs,
         finalOutputs,
         overlaps: overlaps.slice(0, reviewLimit),
@@ -445,11 +448,11 @@ export async function ConceptsNextAsync(repo: Repo, architecture: IArchitecture,
         }
     }
 
-    const { things, operations } = architecture.concepts
+    const { data, operations } = architecture.concepts
     const readBy = new Map<string, string[]>()
     const writtenBy = new Map<string, string[]>()
     const touchedLayers = new Map<string, Set<string>>()
-    for (const name of Object.keys(things))
+    for (const name of Object.keys(data))
     {
         readBy.set(name, [])
         writtenBy.set(name, [])
@@ -470,24 +473,24 @@ export async function ConceptsNextAsync(repo: Repo, architecture: IArchitecture,
         }
     }
 
-    const thingRows = Object.entries(things).map(([name, thing]) => ({
+    const dataRows = Object.entries(data).map(([name, datum]) => ({
         name,
-        summary: thing.summary,
-        layer: thing.layer,
-        files: thing.files ?? [],
-        missing: ThingMissing(thing),
+        summary: datum.summary,
+        layer: datum.layer,
+        files: datum.files ?? [],
+        missing: DataMissing(datum),
         readBy: readBy.get(name) ?? [],
         writtenBy: writtenBy.get(name) ?? [],
         suggestedLayers: architecture.layers.filter((layer) => touchedLayers.get(name)?.has(layer)),
     }))
     const operationRows = Object.entries(operations).map(([name, operation]) => ({ name, operation, missing: OperationMissing(operation) }))
     const operationsLeft = operationRows.filter((row) => row.missing.length > 0)
-    const thingsLeft = thingRows.filter((row) => row.missing.length > 0)
+    const dataLeft = dataRows.filter((row) => row.missing.length > 0)
     const hasOperations = Object.keys(operations).length > 0
     const review = hasOperations ? ReviewConcepts(architecture, graph, known, size) : undefined
     const placedNow = PlacedFiles(architecture)
     const unplaced = hasOperations ? FilesToPlace(architecture).filter((path) => !placedNow.has(path)) : []
-    const remaining = !hasOperations ? 1 : operationsLeft.length + thingsLeft.length + unplaced.length + review!.blocking.length
+    const remaining = !hasOperations ? 1 : operationsLeft.length + dataLeft.length + unplaced.length + review!.blocking.length
 
     // Keep overview near the top of the serialized JSON so it is never clipped if a host truncates long tool replies.
     const batch: IConceptsBatch = {
@@ -496,7 +499,7 @@ export async function ConceptsNextAsync(repo: Repo, architecture: IArchitecture,
         guide: ConceptsGuide(cli, repo.Root),
         layers: architecture.layers,
         overview: page !== undefined ? BuildOverview(architecture, files, imports, usedBy, page) : undefined,
-        things: thingRows,
+        data: dataRows,
         operations: [],
         unplaced: [],
         review: undefined,
@@ -555,9 +558,9 @@ export async function ConceptsNextAsync(repo: Repo, architecture: IArchitecture,
         return batch
     }
 
-    if (thingsLeft.length > 0)
+    if (dataLeft.length > 0)
     {
-        batch.mode = 'things'
+        batch.mode = 'data'
         return batch
     }
 
@@ -566,7 +569,7 @@ export async function ConceptsNextAsync(repo: Repo, architecture: IArchitecture,
         // Each file comes with where its neighbours already sit, as a hint, never a decision.
         const homes = new Map<string, Set<string>>()
         const addHome = (path: string, home: string): void => { const set = homes.get(path) ?? new Set(); set.add(home); homes.set(path, set) }
-        for (const [name, thing] of Object.entries(things)) for (const path of thing.files ?? []) addHome(path, `thing: ${name}`)
+        for (const [name, datum] of Object.entries(data)) for (const path of datum.files ?? []) addHome(path, `data: ${name}`)
         for (const [name, op] of Object.entries(operations))
             for (const path of [...op.files, ...op.steps.flatMap((step) => step.files)]) addHome(path, `operation: ${name}`)
         batch.mode = 'place'
