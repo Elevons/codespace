@@ -296,7 +296,10 @@ function setFolded(id: string, folded: boolean): void
 function announcePanels(): void { window.dispatchEvent(new Event("codespace:panels-changed")); }
 function openOnly(id: string): void
 {
-  for (const other of FoldedPanels) if (other !== id) setFolded(other, true);
+  // A shown route stays in view while you read a file under it, so the details open beside the
+  // Showing panel rather than folding it away.
+  const keepShowing = id === "info" && S.trace !== null;
+  for (const other of FoldedPanels) if (other !== id && !(keepShowing && other === "showing")) setFolded(other, true);
   setFolded(id, false);
   announcePanels();
 }
