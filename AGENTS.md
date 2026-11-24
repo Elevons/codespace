@@ -50,7 +50,9 @@ The file has:
   opens its process sheet (In, Steps, Out, Rules); a step points at its files. Files no operation names
   gather under "Not in an operation". `apply` edits the section (merged by name, `null` removes, same
   validation), and `concepts` hands out the work, like `next`: entry points to turn into operations, then
-  the operations and things still missing steps, reads/writes, or a layer.
+  the operations and things still missing steps, reads/writes, or a layer. There is no separate button for
+  it: Ingest Codebase (and Update Map) writes the files, refines the layers, then runs this pass, and the
+  Repo panel's status counts what is left of the design.
 
 Tags come only from: `entry`, `orchestrate`, `core`, `data`, `io`, `ui`, `config`,
 `test`. Other tags are accepted and stored, but drawn grey. Summaries are one plain sentence
@@ -291,7 +293,8 @@ comes from `.env` beside `package.json` (git-ignored; see `.env.example`): `CODE
 `CODESPACE_MODEL_KEY_FILE` and `CODESPACE_MODEL_KEY_NAME`. What the agent is told lives in
 `src/agent/Instructions.ts`; its endpoint list is made from `MapTools`, so a new tool reaches it on its own.
 **When the CLI or how the chat should use the map changes, change it there too**, as well as in the sections above. `/api/chat` takes `GET` for the chat and `POST` with `{"action": "send", "text"}`, `"stop"`,
-`"new"`, `"describe"` (Ingest Codebase), `"refine"` (Refine layers), or `{"action": "open", "id"}`; its progress reaches pages on this
+`"new"`, `"describe"` (Ingest Codebase, which describes the files, refines the layers, then writes the
+concepts), `"refine"` (Refine layers alone), or `{"action": "open", "id"}`; its progress reaches pages on this
 machine as `chat` events on the view stream. Chats and pi's settings live in `~/.codespace/agent`.
 
 ## Layout worth knowing

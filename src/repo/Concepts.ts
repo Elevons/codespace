@@ -63,6 +63,23 @@ export function OperationMissing(operation: { steps: unknown[], reads: unknown[]
     return missing
 }
 
+/** What the design pass still needs, counted without reading any file: whether
+ * operations are written at all, and how many operations and things are short a
+ * step, their inputs and outputs, or a layer. */
+export interface IConceptsLeft
+{
+    started: boolean
+    operations: number
+    things: number
+}
+
+export function ConceptsLeft(architecture: IArchitecture): IConceptsLeft
+{
+    const operations = Object.values(architecture.concepts.operations).filter((operation) => OperationMissing(operation).length > 0).length
+    const things = Object.values(architecture.concepts.things).filter((thing) => thing.layer === undefined).length
+    return { started: Object.keys(architecture.concepts.operations).length > 0, operations, things }
+}
+
 export async function ConceptsNextAsync(repo: Repo, architecture: IArchitecture, graph: Graph, size: number, cli: string): Promise<IConceptsBatch>
 {
     const usedBy = new Map<string, string[]>()

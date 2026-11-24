@@ -200,11 +200,15 @@ test('The agent prompt names the CLI, the repository, the commands, and the four
     const { port, stop } = await startApi(root)
     try
     {
-        const prompt = (await send(port, '/api/ingest/status')).body.prompt as string
+        const status = (await send(port, '/api/ingest/status')).body as Record<string, unknown>
+        const prompt = status.prompt as string
         assert.ok(prompt.includes('src/cli/Cli.ts'), 'the prompt names the CLI')
         assert.ok(prompt.includes(root), 'the prompt names this repository')
-        for (const command of ['status', 'next', 'apply', 'install', 'refine'])
+        for (const command of ['status', 'next', 'apply', 'install', 'refine', 'concepts'])
             assert.ok(prompt.includes(command), `the prompt names the ${command} command`)
+        // The design pass rides along with the ingest, so the copied prompt carries its guide too.
+        assert.match(prompt, /An operation is something that changes data/)
+        assert.deepEqual(status.concepts, { started: false, operations: 0, things: 0 })
         for (const field of ['"summary"', '"system"', '"layer"', '"tags"'])
             assert.ok(prompt.includes(field), `the prompt names the ${field} field`)
 

@@ -1,7 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Chat } from '../agent/Chat.ts'
 import { Architecture, type IArchitecturePatch } from '../repo/Architecture.ts'
-import { ConceptsNextAsync } from '../repo/Concepts.ts'
+import { ConceptsGuide } from '../repo/ConceptsGuide.ts'
+import { ConceptsLeft, ConceptsNextAsync } from '../repo/Concepts.ts'
 import { DescribeGuide } from '../repo/DescribeGuide.ts'
 import { DraftTour, NormaliseFlow, ReadFlowsAsync, WriteFlowsAsync } from '../repo/Flows.ts'
 import { Graph } from '../repo/Graph.ts'
@@ -95,7 +96,8 @@ export class Api
                 ...status,
                 described: Object.values(architecture.files).filter((entry) => entry.summary !== undefined).length,
                 refine: refine === null ? { remaining: 0, breaks: 0 } : { remaining: refine.remaining, breaks: refine.breakCount },
-                prompt: `${DescribeGuide(this.cli, repo.Root)}\n\n${RefineGuide(this.cli, repo.Root)}`,
+                concepts: ConceptsLeft(architecture),
+                prompt: `${DescribeGuide(this.cli, repo.Root)}\n\n${RefineGuide(this.cli, repo.Root)}\n\n${ConceptsGuide(this.cli, repo.Root)}`,
             }
             SendJson(response, 200, body)
         }

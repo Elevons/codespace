@@ -261,7 +261,7 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "io"],
-      "summary": "The Repo panel: points the map at another folder, walks and lists recent repositories, reports how much is left to describe, and starts the ingest, refine, and delete actions."
+      "summary": "The Repo panel: points the map at another folder, walks and lists recent repositories, reports how much is left to describe, refine, and design, and starts the ingest, refine, and delete actions."
     },
     "public/repo.ts": {
       "system": "browser",
@@ -526,7 +526,7 @@
       "system": "server",
       "layer": "api",
       "tags": ["data"],
-      "summary": "The one list of what an agent can do with the map, including its neighbours, history, health check, saved flows and tour, each as an HTTP call for hosts and the built-in chat."
+      "summary": "The one list of what an agent can do with the map, including its neighbours, history, health check, saved flows and tour, and the concepts pass, each as an HTTP call for hosts and the built-in chat."
     },
     "src/server/View.ts": {
       "system": "server",

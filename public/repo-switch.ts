@@ -98,10 +98,19 @@ async function refreshStatus(): Promise<void>
     if (stale > 0) parts.push(stale + " gone");
     if (status.incomplete > 0) parts.push(status.incomplete + " to fill in");
     if (status.folders > 0) parts.push(status.folders + (status.folders === 1 ? " folder" : " folders"));
-    // Once everything is described, the second pass says how many imports still point up the layers.
+    // Once everything is described, the second pass says how many imports still point up the layers,
+    // and the design pass says what is left of the operations and things, all of which the ingest runs.
     const breaks = refine.breaks;
+    const design = status.concepts;
+    const designLeft: string[] = [];
+    if (design.operations > 0) designLeft.push(design.operations + (design.operations === 1 ? " operation" : " operations"));
+    if (design.things > 0) designLeft.push(design.things + (design.things === 1 ? " thing" : " things"));
+    const designNote = !design.started
+      ? "No operations written yet."
+      : designLeft.length > 0 ? designLeft.join(" and ") + " to finish." : "";
+    const upToDate = "Up to date." + (refine.remaining > 0 ? " " + (breaks > 0 ? breaks + (breaks === 1 ? " layer break" : " layer breaks") + " to refine." : "Layers could be refined.") : "");
     ingestNote.textContent = parts.length === 0
-      ? "Up to date." + (refine.remaining > 0 ? " " + (breaks > 0 ? breaks + (breaks === 1 ? " layer break" : " layer breaks") + " to refine." : "Layers could be refined.") : "")
+      ? [upToDate, designNote].filter((text) => text.length > 0).join(" ")
       : (described > 0 ? "To update: " : "To describe: ") + parts.join(" · ");
     refineButton.hidden = status.remaining !== 0 || refine.remaining === 0;
     copyButton.hidden = status.remaining === 0 && described === 0;
@@ -109,7 +118,7 @@ async function refreshStatus(): Promise<void>
     // time: it picks up whatever changed, even when the page has not counted it yet.
     runButton.hidden = status.remaining === 0 && described === 0;
     runButton.textContent = described > 0 ? "Update Map" : "Ingest Codebase";
-    runButton.title = described > 0 ? "Have the built-in agent bring the description up to date with the changes, in the chat" : "Have the built-in agent describe this repository, in the chat";
+    runButton.title = described > 0 ? "Have the built-in agent bring the description, the layers, and the design up to date, in the chat" : "Have the built-in agent describe this repository, its layers, and its design, in the chat";
   }
   catch
   {

@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { RunAsync } from '../src/cli/Cli.ts'
 import { Architecture } from '../src/repo/Architecture.ts'
-import { ConceptsNextAsync } from '../src/repo/Concepts.ts'
+import { ConceptsLeft, ConceptsNextAsync } from '../src/repo/Concepts.ts'
 import { Graph } from '../src/repo/Graph.ts'
 import { Repo } from '../src/repo/Repo.ts'
 import { makeRepo, removeTemp } from './support.ts'
@@ -176,4 +176,29 @@ test('The concepts command prints the pass, and apply takes a concepts patch', a
         console.log = log
         await removeTemp(root)
     }
+})
+
+test('ConceptsLeft counts what the design still needs, without reading a file', async () =>
+{
+    const root = await repo({
+        things: { Data: { layer: 'data' }, Loose: { summary: 'Kept somewhere.' } },
+        operations: {
+            Good: { summary: 'Runs.', reads: ['Data'], writes: [], steps: [{ text: 'Do it.', files: ['src/a.ts'] }] },
+            Bare: { summary: 'Not written yet.' },
+        },
+    })
+    try
+    {
+        const architecture = await Architecture.ReadAsync(root, Known)
+        assert.deepEqual(ConceptsLeft(architecture), { started: true, operations: 1, things: 1 })
+    }
+    finally { await removeTemp(root) }
+
+    const empty = await repo()
+    try
+    {
+        const architecture = await Architecture.ReadAsync(empty, Known)
+        assert.deepEqual(ConceptsLeft(architecture), { started: false, operations: 0, things: 0 })
+    }
+    finally { await removeTemp(empty) }
 })

@@ -288,7 +288,7 @@ Every path must be a file in the repository. Use show_flow to draw it on the map
     },
     {
         name: 'ingest_status', method: 'GET', path: '/api/ingest/status', writes: false, parameters: NoArguments,
-        description: 'Returns the number of files and folders that need a description. It also returns the number of layer breaks to refine.',
+        description: 'Returns the number of files and folders that need a description, the number of layer breaks to refine, and what the design pass still needs (whether operations are written, and how many operations and things lack steps, inputs and outputs, or a layer). It also returns the prompt that runs the whole ingest.',
     },
     {
         name: 'next', method: 'POST', path: '/api/ingest/next', writes: true,
