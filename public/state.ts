@@ -240,6 +240,8 @@ export function isLitRecord(rec: FileRecord): boolean
 // Glides the camera to one file, close enough to read it and the block stack it opens into.
 export function frameFile(rec: FileRecord): void
 {
+  // The concept view is a map of its own: choosing a file there shows its details without moving the camera.
+  if (S.conceptZoom) return;
   S.autoSpin = false;
   window.dispatchEvent(new Event("codespace:spin"));
   // Frame the box and its block stack, not only the closed box: the stack stands 1.5× the box's
@@ -257,7 +259,7 @@ export function frameFile(rec: FileRecord): void
 export function frameBlock(rec: FileRecord): boolean
 {
   const anchors = S.floorAnchors;
-  if (anchors === null || anchors.path !== rec.path || anchors.chosenBox === null) return false;
+  if (S.conceptZoom || anchors === null || anchors.path !== rec.path || anchors.chosenBox === null) return false;
   S.autoSpin = false;
   window.dispatchEvent(new Event("codespace:spin"));
   // Fit the floor's own box: a thin block still leaves its neighbours in view, and a thick one

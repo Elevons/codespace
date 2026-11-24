@@ -997,3 +997,16 @@ body.phone #concept-list { left: max(6px, env(safe-area-inset-left)); right: max
 body.phone #concept-list.index { padding: 6px; }
 body.phone #concept-list button { min-height: 36px; }
 body.phone #concept-leaders { display: none; }
+
+#concept-labels .concept-thing small { display: block; font: 400 9px ui-sans-serif, system-ui, sans-serif; color: #a8853a; }
+#concept-key { position: fixed; left: 14px; bottom: 150px; z-index: 4; max-width: 300px; padding: 8px 10px; border-radius: 8px; pointer-events: none;
+  background: rgba(13,17,23,.85); border: 1px solid #30363d; color: #9aa7b4; font: 11px/1.5 ui-sans-serif, system-ui, sans-serif; }
+#concept-key[hidden] { display: none; }
+#concept-key b { color: #e6edf3; font-weight: 600; margin-right: 4px; }
+#concept-key i { display: inline-block; width: 12px; height: 10px; margin-right: 6px; vertical-align: -1px; }
+#concept-key i.hex { background: #e3b341; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+#concept-key i.op { border: 1px solid #8b98a8; border-radius: 3px; }
+#concept-key i.read, #concept-key i.write { height: 0; border-top: 2px dashed #8b98a8; vertical-align: 3px; }
+#concept-key i.write { border-top-style: solid; }
+body.phone #concept-labels .concept-thing small { display: none; }
+body.phone #concept-key { display: none; }

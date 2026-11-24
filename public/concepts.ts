@@ -1,7 +1,7 @@
 import { S, V3, scene, camera, canvas, layerRank, render, renderEdges, fileIndex, glow } from "./state.js";
 import { centerView, buildLayerPlanes, setConceptBounds, sceneryMeshes } from "./meshes.js";
 import { pickFile } from "./boxes.js";
-import { select, selectFile } from "./panels.js";
+import { selectFile } from "./panels.js";
 import { changeView } from "./viewcall.js";
 import { setSpin } from "./controls.js";
 import { conceptSpineLayout, type IConceptRoute } from "./rules.js";
@@ -68,6 +68,14 @@ const sizes = new WeakMap<FileRecord, { rest: BABYLON.Vector3; mine: BABYLON.Vec
 const overlay = document.createElement("div");
 overlay.id = "concept-labels";
 overlay.hidden = true;
+// What the shapes are, since nothing else on the map says: a hexagon is data, a sleeve is something that changes it.
+const key = document.createElement("div");
+key.id = "concept-key";
+key.hidden = true;
+key.innerHTML = '<div><i class="hex"></i><b>Data</b> kept or passed on; its own files stand under it</div>' +
+  '<div><i class="op"></i><b>Operation</b> changes data; its files stand in its column</div>' +
+  '<div><i class="read"></i>reads \u00b7 <i class="write"></i>writes</div>';
+document.body.appendChild(key);
 document.body.appendChild(overlay);
 const button = document.getElementById("concept-zoom") as HTMLButtonElement | null;
 
@@ -534,7 +542,12 @@ function thingLabel(marker: Marker): HTMLElement
   element.type = "button";
   element.className = "concept-thing" + (marker.dockedTo !== null ? " docked" : " spine");
   element.textContent = marker.name;
-  element.title = S.CONCEPTS.things[marker.name]?.summary ?? "";
+  const thing = S.CONCEPTS.things[marker.name];
+  const held = thing?.files?.length ?? 0;
+  const small = document.createElement("small");
+  small.textContent = [thing?.layer ? thing.layer + " layer" : "data", held > 0 ? held + (held === 1 ? " file" : " files") : ""].filter((part) => part !== "").join(" \u00b7 ");
+  element.appendChild(small);
+  element.title = thing?.summary ?? "";
   element.addEventListener("pointerenter", () => setHovered({ kind: "thing", name: marker.name }));
   element.addEventListener("pointerleave", () => clearHovered("thing", marker.name));
   element.addEventListener("click", (event) => { event.stopPropagation(); choose("thing", marker.name); });
@@ -640,7 +653,6 @@ function addLeader(row: HTMLElement, path: string, color: string): void
 function openFile(path: string): void
 {
   const [node, file] = fileIndex(path);
-  setZoom(false);
   if (node >= 0) selectFile(node, file);
 }
 
@@ -993,6 +1005,7 @@ function setZoom(on: boolean): void
   S.conceptZoom = on;
   document.body.classList.toggle("concept-zoom", on);
   overlay.hidden = !on;
+  key.hidden = !on;
   button?.classList.toggle("on", on);
   button?.setAttribute("aria-pressed", String(on));
   if (on)
@@ -1000,7 +1013,6 @@ function setZoom(on: boolean): void
     // Labels that drift with a spinning camera are hard to click, and a steady front angle lines
     // up the central data spine horizontally across the screen.
     setSpin(false);
-    select(-1);
     hovered = null;
     layout = null;
     conceptTargets();
@@ -1038,7 +1050,7 @@ function openOperation(spot: Spot): void
   void changeView({ type: "show", shown: { title: spot.name, note: op?.summary ?? "", trace: false, files: spot.files.map((path) => ({ path, note: "" })) } });
 }
 
-// A tap while zoomed out goes back to the files: on a file it opens that file, else it just zooms in.
+// A tap in the concept view stays in it: a file opens its details, and empty space puts the sheet away.
 export function conceptTap(): boolean
 {
   if (!S.conceptZoom) return false;
@@ -1046,7 +1058,6 @@ export function conceptTap(): boolean
   if (plate.hit) { choose("thing", (plate.pickedMesh.metadata as { thing: string }).thing); return true; }
   const hit = pickFile(scene.pointerX, scene.pointerY);
   if (!hit) { if (active !== null) setActive(null); return true; }
-  setZoom(false);
   selectFile(hit.node, hit.file);
   return true;
 }

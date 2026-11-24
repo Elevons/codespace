@@ -120,10 +120,11 @@
         "buildLayout": "Places each operation in one of the two banks with a spine of shared things between them, docks the things only one operation touches beside its column, and gives every file a spot in its owning operation's column. Files no operation names gather under 'Not in an operation'.",
         "conceptTargets": "Runs each frame after the route has set its targets, so while the zoom is on every file glides to its operation and shrinks to a dot; the size it had is kept so zooming back restores it.",
         "setZoom": "Turns the zoom on or off: puts away the city's ground, layer planes, labels, rings, and wires, frames the camera from above, and on the way back restores every file to its terrace.",
-        "conceptTap": "While zoomed out, a tap on a file zooms back in and opens that file; any other tap is swallowed so nothing behind the dots is chosen.",
+        "conceptTap": "A tap in the concept view stays in it: a file opens its details and empty space puts the sheet away.",
         "openOperation": "Clicking an operation's name zooms back in and shows its files lit in place, with the operation's summary as the note.",
         "declutter": "Hides labels that would cover a more important one (the chosen one and what it touches, then operations by size, then things).",
-        "renderIndex": "On a phone, lists every operation and thing in the sheet, folded to one row, so hidden labels stay reachable."
+        "renderIndex": "On a phone, lists every operation and thing in the sheet, folded to one row, so hidden labels stay reachable.",
+        "thingLabel": "Names a hexagon with its layer and how many files stand under it."
       }
     },
     "public/controls.ts": {
@@ -283,7 +284,8 @@
       "tags": ["core"],
       "summary": "The map's pure folder, colour, layer-rank, visibility, ray-picking, and concept-spine layout rules, kept testable away from the scene.",
       "notes": {
-        "conceptFileOwners": "Picks one column per file: the operation whose steps cite it most, the smaller on a tie, then gives any operation left empty a file back from the biggest column sharing it."
+        "conceptFileOwners": "Picks one column per file: the operation whose steps cite it most, the smaller on a tie, then gives any operation left empty a file back from the biggest column sharing it.",
+        "conceptThingClaims": "Picks the files that stand under a thing's hexagon: each file the thing lists, unless an operation needs it to keep a column of its own."
       }
     },
     "public/shown.ts": {
@@ -296,7 +298,10 @@
       "system": "browser",
       "layer": "model",
       "tags": ["core"],
-      "summary": "The page's mutable world and constants: the graph, the chosen file and block, the selection, import names, filters, the layer picked from the legend, edit flashes, wire anchors, scene handles, the commit the history colouring stands at, and camera framing for a file's block stack or a chosen floor."
+      "summary": "The page's mutable world and constants: the graph, the chosen file and block, the selection, import names, filters, the layer picked from the legend, edit flashes, wire anchors, scene handles, the commit the history colouring stands at, and camera framing for a file's block stack or a chosen floor.",
+      "notes": {
+        "frameFile": "Glides the camera to a chosen file and its block stack, except in the concept view, which keeps its own framing."
+      }
     },
     "public/style.css": {
       "system": "browser",
