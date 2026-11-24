@@ -105,6 +105,7 @@ async function refreshStatus(): Promise<void>
     const designLeft: string[] = [];
     if (design.operations > 0) designLeft.push(design.operations + (design.operations === 1 ? " operation" : " operations"));
     if (design.things > 0) designLeft.push(design.things + (design.things === 1 ? " thing" : " things"));
+    if (design.unplaced > 0) designLeft.push(design.unplaced + (design.unplaced === 1 ? " file to place" : " files to place"));
     const designNote = !design.started
       ? "No operations written yet."
       : designLeft.length > 0 ? designLeft.join(" and ") + " to finish." : "";

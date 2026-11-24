@@ -19,7 +19,7 @@ export interface IIngestStatus
   refine: { remaining: number; breaks: number };
   /** The design pass: whether operations are written at all, and what still lacks
    * steps, inputs and outputs, or the layer a thing is held on. */
-  concepts: { started: boolean; operations: number; things: number };
+  concepts: { started: boolean; operations: number; things: number; unplaced: number };
   /** The prompt handed to an agent, as the server words it. */
   prompt: string;
 }

@@ -45,6 +45,7 @@ export interface IThing
 {
     summary?: string
     layer?: string
+    files?: string[]
     rules?: string[]
 }
 
@@ -74,6 +75,7 @@ export interface IThingPatch
 {
     summary?: string | null
     layer?: string | null
+    files?: string[] | null
     rules?: string[] | null
 }
 
@@ -268,6 +270,18 @@ export class Architecture
                 else result.warnings.push(`The thing "${name}" is on layer "${entry.layer}", which "layers" does not list.`)
             }
             else if (entry.layer !== undefined) result.warnings.push(`The thing "${name}": layer should be a name.`)
+            if (Array.isArray(entry.files))
+            {
+                const held: string[] = []
+                for (const item of entry.files)
+                {
+                    if (typeof item !== 'string') continue
+                    if (!exists.has(item)) { result.warnings.push(`The thing "${name}" names "${item}", which is not a file in the repository.`); continue }
+                    if (!held.includes(item)) held.push(item)
+                }
+                if (held.length > 0) thing.files = held
+            }
+            else if (entry.files !== undefined) result.warnings.push(`The thing "${name}" should list its files.`)
             const rules = textList(entry, 'rules', `The thing "${name}"`)
             if (rules.length > 0) thing.rules = rules
             result.concepts.things[name] = thing
@@ -444,6 +458,7 @@ export class Architecture
             {
                 files[to] = files[from]!; delete files[from]
                 for (const operation of Object.values(concepts.operations)) Architecture.RenameInOperation(operation, from, to)
+                for (const thing of Object.values(concepts.things)) Architecture.RenameInOperation(thing, from, to)
             }
         }
 
@@ -689,6 +704,7 @@ export class Architecture
                 if (kind === 'things')
                 {
                     if (!isText(fields.layer)) problems.push(`"${name}": layer must be a layer name.`)
+                    if (!isTextList(fields.files)) problems.push(`"${name}": files must be a list of text.`)
                     continue
                 }
                 for (const key of ['files', 'reads', 'writes']) if (!isTextList(fields[key])) problems.push(`"${name}": ${key} must be a list of text.`)
@@ -740,6 +756,15 @@ export class Architecture
                 if (entry.layer === null) delete thing.layer
                 else if (!layers.includes(entry.layer)) problems.push(`The thing "${name}": layer "${entry.layer}" is not in layers (${layers.join(', ') || 'none'}).`)
                 else thing.layer = entry.layer
+            }
+            if (entry.files !== undefined)
+            {
+                if (entry.files === null || entry.files.length === 0) delete thing.files
+                else
+                {
+                    for (const path of entry.files) if (!exists.has(path)) problems.push(`The thing "${name}": "${path}" is not a file in the repository.`)
+                    thing.files = [...new Set(entry.files)]
+                }
             }
             if (entry.rules !== undefined) { if (entry.rules === null) delete thing.rules; else rulesOf(name, entry.rules, thing) }
             concepts.things[name] = thing

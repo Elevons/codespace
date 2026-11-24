@@ -121,7 +121,9 @@
         "conceptTargets": "Runs each frame after the route has set its targets, so while the zoom is on every file glides to its operation and shrinks to a dot; the size it had is kept so zooming back restores it.",
         "setZoom": "Turns the zoom on or off: puts away the city's ground, layer planes, labels, rings, and wires, frames the camera from above, and on the way back restores every file to its terrace.",
         "conceptTap": "While zoomed out, a tap on a file zooms back in and opens that file; any other tap is swallowed so nothing behind the dots is chosen.",
-        "openOperation": "Clicking an operation's name zooms back in and shows its files lit in place, with the operation's summary as the note."
+        "openOperation": "Clicking an operation's name zooms back in and shows its files lit in place, with the operation's summary as the note.",
+        "declutter": "Hides labels that would cover a more important one (the chosen one and what it touches, then operations by size, then things).",
+        "renderIndex": "On a phone, lists every operation and thing in the sheet, folded to one row, so hidden labels stay reachable."
       }
     },
     "public/controls.ts": {
@@ -279,7 +281,10 @@
       "system": "browser",
       "layer": "model",
       "tags": ["core"],
-      "summary": "The map's pure folder, colour, layer-rank, visibility, ray-picking, and concept-spine layout rules, kept testable away from the scene."
+      "summary": "The map's pure folder, colour, layer-rank, visibility, ray-picking, and concept-spine layout rules, kept testable away from the scene.",
+      "notes": {
+        "conceptFileOwners": "Picks one column per file: the operation whose steps cite it most, the smaller on a tie, then gives any operation left empty a file back from the biggest column sharing it."
+      }
     },
     "public/shown.ts": {
       "system": "browser",
@@ -384,11 +389,14 @@
       "system": "server",
       "layer": "repo",
       "tags": ["orchestrate", "core"],
-      "summary": "Hands out the concepts pass: a codebase overview with candidate things and entry points, operations and things still missing fields, and a review check against coverage and imports.",
+      "summary": "Hands out the concepts pass: every described file as a paged overview, then operations and things still missing fields, then a review of what the design leaves unplaced.",
       "notes": {
-        "IsAppFile": "Filters out tests, docs, config-only files, declarations, and generated files so concept discovery and coverage focus on working application code.",
-        "ReviewConcepts": "Checks the declared things and operations against the application files and import graph: coverage, uncovered systems, orphan things, near-duplicate overlaps, uncovered import divergences, and quality issues.",
-        "ConceptsNextAsync": "Drives the staged concepts pass (candidates, operations, things, review, done), handing back the architecture overview, thing candidates, multi-language triggers, import cones, nearby neighbours, and review diagnostics."
+        "ReviewConcepts": "Checks the design against the files and imports: files no operation or thing names, systems with nothing placed, orphan things, near-duplicate operations, unplaced imports, and writing issues.",
+        "ConceptsNextAsync": "Drives the staged pass (overview, operations, things, place, review, done); the place stage hands back files no operation or thing names, with where their neighbours sit, until none is left. A page number returns that page of the overview at any stage.",
+        "DesignFiles": "Every file the design can name: all but the generated and vendored ones, so the agent judges tests, docs, and data tables itself.",
+        "BuildOverview": "Lists every design file with its system, layer, tags, summary, and import counts, cut into pages by size so nothing is trimmed.",
+        "ThingMissing": "A thing is finished once it has a layer and names the files that define or hold it.",
+        "FilesToPlace": "The described files the design must place: every one but the generated and vendored ones."
       }
     },
     "src/repo/ConceptsGuide.ts": {
@@ -915,10 +923,10 @@
         "reads": ["Snapshot", "Architecture file"],
         "writes": ["Architecture file"],
         "steps": [
-          { "text": "Build an overview of the working systems, folders, and files alongside candidate things and entry points across languages.", "files": ["src/repo/Concepts.ts", "src/cli/Cli.ts"] },
-          { "text": "The agent follows what each entry point calls and proposes things and operations with their steps, inputs, and outputs.", "files": ["src/repo/ConceptsGuide.ts", "src/agent/Instructions.ts"] },
+          { "text": "Hand out every described file with its system, layer, summary, and import counts, page by page, with nothing picked out.", "files": ["src/repo/Concepts.ts", "src/cli/Cli.ts"] },
+          { "text": "The agent reads the files, finds where work starts, and proposes things, the files that hold them, and operations with their steps, inputs, and outputs.", "files": ["src/repo/ConceptsGuide.ts", "src/agent/Instructions.ts"] },
           { "text": "Hand back operations still missing steps, step files, or inputs and outputs (with nearby imports), and things missing a layer.", "files": ["src/repo/Concepts.ts", "src/server/Api.ts"] },
-          { "text": "Review the design against the files and import graph for uncovered systems, low coverage, orphan things, overlaps, and import divergences.", "files": ["src/repo/Concepts.ts"] },
+          { "text": "Review the design for files nothing names, uncovered systems, orphan things, overlaps, and unplaced imports.", "files": ["src/repo/Concepts.ts"] },
           { "text": "Check every named thing, file, and layer, then write the batch or refuse all of it.", "files": ["src/repo/Architecture.ts"] }
         ],
         "rules": [

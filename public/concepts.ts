@@ -1,4 +1,4 @@
-import { S, V3, scene, camera, canvas, render, renderEdges, fileIndex, glow } from "./state.js";
+import { S, V3, scene, camera, canvas, layerRank, render, renderEdges, fileIndex, glow } from "./state.js";
 import { centerView, buildLayerPlanes, setConceptBounds, sceneryMeshes } from "./meshes.js";
 import { pickFile } from "./boxes.js";
 import { select, selectFile } from "./panels.js";
@@ -75,6 +75,16 @@ function hueColor(index: number, count: number): BABYLON.Color3
   return BABYLON.Color3.FromHSV((index * 360 / Math.max(count, 1) + 20) % 360, 0.55, 0.95);
 }
 
+// While zoomed out a file sits on its own layer's plane, not on its folder's tile: the columns read
+// by layer, and a deep folder must not lift a dot above the plane it belongs to. The dot's centre is
+// half a dot above the plane, so its base rests on it and its ring sits just under it.
+function stackY(path: string): number
+{
+  const layer = S.FILE_LAYERS.get(path);
+  const rank = layer === undefined ? -1 : layerRank(layer);
+  return (rank < 0 ? 0 : rank * S.layerGap) + DotSize / 2;
+}
+
 // Operations line up in two banks flanking a central data spine of shared things; single-owner
 // things dock beside their parent column, and unmapped files sit in a quiet tray to the side.
 function buildLayout(): Layout | null
@@ -88,7 +98,7 @@ function buildLayout(): Layout | null
   const opCount = Object.keys(S.CONCEPTS.operations).length;
   const plan = conceptSpineLayout({
     center: { x: center.x, z: center.z },
-    files: records.map((rec) => ({ path: rec.path, y: rec.terrace.y })),
+    files: records.map((rec) => ({ path: rec.path, y: stackY(rec.path) })),
     things: S.CONCEPTS.things,
     operations: S.CONCEPTS.operations,
     unmappedName: Unmapped,
@@ -505,7 +515,9 @@ function label(spot: Spot): HTMLElement
   element.style.setProperty("--op", cssColor(spot.color));
   element.textContent = spot.name;
   const small = document.createElement("small");
-  small.textContent = spot.files.length + (spot.files.length === 1 ? " file" : " files");
+  const named = spot.unmapped ? spot.files.length : (S.CONCEPTS.operations[spot.name]?.files.length ?? spot.files.length);
+  small.textContent = named + (named === 1 ? " file" : " files");
+  element.dataset.weight = String(named);
   element.appendChild(small);
   element.title = S.CONCEPTS.operations[spot.name]?.summary ?? "";
   element.addEventListener("pointerenter", () => setHovered({ kind: "op", name: spot.name }));
@@ -532,7 +544,6 @@ function thingLabel(marker: Marker): HTMLElement
 type Choice = { kind: "op" | "thing"; name: string } | null;
 let active: Choice = null;
 let hovered: Choice = null;
-let step = -1;
 const expanded = new Set<number>();
 const list = document.createElement("aside");
 list.id = "concept-list";
@@ -634,8 +645,13 @@ function openFile(path: string): void
 function setActive(next: Choice): void
 {
   active = next;
-  step = -1;
   expanded.clear();
+  renderSheet();
+}
+
+function toggleStep(index: number): void
+{
+  if (!expanded.delete(index)) expanded.add(index);
   renderSheet();
 }
 
@@ -647,12 +663,41 @@ function renderSheet(): void
   leaders.replaceChildren();
   const spot = active?.kind === "op" ? layout?.operations.find((candidate) => candidate.name === active!.name) : undefined;
   const marker = active?.kind === "thing" ? layout?.things.find((candidate) => candidate.name === active!.name) : undefined;
-  list.hidden = !spot && !marker;
-  if (list.hidden) leaders.setAttribute("hidden", ""); else leaders.removeAttribute("hidden");
+  const phoneIndex = !spot && !marker && S.conceptZoom && layout !== null && document.body.classList.contains("phone");
+  list.hidden = !spot && !marker && !phoneIndex;
+  if (!spot && !marker) leaders.setAttribute("hidden", ""); else leaders.removeAttribute("hidden");
+  list.classList.toggle("index", phoneIndex);
   if (spot) renderOperation(spot);
   else if (marker) renderThing(marker.name);
-  else active = null;
+  else { active = null; if (phoneIndex) renderIndex(layout!); }
   applyActive();
+}
+
+// On a phone the labels cannot all fit, so the sheet lists every operation and thing to choose from,
+// folded to one row until it is opened.
+let indexOpen = false;
+function renderIndex(at: Layout): void
+{
+  const ops = at.operations.filter((spot) => !spot.unmapped);
+  const toggle = el("button", ops.length + " operations · " + at.things.length + " things " + (indexOpen ? "▾" : "▴"), "index-toggle");
+  toggle.type = "button";
+  toggle.addEventListener("click", () => { indexOpen = !indexOpen; renderSheet(); });
+  list.appendChild(toggle);
+  if (!indexOpen) return;
+  const opList = el("div", "", "index-list");
+  for (const spot of at.operations)
+  {
+    const row = el("button", "", "index-op" + (spot.unmapped ? " unmapped" : ""));
+    row.type = "button";
+    row.style.setProperty("--op", cssColor(spot.color));
+    row.appendChild(el("span", spot.name));
+    const named = spot.unmapped ? spot.files.length : (S.CONCEPTS.operations[spot.name]?.files.length ?? 0);
+    row.appendChild(el("small", String(named)));
+    row.addEventListener("click", () => setActive({ kind: "op", name: spot.name }));
+    opList.appendChild(row);
+  }
+  list.appendChild(opList);
+  chips(section("Things"), "thing", at.things.map((marker) => marker.name));
 }
 
 // An operation reads as a process sheet: what comes in, the steps, what goes out, and the rules.
@@ -671,8 +716,8 @@ function renderOperation(spot: Spot): void
     op.steps.forEach((entry, index) =>
     {
       const row = el("li");
-      if (index === step) row.classList.add("on");
-      if (expanded.has(index)) row.classList.add("open");
+      const open = expanded.has(index);
+      if (open) row.classList.add("on", "open");
       const text = el("span", entry.text, "text");
       row.appendChild(text);
       const count = entry.files.length;
@@ -680,8 +725,8 @@ function renderOperation(spot: Spot): void
       {
         const more = el("button", count + (count === 1 ? " file" : " files"), "more");
         more.type = "button";
-        more.title = "List the files that do this";
-        more.addEventListener("click", (event) => { event.stopPropagation(); if (expanded.delete(index)) row.classList.remove("open"); else { expanded.add(index); row.classList.add("open"); } });
+        more.title = open ? "Hide the files that do this" : "List the files that do this";
+        more.addEventListener("click", (event) => { event.stopPropagation(); toggleStep(index); });
         row.appendChild(more);
         const names = el("ul", "", "files");
         for (const path of entry.files)
@@ -690,12 +735,13 @@ function renderOperation(spot: Spot): void
           file.title = path + (S.FILE_SUMMARIES.get(path) ? "\n" + S.FILE_SUMMARIES.get(path) : "");
           file.addEventListener("click", (event) => { event.stopPropagation(); openFile(path); });
           names.appendChild(file);
+          // Each listed file gets its own pointer to its dot, not one line for the whole step.
+          if (open) { emphasised.add(path); if (S.fileRecords.has(path)) addLeader(file, path, color); }
         }
         row.appendChild(names);
       }
-      row.addEventListener("click", () => { step = step === index ? -1 : index; renderSheet(); });
+      row.addEventListener("click", () => toggleStep(index));
       steps.appendChild(row);
-      if (index === step) for (const path of entry.files) { emphasised.add(path); if (S.fileRecords.has(path)) addLeader(row, path, color); }
     });
     block.appendChild(steps);
   }
@@ -794,7 +840,7 @@ function applyActive(): void
   }
 }
 
-// Draws each chosen step's pointers: from the step's row to each of its files' dots, where they are now.
+// Draws each listed file's pointer: from its own row in the sheet to its dot, where the dot is now.
 function placeLeaders(transform: BABYLON.Matrix, viewport: BABYLON.Viewport): void
 {
   if (pointers.length === 0) return;
@@ -835,18 +881,44 @@ function buildLabels(at: Layout): void
   }
 }
 
+// Labels that would cover a more important one are hidden rather than piled up; they come back as the
+// camera moves, and every name stays reachable from the sheet.
+const labelSize = new WeakMap<HTMLElement, { w: number; h: number }>();
+function declutter(placed: { element: HTMLElement; x: number; y: number; rank: number }[], width: number, height: number): void
+{
+  placed.sort((a, b) => a.rank - b.rank);
+  const kept: { l: number; t: number; r: number; b: number }[] = [];
+  for (const { element, x, y } of placed)
+  {
+    let size = labelSize.get(element);
+    if (!size || size.w === 0) { size = { w: element.offsetWidth, h: element.offsetHeight }; labelSize.set(element, size); }
+    const box = { l: x - size.w / 2 - 2, t: y - size.h - 2, r: x + size.w / 2 + 2, b: y + 2 };
+    const onScreen = box.r > 0 && box.l < width && box.b > 0 && box.t < height;
+    const clear = onScreen && !kept.some((k) => box.l < k.r && box.r > k.l && box.t < k.b && box.b > k.t);
+    element.style.visibility = clear ? "" : "hidden";
+    if (clear) kept.push(box);
+  }
+}
+
 export function placeConceptLabels(): void
 {
   if (overlay.hidden) return;
   const width = canvas.clientWidth, height = canvas.clientHeight;
   const transform = scene.getTransformMatrix();
   const viewport = camera.viewport.toGlobal(width, height);
+  const placed: { element: HTMLElement; x: number; y: number; rank: number }[] = [];
   for (const element of overlay.children as HTMLCollectionOf<HTMLElement>)
   {
     const point = new V3(Number(element.dataset.x), Number(element.dataset.y ?? 0), Number(element.dataset.z));
     const p = V3.Project(point, BABYLON.Matrix.IdentityReadOnly, transform, viewport);
     element.style.transform = "translate(" + p.x.toFixed(1) + "px," + p.y.toFixed(1) + "px) translate(-50%, -100%)";
+    // The chosen label and what it touches come first, then operations by size, then things.
+    const isOp = element.classList.contains("concept-op");
+    const lit = element.classList.contains("chosen") || (active !== null && !element.classList.contains("faded"));
+    const rank = (lit ? 0 : 2e6) + (isOp ? 0 : 1e6) - Number(element.dataset.weight ?? 0);
+    placed.push({ element, x: p.x, y: p.y, rank });
   }
+  declutter(placed, width, height);
   placeLeaders(transform, viewport);
 }
 
@@ -867,11 +939,7 @@ export function conceptTargets(): void
     renderSheet();
   }
   if (!layout) return;
-  for (const [path, spot] of layout.home)
-  {
-    const rec = S.fileRecords.get(path);
-    if (rec) spot.y = rec.terrace.y;
-  }
+  for (const [path, spot] of layout.home) if (S.fileRecords.has(path)) spot.y = stackY(path);
   setScenery(false);
   fitPills(layout);
   fitThings(layout);

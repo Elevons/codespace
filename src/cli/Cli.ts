@@ -4,7 +4,7 @@
  *
  *   node src/cli/Cli.ts next [--size N]      the next files or folders without a complete entry
  *   node src/cli/Cli.ts apply --file <json>  write systems, layers, tags, and summaries back; - reads stdin
- *   node src/cli/Cli.ts concepts [--size N]  what concept work remains: codebase overview, candidate things and entry points, missing steps/reads/writes/layers, and a review check
+ *   node src/cli/Cli.ts concepts [--size N] [--page N]  what concept work remains: the whole codebase overview (paged), missing steps/reads/writes/layers, and a review check
  *   node src/cli/Cli.ts refine [--size N]    the second pass: layer breaks, files that fit elsewhere, and layering problems
  *   node src/cli/Cli.ts sync                 carry entries along with moved files and drop those for files that are gone
  *   node src/cli/Cli.ts install              leave the upkeep rules in the repository, so its architecture file is kept true
@@ -18,7 +18,7 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Architecture, type IArchitecturePatch } from '../repo/Architecture.ts'
-import { ConceptsNextAsync, DefaultConceptsSize } from '../repo/Concepts.ts'
+import { ConceptsNextAsync, DefaultConceptsSize, ReadPage } from '../repo/Concepts.ts'
 import { Graph } from '../repo/Graph.ts'
 import { ClampSize, DefaultBatch, MaxBatchSize, StatusAsync } from '../repo/Ingest.ts'
 import { InstallAsync } from '../repo/Install.ts'
@@ -39,7 +39,7 @@ const Usage = `Usage: node src/cli/Cli.ts <command> [--repo <folder>]
   next [--size N]            the next files or folders to describe or review, with their source
   refine [--size N]          the second pass, once everything is described: the imports that point up the layers,
                              files that would sit better on another layer or in another system, and layering problems
-  concepts [--size N]        the concepts pass: codebase overview, candidate things and entry points, operations and things
+  concepts [--size N] [--page N]  the concepts pass: every described file (paged), operations and things
                              still missing steps, reads and writes, or a layer, and a review check against the imports
   install                    write the upkeep rules into the repository (a note in AGENTS.md, the rules in .codespace/README.md),
                              so whoever changes the code later keeps its architecture file true
@@ -115,7 +115,8 @@ export async function RunAsync(args: readonly string[]): Promise<number>
         {
             const architecture = await Architecture.ReadAsync(repo.Root, await repo.ListFilesAsync())
             const size = ClampSize(ReadOption(rest, '--size'), DefaultConceptsSize)
-            console.log(JSON.stringify({ name: repo.Name, root: repo.Root, ...await ConceptsNextAsync(repo, architecture, await Graph.BuildAsync(repo), size, fileURLToPath(import.meta.url)) }))
+            const page = ReadPage(ReadOption(rest, '--page'))
+            console.log(JSON.stringify({ name: repo.Name, root: repo.Root, ...await ConceptsNextAsync(repo, architecture, await Graph.BuildAsync(repo), size, fileURLToPath(import.meta.url), page) }))
             return 0
         }
 

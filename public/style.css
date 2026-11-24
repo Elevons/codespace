@@ -981,3 +981,19 @@ body.concept-zoom #labels { display: none; }
 #concept-list ul.files li { padding: 2px 6px; border-radius: 4px; cursor: pointer; font: 11px ui-monospace, monospace; color: #9aa7b4; }
 #concept-list ul.files li:hover { background: #21262d; color: #fff; }
 #concept-list ul.rules li { padding: 2px 0 2px 10px; color: #9aa7b4; border-left: 2px solid #30363d; margin-bottom: 3px; }
+
+/* The concept zoom on a phone: smaller labels, and the sheet sits above the tab bar, full width. */
+#concept-list .index-toggle { width: 100%; text-align: left; padding: 8px 10px; font-weight: 600; }
+#concept-list .index-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+#concept-list .index-op { display: flex; align-items: center; gap: 8px; text-align: left; padding: 8px 10px; border-left: 3px solid var(--op, #8b98a8); }
+#concept-list .index-op span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#concept-list .index-op small { color: #7d8a97; }
+#concept-list .index-op.unmapped { border-left-style: dashed; color: #9aa7b4; }
+body.phone #concept-labels .concept-op { font-size: 11px; padding: 2px 7px; max-width: 42vw; overflow: hidden; text-overflow: ellipsis; }
+body.phone #concept-labels .concept-op small { display: none; }
+body.phone #concept-labels .concept-thing { font-size: 10px; padding: 1px 5px; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; }
+body.phone #concept-list { left: max(6px, env(safe-area-inset-left)); right: max(6px, env(safe-area-inset-right)); top: auto; width: auto;
+  bottom: calc(var(--tabs-h, 67px) + 6px); max-height: 46dvh; font-size: 13px; border-radius: 14px; }
+body.phone #concept-list.index { padding: 6px; }
+body.phone #concept-list button { min-height: 36px; }
+body.phone #concept-leaders { display: none; }

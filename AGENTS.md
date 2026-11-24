@@ -44,13 +44,15 @@ The file has:
 - `concepts` (optional) — what the code does, above the files: `things` (the data, keyed by name, each with a
   `summary`) and `operations` (what changes the data, keyed by a plain name such as "Read a repository", each
   with a `summary`, the `files` it lives in, the things it `reads` and `writes`, ordered plain-word `steps`
-  `{text, files}`, and `rules`; a thing also has the `layer` it is held on and `rules`). Space, or the Concepts
+  `{text, files}`, and `rules`; a thing also has the `layer` it is held on, the `files` that hold it (its tables or saved state, drawn in the column of the operation that writes it), and `rules`). Space, or the Concepts
   button, zooms the map out to them: each operation's files gather into one column, and each thing floats at
   its layer's height, wired to the operations that read (dashed) and write (solid) it. Clicking an operation
   opens its process sheet (In, Steps, Out, Rules); a step points at its files. Files no operation names
   gather under "Not in an operation". `apply` edits the section (merged by name, `null` removes, same
-  validation), and `concepts` hands out the work, like `next`: entry points to turn into operations, then
-  the operations and things still missing steps, reads/writes, or a layer. There is no separate button for
+  validation), and `concepts` hands out the work, like `next`: first every described file, paged (`--page N`),
+  with nothing picked out, so the agent decides what the things and operations are; then the operations and
+  things still missing steps, reads/writes, a layer, or files; then every described file nothing names yet,
+  until each is in an operation's steps or a thing's files; then a review. There is no separate button for
   it: Ingest Codebase (and Update Map) writes the files, refines the layers, then runs this pass, and the
   Repo panel's status counts what is left of the design.
 

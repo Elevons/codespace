@@ -87,8 +87,8 @@ export interface IConceptLayoutInput
 {
   center: { x: number; z: number }
   files: readonly { path: string; y: number }[]
-  things: Record<string, { layer?: string }>
-  operations: Record<string, { files: readonly string[]; reads: readonly string[]; writes: readonly string[] }>
+  things: Record<string, { layer?: string; files?: readonly string[] }>
+  operations: Record<string, { files: readonly string[]; reads: readonly string[]; writes: readonly string[]; steps?: readonly { files: readonly string[] }[] }>
   unmappedName: string
 }
 
@@ -283,16 +283,66 @@ function roundOrthogonalCorners(raw: readonly { x: number; z: number }[]): { x: 
 
 // Lays out operations in two banks flanking a central shared-state spine, docks single-owner things
 // beside their parent column, quarantines unmapped files in a corner tray, and routes orthogonal bus tracks.
+// A file stands in one column, so a file several operations name goes to the one whose steps cite it most
+// (the smaller operation on a tie); then an operation left with no file of its own takes one back from the
+// biggest column that shares it, so no operation draws as an empty column.
+export function conceptFileOwners(ops: readonly { name: string; files: readonly string[]; steps: readonly { files: readonly string[] }[] }[]): Map<string, string>
+{
+  const cites = new Map<string, Map<string, number>>();
+  for (const op of ops)
+  {
+    const counts = new Map<string, number>();
+    for (const step of op.steps) for (const path of step.files) counts.set(path, (counts.get(path) ?? 0) + 1);
+    cites.set(op.name, counts);
+  }
+  const size = new Map(ops.map((op) => [op.name, new Set(op.files).size]));
+  const owner = new Map<string, string>();
+  const paths = [...new Set(ops.flatMap((op) => op.files))];
+  for (const path of paths)
+  {
+    let best: string | null = null, bestCites = -1, bestSize = Infinity;
+    for (const op of ops)
+    {
+      if (!op.files.includes(path)) continue;
+      const count = cites.get(op.name)!.get(path) ?? 0, opSize = size.get(op.name)!;
+      if (count > bestCites || (count === bestCites && opSize < bestSize)) { best = op.name; bestCites = count; bestSize = opSize; }
+    }
+    if (best !== null) owner.set(path, best);
+  }
+  const owned = new Map<string, number>(ops.map((op) => [op.name, 0]));
+  for (const name of owner.values()) owned.set(name, owned.get(name)! + 1);
+  for (const op of ops)
+  {
+    if (owned.get(op.name)! > 0) continue;
+    let pick: string | null = null, from = 1;
+    for (const path of op.files)
+    {
+      const holder = owner.get(path)!, count = owned.get(holder)!;
+      if (count > from) { pick = path; from = count; }
+    }
+    if (pick === null) continue;
+    owned.set(owner.get(pick)!, from - 1);
+    owner.set(pick, op.name);
+    owned.set(op.name, 1);
+  }
+  return owner;
+}
+
 export function conceptSpineLayout(input: IConceptLayoutInput): IConceptSpineLayout
 {
   const known = new Map<string, number>();
   for (const file of input.files) known.set(file.path, file.y);
 
-  const owner = new Map<string, string>();
   const opEntries = Object.entries(input.operations);
-  for (const [name, op] of opEntries)
-    for (const path of op.files)
-      if (known.has(path) && !owner.has(path)) owner.set(path, name);
+  const owner = conceptFileOwners(opEntries.map(([name, op]) => ({ name, files: op.files.filter((path) => known.has(path)), steps: op.steps ?? [] })));
+  // A thing's own files (its tables, its saved state) stand with the operation that writes it, else one that reads it.
+  for (const [thingName, thing] of Object.entries(input.things))
+  {
+    const holder = opEntries.find(([, op]) => op.writes.includes(thingName)) ?? opEntries.find(([, op]) => op.reads.includes(thingName));
+    if (holder === undefined) continue;
+    for (const path of thing.files ?? [])
+      if (known.has(path) && !owner.has(path)) owner.set(path, holder[0]);
+  }
 
   const sortFiles = (paths: string[]): string[] =>
     paths.sort((a, b) => (known.get(a)! - known.get(b)!) || a.localeCompare(b));
@@ -332,7 +382,7 @@ export function conceptSpineLayout(input: IConceptLayoutInput): IConceptSpineLay
 
   const drafts: OpDraft[] = opEntries.map(([name, op], index) =>
   {
-    const files = sortFiles(op.files.filter((path) => owner.get(path) === name));
+    const files = sortFiles([...owner.keys()].filter((path) => owner.get(path) === name));
     const { offsets, radius } = gridPack(files.length);
     const dockedCount = dockedByOp.get(name)?.length ?? 0;
     const halfW = Math.max(radius, dockedCount > 1 ? ((dockedCount - 1) * 1.85 + 1.1) / 2 : 0);

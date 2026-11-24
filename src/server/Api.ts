@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Chat } from '../agent/Chat.ts'
 import { Architecture, type IArchitecturePatch } from '../repo/Architecture.ts'
 import { ConceptsGuide } from '../repo/ConceptsGuide.ts'
-import { ConceptsLeft, ConceptsNextAsync, DefaultConceptsSize } from '../repo/Concepts.ts'
+import { ConceptsLeft, ConceptsNextAsync, DefaultConceptsSize, ReadPage } from '../repo/Concepts.ts'
 import { DescribeGuide } from '../repo/DescribeGuide.ts'
 import { DraftTour, NormaliseFlow, ReadFlowsAsync, WriteFlowsAsync } from '../repo/Flows.ts'
 import { Graph } from '../repo/Graph.ts'
@@ -113,7 +113,8 @@ export class Api
             const repo = workspace.repo
             const architecture = await Architecture.ReadAsync(repo.Root, await repo.ListFilesAsync())
             const size = ClampSize(url.searchParams.get('size'), DefaultConceptsSize)
-            SendJson(response, 200, { name: repo.Name, root: repo.Root, ...await ConceptsNextAsync(repo, architecture, await Graph.BuildAsync(repo), size, this.cli) })
+            const page = ReadPage(url.searchParams.get('page'))
+            SendJson(response, 200, { name: repo.Name, root: repo.Root, ...await ConceptsNextAsync(repo, architecture, await Graph.BuildAsync(repo), size, this.cli, page) })
         }
         else if (path === '/api/health' && reading)
         {

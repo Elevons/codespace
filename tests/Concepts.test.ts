@@ -4,7 +4,8 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { RunAsync } from '../src/cli/Cli.ts'
 import { Architecture } from '../src/repo/Architecture.ts'
-import { ConceptsLeft, ConceptsNextAsync, IsAppFile, ReviewConcepts } from '../src/repo/Concepts.ts'
+import { ConceptsLeft, ConceptsNextAsync, ReviewConcepts } from '../src/repo/Concepts.ts'
+import { conceptFileOwners, conceptSpineLayout } from '../public/rules.ts'
 import { Graph } from '../src/repo/Graph.ts'
 import { Repo } from '../src/repo/Repo.ts'
 import { makeRepo, removeTemp } from './support.ts'
@@ -120,20 +121,17 @@ test('A moved file is followed in the operations that name it', async () =>
     finally { await removeTemp(root) }
 })
 
-test('The pass lists entry points first, then what each operation still lacks', async () =>
+test('The pass hands out the whole overview first, then what each operation still lacks', async () =>
 {
     const root = await repo()
     try
     {
         const opened = await Repo.OpenAsync(root)
         const first = await ConceptsNextAsync(opened, await Architecture.ReadAsync(root, Known), await Graph.BuildAsync(opened), 6, 'cli.ts')
-        assert.equal(first.mode, 'candidates')
+        assert.equal(first.mode, 'overview')
         assert.equal(first.remaining, 1)
-        const names = first.candidates.map((candidate) => `${candidate.kind}:${candidate.name}`)
-        assert.ok(names.includes('entry file:src/Cli.ts'))
-        assert.ok(names.includes('cli command:run'))
-        assert.ok(names.includes('endpoint:/api/things'))
-        assert.equal(first.entryFiles[0]?.path, 'src/Cli.ts')
+        assert.deepEqual(first.overview?.files.map((file) => file.path), ['src/Cli.ts', 'src/a.ts', 'src/b.ts'])
+        assert.equal(first.overview?.files[0]?.summary, 'Runs.')
         assert.match(first.guide, /plain words/)
 
         await Architecture.UpdateAsync(root, Known, { concepts: {
@@ -145,11 +143,19 @@ test('The pass lists entry points first, then what each operation still lacks', 
         assert.deepEqual(second.operations.map((operation) => [operation.name, operation.missing]), [['Run', ['steps', 'reads or writes']]])
         assert.deepEqual(second.operations[0]?.files.map((file) => [file.path, file.imports]), [['src/a.ts', ['src/b.ts']]])
         assert.deepEqual(second.operations[0]?.nearby.map((file) => [file.path, file.relation]), [['src/b.ts', 'imports']])
-        assert.equal(second.remaining, 2, 'the operation and the thing without a layer')
+        assert.equal(second.remaining, 3, 'the operation, the thing without a layer or files, and the unplaced src/Cli.ts')
 
         await Architecture.UpdateAsync(root, Known, { concepts: { operations: { Run: { reads: ['Data'], steps: [{ text: 'Go.', files: ['src/a.ts'] }] } } } })
-        assert.equal((await ConceptsNextAsync(opened, await Architecture.ReadAsync(root, Known), await Graph.BuildAsync(opened), 6, 'cli.ts')).mode, 'things')
-        await Architecture.UpdateAsync(root, Known, { concepts: { things: { Data: { layer: 'data' } } } })
+        const things = await ConceptsNextAsync(opened, await Architecture.ReadAsync(root, Known), await Graph.BuildAsync(opened), 6, 'cli.ts')
+        assert.equal(things.mode, 'things')
+        assert.deepEqual(things.things.map((thing) => [thing.name, thing.missing]), [['Data', ['layer', 'files']]])
+        await Architecture.UpdateAsync(root, Known, { concepts: { things: { Data: { layer: 'data', files: ['src/b.ts'] } } } })
+
+        const place = await ConceptsNextAsync(opened, await Architecture.ReadAsync(root, Known), await Graph.BuildAsync(opened), 6, 'cli.ts')
+        assert.equal(place.mode, 'place', 'a described file no operation or thing names is handed back')
+        assert.deepEqual(place.unplaced.map((file) => [file.path, file.summary]), [['src/Cli.ts', 'Runs.']])
+        assert.equal(place.remaining, 1)
+        await Architecture.UpdateAsync(root, Known, { concepts: { operations: { Run: { steps: [{ text: 'Start.', files: ['src/Cli.ts'] }, { text: 'Go.', files: ['src/a.ts'] }] } } } })
         const done = await ConceptsNextAsync(opened, await Architecture.ReadAsync(root, Known), await Graph.BuildAsync(opened), 6, 'cli.ts')
         assert.equal(done.mode, 'done')
         assert.equal(done.remaining, 0)
@@ -166,7 +172,7 @@ test('The concepts command prints the pass, and apply takes a concepts patch', a
     try
     {
         assert.equal(await RunAsync(['concepts', '--repo', root]), 0)
-        assert.equal(JSON.parse(out.pop()!).mode, 'candidates')
+        assert.equal(JSON.parse(out.pop()!).mode, 'overview')
         const { writeFile } = await import('node:fs/promises')
         await writeFile(join(root, 'patch.json'), JSON.stringify({ concepts: { things: { Data: { layer: 'data' } } } }))
         assert.equal(await RunAsync(['apply', '--file', join(root, 'patch.json'), '--repo', root]), 0)
@@ -192,7 +198,7 @@ test('ConceptsLeft counts what the design still needs, without reading a file', 
     try
     {
         const architecture = await Architecture.ReadAsync(root, Known)
-        assert.deepEqual(ConceptsLeft(architecture), { started: true, operations: 2, things: 1 })
+        assert.deepEqual(ConceptsLeft(architecture), { started: true, operations: 2, things: 2, unplaced: 1 }, 'both things lack files; src/Cli.ts is described and unplaced')
     }
     finally { await removeTemp(root) }
 
@@ -200,103 +206,85 @@ test('ConceptsLeft counts what the design still needs, without reading a file', 
     try
     {
         const architecture = await Architecture.ReadAsync(empty, Known)
-        assert.deepEqual(ConceptsLeft(architecture), { started: false, operations: 0, things: 0 })
+        assert.deepEqual(ConceptsLeft(architecture), { started: false, operations: 0, things: 0, unplaced: 0 })
     }
     finally { await removeTemp(empty) }
 })
 
-test('Discovery works on a C# simulation without HTTP or CLI syntax, surfacing overview, thingCandidates, and handlers', async () =>
+test('The overview lists every described file, tests, docs, and data tables alike, with nothing picked out', async () =>
 {
     const root = await makeRepo({
         'src/Model/WorldState.cs': 'namespace Sim.Model;\npublic class WorldState { public int TickCount; }\n',
-        'src/Model/AgentStore.cs': 'namespace Sim.Model;\npublic class AgentStore {}\n',
-        'src/Actions/ActionExecutor.cs': 'using Sim.Model;\nnamespace Sim.Actions;\npublic class ActionExecutor { public void Execute(WorldState w) {} }\n',
-        'src/Sim/SimulationRunner.cs': 'using Sim.Model;\nusing Sim.Actions;\nnamespace Sim.Core;\npublic class SimulationRunner { public void Tick() {} }\n',
+        'src/Sim/SimulationRunner.cs': 'using Sim.Model;\nnamespace Sim.Core;\npublic class SimulationRunner { public void Tick() {} }\n',
+        'data/places.json': '{"places": []}\n',
         'tests/SimTests.cs': 'using Sim.Core;\nnamespace Sim.Tests;\npublic class SimTests { public void Run() {} }\n',
         'README.md': '# Sim\n',
         'package-lock.json': '{}\n',
         '.codespace/architecture.json': JSON.stringify({
-            layers: ['docs', 'model', 'domain', 'entry', 'tests'],
-            systems: {
-                sim: { summary: 'Runs the world simulation.' },
-                meta: { summary: 'Docs and tests.' },
-            },
-            folders: {
-                'src/Model': { summary: 'Simulation state and stores.' },
-                'src/Sim': { summary: 'Simulation loop.' },
-            },
+            layers: ['docs', 'data', 'model', 'entry', 'tests'],
+            systems: { sim: { summary: 'Runs the world simulation.' }, meta: { summary: 'Docs and tests.' } },
+            folders: { 'src/Model': { summary: 'Simulation state.' } },
             files: {
                 'src/Model/WorldState.cs': { system: 'sim', layer: 'model', tags: ['data'], summary: 'Holds the live world state.' },
-                'src/Model/AgentStore.cs': { system: 'sim', layer: 'model', tags: ['data'], summary: 'Stores active agents.' },
-                'src/Actions/ActionExecutor.cs': { system: 'sim', layer: 'domain', tags: ['core'], summary: 'Applies queued actions to the world.' },
                 'src/Sim/SimulationRunner.cs': { system: 'sim', layer: 'entry', tags: ['orchestrate'], summary: 'Advances the simulation one tick at a time.' },
+                'data/places.json': { system: 'sim', layer: 'data', tags: ['data'], summary: 'The authored places.' },
                 'tests/SimTests.cs': { system: 'meta', layer: 'tests', tags: ['test'], summary: 'Tests the simulation.' },
                 'README.md': { system: 'meta', layer: 'docs', tags: ['config'], summary: 'Readme.' },
                 'package-lock.json': { summary: 'Lockfile.' },
             },
         }),
-    }, 'codespace-cs-concepts-')
-    try
-    {
-        const opened = await Repo.OpenAsync(root)
-        const known = await opened.ListFilesAsync()
-        const architecture = await Architecture.ReadAsync(root, known)
-        const graph = await Graph.BuildAsync(opened)
-        const batch = await ConceptsNextAsync(opened, architecture, graph, 6, 'cli.ts')
-
-        assert.equal(batch.mode, 'candidates')
-        assert.equal(batch.overview?.appFileCount, 4, 'excludes tests, docs, and lockfiles')
-        assert.deepEqual(batch.overview?.files.map((f) => f.path), [
-            'src/Actions/ActionExecutor.cs', 'src/Model/AgentStore.cs', 'src/Model/WorldState.cs', 'src/Sim/SimulationRunner.cs',
-        ])
-        assert.ok(batch.thingCandidates.some((t) => t.path === 'src/Model/WorldState.cs'), 'flags data state file as thingCandidate')
-        assert.ok(batch.thingCandidates.some((t) => t.path === 'src/Model/AgentStore.cs'), 'flags data store file as thingCandidate')
-        const candNames = batch.candidates.map((c) => `${c.kind}:${c.name}`)
-        assert.ok(candNames.includes('handler:Tick'), 'detects C# Tick loop handler')
-        assert.ok(candNames.includes('handler:Execute'), 'detects C# Execute handler')
-        assert.ok(candNames.includes('orchestrator:src/Sim/SimulationRunner.cs'), 'detects orchestrator even without entry tag')
-        assert.equal(batch.entryFiles[0]?.path, 'src/Sim/SimulationRunner.cs')
-        assert.ok(batch.entryFiles[0]?.reaches.includes('src/Model/WorldState.cs'), 'includes transitive reaches cone')
-        assert.equal(IsAppFile('tests/SimTests.cs', architecture.files['tests/SimTests.cs']), false)
-    }
-    finally { await removeTemp(root) }
-})
-
-test('Multi-language finders detect Express/FastAPI/CLI routes and cap candidates per file', async () =>
-{
-    const buttons = Array.from({ length: 15 }, (_, i) => `<button id="btn-${i}">B${i}</button>`).join('\n')
-    const root = await makeRepo({
-        'public/index.html': `<html><body>${buttons}</body></html>\n`,
-        'src/routes.ts': "app.get('/users', list)\napp.post('/orders', create)\nprogram.command('migrate')\n",
-        'src/api.py': "@app.post('/webhooks/stripe')\ndef handle(req):\n    pass\n",
-        '.codespace/architecture.json': JSON.stringify({
-            layers: ['api', 'ui'],
-            systems: { web: {} },
-            files: {
-                'public/index.html': { system: 'web', layer: 'ui', tags: ['ui'], summary: 'Page.' },
-                'src/routes.ts': { system: 'web', layer: 'api', tags: ['entry'], summary: 'Routes.' },
-                'src/api.py': { system: 'web', layer: 'api', tags: ['entry'], summary: 'Python API.' },
-            },
-        }),
-    }, 'codespace-finders-')
+    }, 'codespace-overview-')
     try
     {
         const opened = await Repo.OpenAsync(root)
         const known = await opened.ListFilesAsync()
         const batch = await ConceptsNextAsync(opened, await Architecture.ReadAsync(root, known), await Graph.BuildAsync(opened), 6, 'cli.ts')
-        const byFile = batch.candidates.filter((c) => c.path === 'public/index.html')
-        assert.equal(byFile.length, 8, 'caps candidates per file so one HTML page cannot starve the rest')
-        const names = batch.candidates.map((c) => `${c.kind}:${c.name}`)
-        assert.ok(names.includes('endpoint:/users'))
-        assert.ok(names.includes('endpoint:/orders'))
-        assert.ok(names.includes('cli command:migrate'))
-        assert.ok(names.includes('endpoint:/webhooks/stripe'))
-        assert.ok(names.includes('handler:handle'))
+        assert.equal(batch.mode, 'overview')
+        assert.deepEqual(batch.overview?.files.map((f) => f.path), [
+            'README.md', 'data/places.json', 'src/Model/WorldState.cs', 'src/Sim/SimulationRunner.cs', 'tests/SimTests.cs',
+        ], 'only generated files are left out')
+        assert.equal(batch.overview?.systems.sim?.files, 3)
+        assert.deepEqual(batch.overview?.folders.find((f) => f.path === 'src/Model'), { path: 'src/Model', summary: 'Simulation state.', files: 1 })
+        assert.ok(!('candidates' in batch) && !('thingCandidates' in batch) && !('entryFiles' in batch), 'no preset guesses')
     }
     finally { await removeTemp(root) }
 })
 
-test('ReviewConcepts blocks on low coverage, uncovered systems, and orphan things, and flags reflexion issues', async () =>
+test('A thing names the files that hold it, they count as placed, follow a move, and stand with its writer on the map', async () =>
+{
+    const root = await repo({
+        things: { Data: { summary: 'The data.', layer: 'data', files: ['src/b.ts', 'src/gone.ts'] } },
+        operations: { Run: { writes: ['Data'], steps: [{ text: 'Do.', files: ['src/a.ts'] }] } },
+    })
+    try
+    {
+        const architecture = await Architecture.ReadAsync(root, Known)
+        assert.deepEqual(architecture.concepts.things.Data?.files, ['src/b.ts'])
+        assert.ok(architecture.warnings.some((w) => /src\/gone\.ts/.test(w)))
+        await assert.rejects(Architecture.UpdateAsync(root, Known, { concepts: { things: { Data: { files: ['src/nope.ts'] } } } }), /"src\/nope\.ts" is not a file/)
+
+        const opened = await Repo.OpenAsync(root)
+        const review = ReviewConcepts(architecture, await Graph.BuildAsync(opened), Known)
+        assert.deepEqual(review.coverage.unplaced, ['src/Cli.ts'])
+
+        const layout = conceptSpineLayout({
+            center: { x: 0, z: 0 },
+            files: Known.map((path) => ({ path, y: 0 })),
+            things: architecture.concepts.things,
+            operations: architecture.concepts.operations,
+            unmappedName: 'Not in an operation',
+        })
+        assert.deepEqual(layout.operations.find((op) => op.name === 'Run')?.files.slice().sort(), ['src/a.ts', 'src/b.ts'])
+
+        const moved = [...Known, 'src/c.ts']
+        await Architecture.UpdateAsync(root, Known, { files: { 'src/b.ts': { summary: 'B.' } } })
+        await Architecture.UpdateAsync(root, moved, { renames: [{ from: 'src/b.ts', to: 'src/c.ts' }] })
+        assert.deepEqual((await Architecture.ReadAsync(root, moved)).concepts.things.Data?.files, ['src/c.ts'])
+    }
+    finally { await removeTemp(root) }
+})
+
+test('ReviewConcepts blocks on uncovered systems and orphan things, and flags reflexion issues', async () =>
 {
     const files: Record<string, string> = {
         'src/a1.ts': "import './a2.ts'\nimport './a3.ts'\nexport const a1 = 1\n",
@@ -320,9 +308,9 @@ test('ReviewConcepts blocks on low coverage, uncovered systems, and orphan thing
             files: archFiles,
             concepts: {
                 things: {
-                    Input: { summary: 'External input.', layer: 'data' },
-                    Orphan: { layer: 'data' },
-                    alpha: { summary: 'Named after a system.', layer: 'data' },
+                    Input: { summary: 'External input.', layer: 'data', files: ['src/a1.ts'] },
+                    Orphan: { layer: 'data', files: ['src/a1.ts'] },
+                    alpha: { summary: 'Named after a system.', layer: 'data', files: ['src/a2.ts'] },
                 },
                 operations: {
                     DoAlpha: {
@@ -349,23 +337,25 @@ test('ReviewConcepts blocks on low coverage, uncovered systems, and orphan thing
         const graph = await Graph.BuildAsync(opened)
 
         const review = ReviewConcepts(architecture, graph, known, 8)
-        assert.equal(review.coverage.appFiles, 8)
-        assert.equal(review.coverage.coveredFiles, 3)
+        assert.equal(review.coverage.files, 8)
+        assert.equal(review.coverage.placedFiles, 3)
+        assert.deepEqual(review.coverage.unplaced, ['src/a4.ts', 'src/b1.ts', 'src/b2.ts', 'src/b3.ts', 'src/b4.ts'])
         assert.deepEqual(review.orphanThings, ['Orphan'])
         assert.deepEqual(review.externalInputs, ['Input'])
         assert.deepEqual(review.finalOutputs, ['alpha'])
         assert.deepEqual(review.coverage.uncoveredSystems.map((s) => s.name), ['beta'])
         assert.equal(review.overlaps.length, 1, 'detects near-duplicate operations')
-        assert.ok(review.divergences.some((d) => d.operation === 'DoAlpha' && d.uncoveredImports.some((u) => u.path === 'src/a4.ts')), 'detects uncovered import divergence')
+        assert.ok(review.divergences.some((d) => d.operation === 'DoAlpha' && d.unplacedImports.some((u) => u.path === 'src/a4.ts')), 'detects uncovered import divergence')
         assert.ok(review.issues.some((i) => /names a file in its text/.test(i)), 'flags file path leaked into step text')
         assert.ok(review.issues.some((i) => /not tied to any step/.test(i)), 'flags unplaced operation file src/a3.ts')
         assert.ok(review.issues.some((i) => /looks like a system/.test(i)), 'flags module-shaped thing name')
-        assert.equal(review.blocking.length, 3, 'blocks on orphan thing, uncovered system, and <60% coverage')
+        assert.equal(review.blocking.length, 2, 'blocks on the orphan thing and the uncovered system')
 
         const batch = await ConceptsNextAsync(opened, architecture, graph, 8, 'cli.ts')
-        assert.equal(batch.mode, 'review')
-        assert.equal(batch.remaining, 3)
-        assert.ok(batch.overview !== undefined, 'attaches overview in review mode so uncovered files are visible')
+        assert.equal(batch.mode, 'place')
+        assert.deepEqual(batch.unplaced.map((file) => file.path), ['src/a4.ts', 'src/b1.ts', 'src/b2.ts', 'src/b3.ts', 'src/b4.ts'])
+        assert.ok(batch.unplaced[0]?.near.includes('operation: DoAlpha'), 'a4 is imported by a file DoAlpha names')
+        assert.equal(batch.remaining, 7, 'two blocking gaps and five unplaced files')
 
         // Resolving the blocking gaps transitions cleanly to done.
         await Architecture.UpdateAsync(root, known, { concepts: {
@@ -378,7 +368,7 @@ test('ReviewConcepts blocks on low coverage, uncovered systems, and orphan thing
                     writes: ['alpha'],
                     steps: [
                         { text: 'Start beta processing.', files: ['src/b1.ts', 'src/b2.ts'] },
-                        { text: 'Finish beta processing.', files: ['src/b3.ts', 'src/b4.ts'] },
+                        { text: 'Finish beta processing.', files: ['src/b3.ts', 'src/b4.ts', 'src/a4.ts'] },
                     ],
                 },
             },
@@ -390,63 +380,68 @@ test('ReviewConcepts blocks on low coverage, uncovered systems, and orphan thing
     finally { await removeTemp(root) }
 })
 
-test('ConceptsNextAsync keeps payloads under 40 KB and serializes overview before entryFiles', async () =>
+test('ConceptsNextAsync pages the overview under 40 KB without leaving a file out', async () =>
 {
     const files: Record<string, string> = {}
     const archFiles: Record<string, { system: string, layer: string, tags: string[], summary: string }> = {}
     const body = `${'export const line = "payload padding for large source files"\n'.repeat(120)}`
-    for (let i = 0; i < 70; i++)
+    for (let i = 0; i < 300; i++)
     {
-        const folder = `src/mod${String(i % 35).padStart(2, '0')}`
-        const path = `${folder}/File${i}Store.ts`
-        files[path] = `if (path === '/api/route-${i}') {}\n${body}`
-        archFiles[path] = {
-            system: 'core',
-            layer: i < 10 ? 'entry' : 'data',
-            tags: i < 6 ? ['entry'] : ['data', 'core'],
-            summary: `Handles workflow and stored records for module ${i} with a long enough summary to exercise truncation cleanly.`,
-        }
+        const path = `src/mod${String(i % 35).padStart(2, '0')}/File${i}Store.ts`
+        files[path] = body
+        archFiles[path] = { system: 'core', layer: 'data', tags: ['data'], summary: `Handles workflow and stored records for module ${i}. ${'A long summary. '.repeat(10)}` }
     }
     const root = await makeRepo({
         ...files,
-        '.codespace/architecture.json': JSON.stringify({
-            layers: ['data', 'entry'],
-            systems: { core: { summary: 'Core system.' } },
-            files: archFiles,
-        }),
+        '.codespace/architecture.json': JSON.stringify({ layers: ['data', 'entry'], systems: { core: { summary: 'Core system.' } }, files: archFiles }),
     }, 'codespace-budget-')
     try
     {
         const opened = await Repo.OpenAsync(root)
         const known = await opened.ListFilesAsync()
         const graph = await Graph.BuildAsync(opened)
+        const architecture = await Architecture.ReadAsync(root, known)
 
-        const candidates = await ConceptsNextAsync(opened, await Architecture.ReadAsync(root, known), graph, 8, 'cli.ts')
-        const candidatesJson = JSON.stringify(candidates)
-        assert.equal(candidates.mode, 'candidates')
-        assert.ok(candidatesJson.indexOf('"overview"') > 0 && candidatesJson.indexOf('"overview"') < candidatesJson.indexOf('"entryFiles"'), 'overview serializes before entryFiles')
-        assert.ok((candidates.overview?.files.length ?? 0) <= 50, 'caps overview files')
-        assert.ok((candidates.overview?.folders.length ?? 0) <= 30, 'caps overview folders')
-        assert.ok(candidates.candidates.length <= 35, 'caps total candidates')
-        assert.ok(candidates.entryFiles.length <= 4, 'caps entry file excerpts')
-        assert.ok(candidatesJson.length < 40_000, `candidates payload ${candidatesJson.length} stays under 40 KB`)
+        const first = await ConceptsNextAsync(opened, architecture, graph, 8, 'cli.ts')
+        const pages = first.overview!.pages
+        assert.ok(pages > 1)
+        const seen: string[] = []
+        for (let page = 1; page <= pages; page++)
+        {
+            const batch = await ConceptsNextAsync(opened, architecture, graph, 8, 'cli.ts', page)
+            const json = JSON.stringify(batch)
+            assert.ok(json.length < 40_000, `page ${page} is ${json.length} characters`)
+            assert.ok(json.indexOf('"overview"') < json.indexOf('"things"'), 'overview serializes near the top')
+            seen.push(...batch.overview!.files.map((f) => f.path))
+        }
+        assert.deepEqual(seen, Object.keys(files).sort(), 'every file, once, in order')
 
         const allPaths = Object.keys(files)
         await Architecture.UpdateAsync(root, known, { concepts: {
-            operations: {
-                Op1: { files: allPaths.slice(0, 10) },
-                Op2: { files: allPaths.slice(10, 20) },
-                Op3: { files: allPaths.slice(20, 30) },
-                Op4: { files: allPaths.slice(30, 40) },
-                Op5: { files: allPaths.slice(40, 50) },
-            },
+            operations: Object.fromEntries([0, 1, 2, 3, 4].map((n) => [`Op${n}`, { files: allPaths.slice(n * 10, n * 10 + 10) }])),
         } })
         const operations = await ConceptsNextAsync(opened, await Architecture.ReadAsync(root, known), graph, 8, 'cli.ts')
-        const operationsJson = JSON.stringify(operations)
         assert.equal(operations.mode, 'operations')
+        assert.equal(operations.overview, undefined)
         assert.equal(operations.operations.length, 3, 'caps operations per batch')
-        assert.equal(operations.review, undefined, 'omits review while operations are still being filled')
-        assert.ok(operationsJson.length < 40_000, `operations payload ${operationsJson.length} stays under 40 KB`)
+        assert.ok(JSON.stringify(operations).length < 40_000)
+        const paged = await ConceptsNextAsync(opened, await Architecture.ReadAsync(root, known), graph, 8, 'cli.ts', 2)
+        assert.equal(paged.mode, 'operations')
+        assert.equal(paged.overview?.page, 2, 'a page is returned at any stage')
     }
     finally { await removeTemp(root) }
+})
+
+test('Every operation that names a file draws at least one in its own column', () =>
+{
+    const owners = conceptFileOwners([
+        { name: 'Big', files: ['a', 'b', 'c'], steps: [{ files: ['a', 'b', 'c'] }] },
+        { name: 'Shared', files: ['a', 'b'], steps: [{ files: ['a'] }, { files: ['a'] }] },
+        { name: 'Subset', files: ['c'], steps: [{ files: ['c'] }] },
+    ])
+    assert.equal(owners.get('a'), 'Shared', 'the operation whose steps cite a file most keeps it')
+    assert.equal(owners.get('c'), 'Subset', 'the smaller operation wins a tie')
+    const counts = new Map<string, number>()
+    for (const name of owners.values()) counts.set(name, (counts.get(name) ?? 0) + 1)
+    for (const name of ['Big', 'Shared', 'Subset']) assert.ok((counts.get(name) ?? 0) > 0, `${name} has a file`)
 })
