@@ -32,6 +32,7 @@ interface Marker
   at: BABYLON.Vector3;
   dockedTo: string | null;
   y: number;
+  files: string[];
   mesh?: BABYLON.Mesh;
   tag?: HTMLElement;
 }
@@ -127,6 +128,7 @@ function buildLayout(): Layout | null
     at: new V3(thing.x, 0, thing.z),
     dockedTo: thing.dockedTo,
     y: stackMid,
+    files: thing.files,
   }));
 
   return { operations, things, home, center, spine: plan.spine, tray: plan.tray, routes: plan.routes };
@@ -781,6 +783,21 @@ function renderThing(name: string): void
   const readers = operations.filter(([, op]) => op.reads.includes(name)).map(([key]) => key);
   if (writers.length > 0) chips(section("Written by"), "op", writers);
   if (readers.length > 0) chips(section("Read by"), "op", readers);
+  const held = thing?.files ?? [];
+  if (held.length > 0)
+  {
+    const rows = el("ul", "", "files shown");
+    for (const path of held)
+    {
+      const row = el("li", path.split("/").pop() ?? path);
+      row.title = path + (S.FILE_SUMMARIES.get(path) ? "\n" + S.FILE_SUMMARIES.get(path) : "");
+      row.addEventListener("click", () => openFile(path));
+      rows.appendChild(row);
+      emphasised.add(path);
+      if (S.fileRecords.has(path)) addLeader(row, path, cssColor(ThingColor));
+    }
+    section("Files").appendChild(rows);
+  }
   if (thing && (thing.rules?.length ?? 0) > 0)
   {
     const rules = el("ul", "", "rules");

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { RunAsync } from '../src/cli/Cli.ts'
 import { Architecture } from '../src/repo/Architecture.ts'
 import { ConceptsLeft, ConceptsNextAsync, ReviewConcepts } from '../src/repo/Concepts.ts'
-import { conceptFileOwners, conceptSpineLayout } from '../public/rules.ts'
+import { conceptFileOwners, conceptSpineLayout, conceptThingClaims } from '../public/rules.ts'
 import { Graph } from '../src/repo/Graph.ts'
 import { Repo } from '../src/repo/Repo.ts'
 import { makeRepo, removeTemp } from './support.ts'
@@ -250,7 +250,7 @@ test('The overview lists every described file, tests, docs, and data tables alik
     finally { await removeTemp(root) }
 })
 
-test('A thing names the files that hold it, they count as placed, follow a move, and stand with its writer on the map', async () =>
+test('A thing names the files that hold it, they count as placed, follow a move, and stand under its hexagon on the map', async () =>
 {
     const root = await repo({
         things: { Data: { summary: 'The data.', layer: 'data', files: ['src/b.ts', 'src/gone.ts'] } },
@@ -274,7 +274,11 @@ test('A thing names the files that hold it, they count as placed, follow a move,
             operations: architecture.concepts.operations,
             unmappedName: 'Not in an operation',
         })
-        assert.deepEqual(layout.operations.find((op) => op.name === 'Run')?.files.slice().sort(), ['src/a.ts', 'src/b.ts'])
+        assert.deepEqual(layout.operations.find((op) => op.name === 'Run')?.files, ['src/a.ts'])
+        const hex = layout.things.find((thing) => thing.name === 'Data')!
+        assert.deepEqual(hex.files, ['src/b.ts'], 'a file only the thing names stands under its hexagon')
+        const at = layout.home.get('src/b.ts')!
+        assert.ok(Math.hypot(at.x - hex.x, at.z - hex.z) < 1, 'and sits at the hexagon, not in a column')
 
         const moved = [...Known, 'src/c.ts']
         await Architecture.UpdateAsync(root, Known, { files: { 'src/b.ts': { summary: 'B.' } } })
@@ -444,4 +448,12 @@ test('Every operation that names a file draws at least one in its own column', (
     const counts = new Map<string, number>()
     for (const name of owners.values()) counts.set(name, (counts.get(name) ?? 0) + 1)
     for (const name of ['Big', 'Shared', 'Subset']) assert.ok((counts.get(name) ?? 0) > 0, `${name} has a file`)
+})
+
+test('A file an operation needs to keep a column stays there, the rest of a thing\'s files go under its hexagon', () =>
+{
+  const known = new Set(['a', 'b', 'c'])
+  const ops = [{ name: 'Load', files: ['a'], steps: [{ files: ['a'] }] }, { name: 'Run', files: ['b', 'c'], steps: [{ files: ['b', 'c'] }] }]
+  const claims = conceptThingClaims({ Tables: { files: ['a', 'b', 'c', 'gone'] } }, ops, known)
+  assert.deepEqual([...claims.entries()], [['b', 'Tables']], 'Load keeps its only file, Run keeps one of its two, unknown files are ignored')
 })
