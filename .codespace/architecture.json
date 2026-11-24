@@ -384,7 +384,12 @@
       "system": "server",
       "layer": "repo",
       "tags": ["orchestrate", "core"],
-      "summary": "Hands out the concepts pass: entry points to turn into operations, then the operations and things still missing steps, reads and writes, or a layer."
+      "summary": "Hands out the concepts pass: a codebase overview with candidate things and entry points, operations and things still missing fields, and a review check against coverage and imports.",
+      "notes": {
+        "IsAppFile": "Filters out tests, docs, config-only files, declarations, and generated files so concept discovery and coverage focus on working application code.",
+        "ReviewConcepts": "Checks the declared things and operations against the application files and import graph: coverage, uncovered systems, orphan things, near-duplicate overlaps, uncovered import divergences, and quality issues.",
+        "ConceptsNextAsync": "Drives the staged concepts pass (candidates, operations, things, review, done), handing back the architecture overview, thing candidates, multi-language triggers, import cones, nearby neighbours, and review diagnostics."
+      }
     },
     "src/repo/ConceptsGuide.ts": {
       "system": "server",
@@ -910,9 +915,10 @@
         "reads": ["Snapshot", "Architecture file"],
         "writes": ["Architecture file"],
         "steps": [
-          { "text": "List the entry points: entry files, endpoints, commands, buttons, and keys.", "files": ["src/repo/Concepts.ts", "src/cli/Cli.ts"] },
-          { "text": "The agent follows what each entry point calls and proposes operations with their steps, inputs, and outputs.", "files": ["src/repo/ConceptsGuide.ts", "src/agent/Instructions.ts"] },
-          { "text": "Hand back the operations still missing steps or inputs and outputs, and things missing a layer, with their files' text.", "files": ["src/repo/Concepts.ts", "src/server/Api.ts"] },
+          { "text": "Build an overview of the working systems, folders, and files alongside candidate things and entry points across languages.", "files": ["src/repo/Concepts.ts", "src/cli/Cli.ts"] },
+          { "text": "The agent follows what each entry point calls and proposes things and operations with their steps, inputs, and outputs.", "files": ["src/repo/ConceptsGuide.ts", "src/agent/Instructions.ts"] },
+          { "text": "Hand back operations still missing steps, step files, or inputs and outputs (with nearby imports), and things missing a layer.", "files": ["src/repo/Concepts.ts", "src/server/Api.ts"] },
+          { "text": "Review the design against the files and import graph for uncovered systems, low coverage, orphan things, overlaps, and import divergences.", "files": ["src/repo/Concepts.ts"] },
           { "text": "Check every named thing, file, and layer, then write the batch or refuse all of it.", "files": ["src/repo/Architecture.ts"] }
         ],
         "rules": [

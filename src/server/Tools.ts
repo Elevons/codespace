@@ -1,3 +1,4 @@
+import { DefaultConceptsSize } from '../repo/Concepts.ts'
 import { DefaultBatch, MaxBatchSize } from '../repo/Ingest.ts'
 import { DefaultRefineSize } from '../repo/Refine.ts'
 import { MaxFileNote, MaxNote, MaxShown, MaxTitle } from '../repo/ShowLimits.ts'
@@ -338,9 +339,9 @@ It does not change the architecture file. Read the files that it names. Write th
     },
     {
         name: 'concepts', method: 'GET', path: '/api/concepts', writes: false,
-        description: `The concepts pass. It returns what concept work is left: entry points to turn into operations when there are none.
-It also returns operations that need steps, reads, or writes, and things that need a layer, with the source of their files.
-The answer has a guide for how to write them. It does not change the architecture file. Write the concepts with apply, and then use it again.`,
-        parameters: { type: 'object', properties: { size: SizeArgument(6) }, additionalProperties: false },
+        description: `The concepts pass. When no operations exist, it returns a codebase overview, candidate things, entry points, and source excerpts with import cones.
+When operations exist, it returns operations missing steps, step files, reads, or writes (with source and nearby imports), things missing a layer, and a review check of coverage, orphan things, overlaps, import divergences, and issues.
+It does not change the architecture file. Write the concepts with apply, and then use it again.`,
+        parameters: { type: 'object', properties: { size: SizeArgument(DefaultConceptsSize) }, additionalProperties: false },
     },
 ]
