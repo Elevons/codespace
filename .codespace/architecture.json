@@ -129,7 +129,7 @@
         "applyActive": "Lights a chosen entry's writers and readers and its links, fades the rest, and ghosts what the filters leave nothing of.",
         "renderData": "The data sheet lists Comes from and Goes to, each operation with the steps that touch the entry's files.",
         "namedNow": "The map names nothing until something is hovered or chosen: then that item and what it touches, the data an operation reads and writes or the operations that write and read an entry. Naming everything at once covered what it named; the sheet's index lists them all.",
-        "conceptHover": "Hovering a hexagon or a file's dot in the concept view names it, or the operation the file stands in."
+        "conceptHover": "Hovering in the concept view names the first operation column or hexagon the pointer's ray meets (the columns are pickable for this alone), or the operation of a file outside any column."
       }
     },
     "public/controls.ts": {

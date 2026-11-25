@@ -283,7 +283,9 @@ function buildMeshes(at: Layout): void
     material.alpha = spot.unmapped ? 0.09 : 0.16;
     material.backFaceCulling = false;
     pill.material = material;
-    pill.isPickable = false;
+    // Pickable only so hovering the column can name it; every other pick filters by metadata.
+    pill.isPickable = true;
+    pill.metadata = { op: spot.name };
     glow.addExcludedMesh(pill);
     meshes.push(pill);
   }
@@ -1030,18 +1032,24 @@ function namedNow(): Set<HTMLElement>
   return named;
 }
 
-// Hovering a hexagon or a file's dot in the concept view names it, or the operation the file stands in.
+// Hovering in the concept view names the first column or hexagon the pointer's ray meets, or the operation of a
+// file that stands outside any column.
 let hoverFromMap = false;
 export function conceptHover(x: number, y: number): void
 {
   if (!S.conceptZoom || !layout) return;
-  const plate = scene.pick(x, y, (mesh) => (mesh.metadata as { datum?: string } | null)?.datum !== undefined);
-  let next: Choice = null;
-  if (plate.hit) next = { kind: "datum", name: (plate.pickedMesh!.metadata as { datum: string }).datum };
-  else
+  const hit = scene.pick(x, y, (mesh) =>
   {
-    const hit = pickFile(x, y);
-    const spot = hit ? layout.operations.find((candidate) => !candidate.unmapped && candidate.files.includes(hit.path)) : undefined;
+    const meta = mesh.metadata as { op?: string; datum?: string } | null;
+    if (meta?.op !== undefined) return meta.op === Unmapped || opShown(meta.op);
+    return meta?.datum !== undefined && dataShown(meta.datum);
+  });
+  const meta = hit.hit ? hit.pickedMesh!.metadata as { op?: string; datum?: string } : null;
+  let next: Choice = meta?.op !== undefined ? { kind: "op", name: meta.op } : meta?.datum !== undefined ? { kind: "datum", name: meta.datum } : null;
+  if (next === null)
+  {
+    const file = pickFile(x, y);
+    const spot = file ? layout.operations.find((candidate) => candidate.files.includes(file.path)) : undefined;
     if (spot) next = { kind: "op", name: spot.name };
   }
   if (next === null && !hoverFromMap) return;
