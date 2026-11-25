@@ -1,7 +1,8 @@
-import { S, V3, scene, camera, canvas, layerRank, render, renderEdges, fileIndex, glow, hasFilters, inScene } from "./state.js";
+import { S, V3, scene, camera, canvas, layerRank, render, renderEdges, fileIndex, glow, hasFilters, inScene, revealFiles } from "./state.js";
 import { centerView, buildLayerPlanes, setConceptBounds, sceneryMeshes } from "./meshes.js";
+import { build } from "./city.js";
 import { pickFile } from "./boxes.js";
-import { revealOutliner, selectFile } from "./panels.js";
+import { revealOutliner, renderOutliner, selectFile } from "./panels.js";
 import { changeView } from "./viewcall.js";
 import { setSpin } from "./controls.js";
 import { conceptSpineLayout, conceptTrace, conceptFilterView, conceptFraming, conceptStems, type IConceptRoute, type IConceptFilterView, type IConceptTraceHop } from "./rules.js";
@@ -728,14 +729,30 @@ function openFile(path: string): void
   if (node >= 0) selectFile(node, file);
 }
 
+// The files a chosen operation or data entry names, so choosing it can bring them back into the scene.
+function conceptFiles(choice: NonNullable<Choice>): string[]
+{
+  if (choice.kind === "op")
+  {
+    const op = S.CONCEPTS.operations[choice.name];
+    return op ? [...op.files, ...(op.steps ?? []).flatMap((step) => step.files)] : [];
+  }
+  return S.CONCEPTS.data[choice.name]?.files ?? [];
+}
+
 function setActive(next: Choice): void
 {
   active = next;
   expanded.clear();
-  if (next !== null && !phoneQuery.matches)
+  if (next !== null)
   {
-    setRightTab("concepts");
-    revealOutliner();
+    // A chosen concept whose files an eye hid brings them back, so the sheet and the map agree.
+    if (revealFiles(conceptFiles(next))) { build(); renderOutliner(); }
+    if (!phoneQuery.matches)
+    {
+      setRightTab("concepts");
+      revealOutliner();
+    }
   }
   renderSheet();
   if (next !== null && document.body.classList.contains("phone")) frameChoice(next);

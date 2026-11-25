@@ -1,4 +1,4 @@
-import { S, camera, canvas, DEFAULT_ALPHA, filePath, frameBlock, frameFile, frameFolder, glow, hasFilters, isFileVisible, matchesTagFilter, render, renderEdges, fileIndex, pathIndex, sliceValue } from "./state.js";
+import { S, camera, canvas, DEFAULT_ALPHA, filePath, frameBlock, frameFile, frameFolder, glow, hasFilters, isFileVisible, matchesTagFilter, render, renderEdges, fileIndex, pathIndex, revealFiles, sliceValue } from "./state.js";
 import { api } from "./endpoint.js";
 import { build, restack } from "./city.js";
 import { centerView, recenterTarget, pulseFile } from "./meshes.js";
@@ -653,6 +653,12 @@ document.getElementById("outliner-show-all-files")!.addEventListener("click", ()
   renderEdges();
 });
 
+// A value switched on brings its files back if an eye hid them, so a chosen slice always draws something.
+function revealValue(axis: GroupAxis, value: string): void
+{
+  revealFiles(allFilePaths().filter((path) => sliceValue(path, axis) === value && matchesTagFilter(path) && !isFileVisible(path)));
+}
+
 // Shows or hides one system or layer in the filter strip. With nothing selected every value is on,
 // so hiding one keeps every other value that has files; showing one adds it to those already on,
 // and a selection that comes to name every value reads as "all" again. Hiding the last value on
@@ -661,6 +667,7 @@ function toggleSlice(axis: GroupAxis, value: string): void
 {
   const set = sliceSet(axis);
   const chip = document.querySelector<HTMLElement>('#outliner-filters [data-slice="' + axis + '"][data-value="' + CSS.escape(value) + '"]');
+  const turningOn = chip !== null && !chip.classList.contains("on");
   if (chip?.classList.contains("on"))
   {
     if (set.size === 0)
@@ -681,6 +688,7 @@ function toggleSlice(axis: GroupAxis, value: string): void
     set.add(value);
   }
   if (coversEvery(axis, set)) set.clear();
+  if (turningOn) revealValue(axis, value);
   reachSlices(axis);
   redrawScene();
 }
@@ -691,7 +699,9 @@ function isolateSlice(axis: GroupAxis, value: string): void
   const set = sliceSet(axis);
   const alone = set.size === 1 && set.has(value);
   set.clear();
-  if (!alone && !coversEvery(axis, new Set([value]))) set.add(value);
+  const turningOn = !alone && !coversEvery(axis, new Set([value]));
+  if (turningOn) set.add(value);
+  if (turningOn) revealValue(axis, value);
   reachSlices(axis);
   redrawScene();
 }
@@ -892,6 +902,12 @@ function spotLayer(layer: string | null): void
 {
   if (S.spotLayer === layer) return;
   S.spotLayer = layer;
+  if (layer !== null)
+  {
+    // Picking a layer from the legend brings back any of its files an eye hid, so the pick has something to show.
+    const hidden = allFilePaths().filter((path) => S.FILE_LAYERS.get(path) === layer && !isFileVisible(path));
+    if (revealFiles(hidden)) { build(); renderOutliner(); }
+  }
   renderEdges();
 }
 

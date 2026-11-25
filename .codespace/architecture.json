@@ -130,7 +130,9 @@
         "renderData": "The data sheet lists Comes from and Goes to, each operation with the steps that touch the entry's files.",
         "namedNow": "At rest each shown operation wears a quiet stem badge and data stays unnamed; hovering or choosing an item expands its full name and names what it touches.",
         "conceptHover": "Hovering in the concept view names the first operation column or hexagon the pointer's ray meets (the columns are pickable for this alone), or the operation of a file outside any column.",
-        "placeLeaders": "Draws each listed file's pointer from whichever edge of the sheet faces the dot, hiding lines scrolled outside the sheet body or when the sheet is hidden."
+        "placeLeaders": "Draws each listed file's pointer from whichever edge of the sheet faces the dot, hiding lines scrolled outside the sheet body or when the sheet is hidden.",
+        "conceptFiles": "The files an operation names in its own list and its steps, or the files a data entry holds, so choosing either can bring them back into the scene.",
+        "setActive": "Chooses an operation or data entry: brings back any of its files an eye hid, opens its sheet in the right panel, and on a phone frames the chosen column or hexagon in the upper half."
       }
     },
     "public/controls.ts": {
@@ -139,7 +141,11 @@
       "tags": ["ui", "core"],
       "summary": "The map's controls and options: framing the chosen block, file, or folder; colouring (choosing History opens its tab), grouping, filters (including picking out a layer from its legend name), shift-click selection, collapsing the outliner, and refreshing the graph.",
       "notes": {
-        "setupDockResize": "Attaches width resize grips to the left dock's panels (including the tools bar) and the right dock (saved in localStorage), and height resize grips to the left-column foldable panels, with double-click reset."
+        "setupDockResize": "Attaches width resize grips to the left dock's panels (including the tools bar) and the right dock (saved in localStorage), and height resize grips to the left-column foldable panels, with double-click reset.",
+        "revealValue": "Brings back the hidden files of a system or layer being switched on, so a chosen slice always draws something.",
+        "toggleSlice": "Turns one system or layer on or off; switching one on brings back its hidden files, then reaches the other strip's values it needs so the selection never locks them out.",
+        "isolateSlice": "Shows only one system or layer, or brings them all back when it is already alone; isolating a value brings back its hidden files.",
+        "spotLayer": "Picks a layer from the legend to keep bright while the rest fade in place; picking one brings back any of its files an eye hid."
       }
     },
     "public/edges.ts": {
@@ -267,7 +273,10 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "core"],
-      "summary": "The outliner, the info panel with its block rail and start-here link, the neighbourhood action, and the selected files with their actions, and everything a person can click, select, fold, or search."
+      "summary": "The outliner, the info panel with its block rail and start-here link, the neighbourhood action, and the selected files with their actions, and everything a person can click, select, fold, or search.",
+      "notes": {
+        "renderFilterStrip": "Draws one switch per system and layer with a live count. A value is selectable when it holds any file that passes the tag filter, even if an eye hid them all, since switching it on brings them back; only a value with no such file is empty."
+      }
     },
     "public/repo-switch.ts": {
       "system": "browser",
@@ -316,7 +325,8 @@
       "tags": ["core"],
       "summary": "The page's mutable world and constants: the graph, the chosen file and block, the selection, import names, filters, the layer picked from the legend, edit flashes, wire anchors, scene handles, the commit the history colouring stands at, and camera framing for a file's block stack or a chosen floor.",
       "notes": {
-        "frameFile": "Glides the camera to a chosen file and its block stack; in the concept view it goes to the file's dot instead, and frameFolder does nothing there."
+        "frameFile": "Glides the camera to a chosen file and its block stack; in the concept view it goes to the file's dot instead, and frameFolder does nothing there.",
+        "revealFiles": "Brings files back from an eye that hid them, so a chosen concept or filter slice always draws its files. A file's own eye wins over its folder's, so it opens the folders above the file without showing the rest."
       }
     },
     "public/style.css": {
@@ -347,7 +357,10 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "io"],
-      "summary": "The Showing panel and view events from the server or this page: shows a route and its import graph, selects and isolates files, frames the whole route or selection, and does not repeat a step's own summary."
+      "summary": "The Showing panel and view events from the server or this page: shows a route and its import graph, selects and isolates files, frames the whole route or selection, and does not repeat a step's own summary.",
+      "notes": {
+        "show": "Lights the files a tool or this page asked for, brings back any an eye hid, and frames the whole route or set."
+      }
     },
     "public/viewcall.ts": {
       "system": "browser",

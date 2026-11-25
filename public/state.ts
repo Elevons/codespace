@@ -320,6 +320,21 @@ export function isFileVisible(path: string): boolean
   });
 }
 
+// Brings files back from an eye that hid them, so a chosen concept or slice always draws its files.
+// A file's own eye wins over a folder's, so this opens the folders above it without showing the rest.
+export function revealFiles(paths: Iterable<string>): boolean
+{
+  let changed = false;
+  for (const path of paths)
+  {
+    if (isFileVisible(path)) continue;
+    S.outliner.hiddenFiles.delete(path);
+    S.outliner.shownFiles.add(path);
+    changed = true;
+  }
+  return changed;
+}
+
 // Whether a file is drawn in the scene: no eye hides it, and it passes every active filter.
 export function inScene(path: string): boolean
 {

@@ -1,5 +1,5 @@
 import { api } from "./endpoint.js";
-import { S, V3, camera, renderEdges, pathIndex } from "./state.js";
+import { S, V3, camera, renderEdges, pathIndex, revealFiles } from "./state.js";
 import { escapeHtml, select, selectFile, renderOutliner, setSelection } from "./panels.js";
 import { refreshGraph, setSpin } from "./controls.js";
 import { build } from "./city.js";
@@ -80,8 +80,11 @@ document.getElementById("labels")!.addEventListener("click", (event) =>
 function show(shown: IShown): void
 {
   window.dispatchEvent(new CustomEvent("codespace:panel-open", { detail: "showing" }));
+  const paths = shown.files.map((file) => file.path);
+  // Showing files an eye hid brings them back, so a route or a set is never asked for and then invisible.
+  if (revealFiles(paths)) { build(); renderOutliner(); }
   S.trace = {
-    paths: shown.files.map((file) => file.path), set: new Set(shown.files.map((file) => file.path)),
+    paths, set: new Set(paths),
     notes: shown.files.map((file) => file.note),
     trace: shown.trace, title: shown.title, note: shown.note,
   };

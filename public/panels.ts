@@ -849,11 +849,12 @@ function renderFilterStrip(): void
     // What each value holds under the other axis's selection: drawn, and before the eyes hide any.
     // "reach" ignores the other strip too: a value can be switched on whenever it has files to draw,
     // since switching it on brings the other strip's values it needs along with it.
-    const counts = new Map<string, number>(), held = new Map<string, number>(), reach = new Map<string, number>();
+    const counts = new Map<string, number>(), held = new Map<string, number>(), reach = new Map<string, number>(), total = new Map<string, number>();
     const bump = (map: Map<string, number>, value: string) => map.set(value, (map.get(value) ?? 0) + 1);
     for (const item of files)
     {
       const value = sliceValue(item.path, axis);
+      if (matchesTagFilter(item.path)) bump(total, value);
       if (passesSlices(item.path, axis, false)) bump(held, value);
       if (passesSlices(item.path, axis)) bump(counts, value);
       if (passesSlices(item.path, axis, true, false)) bump(reach, value);
@@ -863,19 +864,21 @@ function renderFilterStrip(): void
     {
       const count = counts.get(value) ?? 0;
       const on = all || selected.has(value);
-      // A value with nothing to draw cannot be switched on, since it would only empty the scene.
-      // One that is already selected stays clickable, so it can always be switched off again.
-      const unavailable = (reach.get(value) ?? 0) === 0 && !selected.has(value);
+      // A value with no file at all cannot be switched on, since it would only empty the scene. One whose
+      // files an eye hid can be: switching it on brings them back. A selected value stays clickable.
+      const unavailable = (total.get(value) ?? 0) === 0 && !selected.has(value);
       // Off for now only because of the other strip: clicking it brings in what it needs.
-      const crossing = !unavailable && count === 0 && !selected.has(value);
+      const hiddenOnly = (held.get(value) ?? 0) > 0 && (reach.get(value) ?? 0) === 0;
+      const crossing = !unavailable && !hiddenOnly && count === 0 && !selected.has(value);
       const label = groupLabel(axis, value);
-      const why = (held.get(value) ?? 0) > 0 && (reach.get(value) ?? 0) === 0 ? "its files are hidden in the scene (an eye, or Extras off)"
+      const why = hiddenOnly ? "its files are hidden in the scene (an eye, or Extras off)"
         : S.tagFilter !== null ? "no files in it carry the tag " + S.tagFilter
         : sliceSet(other).size > 0 ? "no files in it are in the selected " + other + "s"
         : "it holds no files";
       const title = unavailable ? label + ": nothing to show — " + why
+        : hiddenOnly && !on ? "Show " + axis + ": " + label + " — brings back its hidden files (double-click: show only this)"
+        : on ? "Hide " + axis + ": " + label + (count === 0 ? " — " + why : "") + (hiddenOnly ? " (double-click: show only this and bring them back)" : " (double-click: show only this)")
         : crossing ? "Also show " + axis + ": " + label + " — also switches on its " + other + "s"
-        : on ? "Hide " + axis + ": " + label + (count === 0 ? " — " + why : "") + " (double-click: show only this)"
         : "Also show " + axis + ": " + label + " (double-click: show only this)";
       return '<button type="button" class="fchip' + (on && !unavailable && !crossing ? " on" : "") + (unavailable ? " empty" : "") + (crossing ? " cross" : "") + (on && !unavailable && count === 0 ? " zero" : "") +
         '" data-slice="' + axis + '" data-value="' + escapeHtml(value) + '" aria-pressed="' + String(on && !unavailable && !crossing) + '"' +
