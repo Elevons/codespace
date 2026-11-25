@@ -7,6 +7,7 @@ It prints JSON and decides nothing. It works in stages:
 - "operations": operations still missing steps, file evidence on their steps, or inputs and outputs, with their files' source and "nearby" imported neighbours not yet in the operation.
 - "data": data entries still missing a layer or their files, with the operations that read and write them and "suggestedLayers".
 - "place": described files that no operation and no data entry names yet, each with its imports, importers, and "near" (where those neighbours already sit, a hint only). Put every one somewhere: in a step of the operation it does work in, or in the "files" of the data it holds. Nothing is finished while a file is unplaced.
+- "changed": operations and data whose files changed since you wrote them. Each item has "reason": "changed", "changedFiles", and the "current" entry. Read the changed files, then apply the entry again, rewritten if it no longer fits (steps, reads, writes, files, rules); applying it restamps it. An entry written before stamps existed is treated as current.
 - "review": blocking gaps — data that no operation reads or writes, or whole systems with no file in any operation or data entry.
 - "done": every required field and blocking check is satisfied; read "review" anyway (import divergences, overlapping operations, oversized data, and issues) and do one polish pass if anything real is flagged.
 Every operation and every data entry must end up with files: an operation through its steps, data through "files".

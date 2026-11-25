@@ -686,3 +686,89 @@ export function conceptSpineLayout(input: IConceptLayoutInput): IConceptSpineLay
 
   return { operations, data, home, spine, tray, routes };
 }
+
+export interface IConceptTraceHop
+{
+  op: string
+  // The steps of this operation whose files include one the data entry holds; empty when none can be matched.
+  steps: string[]
+}
+
+export interface IConceptTrace
+{
+  comesFrom: IConceptTraceHop[]
+  goesTo: IConceptTraceHop[]
+}
+
+// Where a data entry comes from and where it goes: the operations that write it and those that read it,
+// each with the step text that touches the entry's own files, so the sheet can say what happens to it there.
+export function conceptTrace(
+  data: Record<string, { files?: readonly string[] }>,
+  operations: Record<string, { reads: readonly string[]; writes: readonly string[]; steps: readonly { text: string; files: readonly string[] }[] }>,
+  name: string): IConceptTrace
+{
+  const held = new Set(data[name]?.files ?? []);
+  const hop = (op: string): IConceptTraceHop =>
+    ({ op, steps: operations[op]!.steps.filter((step) => step.files.some((path) => held.has(path))).map((step) => step.text) });
+  const names = Object.keys(operations);
+  return {
+    comesFrom: names.filter((op) => operations[op]!.writes.includes(name)).map(hop),
+    goesTo: names.filter((op) => operations[op]!.reads.includes(name)).map(hop),
+  };
+}
+
+export interface IConceptFilterView
+{
+  filtering: boolean
+  operations: Set<string>
+  data: Set<string>
+  totalOperations: number
+  totalData: number
+}
+
+// What stays of the design under the outliner's filters: an operation stays when one of its files is still
+// drawn, and data stays when a remaining operation reads or writes it. With no filter on, everything stays.
+export function conceptFilterView(
+  data: Record<string, unknown>,
+  operations: Record<string, { files: readonly string[]; reads: readonly string[]; writes: readonly string[]; steps?: readonly { files: readonly string[] }[] }>,
+  filtering: boolean,
+  drawn: (path: string) => boolean): IConceptFilterView
+{
+  const names = Object.keys(operations);
+  const dataNames = Object.keys(data);
+  const view: IConceptFilterView = { filtering, operations: new Set(), data: new Set(), totalOperations: names.length, totalData: dataNames.length };
+  if (!filtering)
+  {
+    for (const name of names) view.operations.add(name);
+    for (const name of dataNames) view.data.add(name);
+    return view;
+  }
+  for (const name of names)
+  {
+    const op = operations[name]!;
+    if ([...op.files, ...(op.steps ?? []).flatMap((step) => step.files)].some(drawn))
+    {
+      view.operations.add(name);
+      for (const item of [...op.reads, ...op.writes]) if (item in data) view.data.add(item);
+    }
+  }
+  return view;
+}
+
+// Where the camera should aim to hold several points at once: the middle of their box, and a distance far
+// enough that the widest side fits the narrower of the screen's two directions.
+export function conceptFraming(points: readonly { x: number; y: number; z: number }[], fov: number, aspect: number, minRadius: number): { center: { x: number; y: number; z: number }; radius: number } | null
+{
+  if (points.length === 0) return null;
+  const lo = { x: Infinity, y: Infinity, z: Infinity }, hi = { x: -Infinity, y: -Infinity, z: -Infinity };
+  for (const p of points)
+  {
+    lo.x = Math.min(lo.x, p.x); hi.x = Math.max(hi.x, p.x);
+    lo.y = Math.min(lo.y, p.y); hi.y = Math.max(hi.y, p.y);
+    lo.z = Math.min(lo.z, p.z); hi.z = Math.max(hi.z, p.z);
+  }
+  const center = { x: (lo.x + hi.x) / 2, y: (lo.y + hi.y) / 2, z: (lo.z + hi.z) / 2 };
+  const half = Math.hypot(hi.x - lo.x, hi.y - lo.y, hi.z - lo.z) / 2 + 1.5;
+  const reach = Math.tan(fov / 2) * Math.min(1, aspect);
+  return { center, radius: Math.max(minRadius, half / Math.max(reach, 0.1)) };
+}

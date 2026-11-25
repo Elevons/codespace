@@ -340,7 +340,7 @@ It does not change the architecture file. Read the files that it names. Write th
     {
         name: 'concepts', method: 'GET', path: '/api/concepts', writes: false,
         description: `The concepts pass. When no operations exist, it returns an overview of every described file (system, layer, tags, summary, import counts), paged; read every page before you write the design.
-When operations exist, it returns operations missing steps, step files, reads, or writes (with source and nearby imports), then data missing a layer or files, then the files no operation or data entry names yet ("place"), then a review of orphan data, overlaps, import divergences, and issues.
+When operations exist, it returns operations missing steps, step files, reads, or writes (with source and nearby imports), then data missing a layer or files, then the files no operation or data entry names yet ("place"), then operations and data whose files changed since they were written ("changed", with the changed paths and the current entry; apply it again to confirm or rewrite it), then a review of orphan data, overlaps, import divergences, and issues.
 It does not change the architecture file. Write the concepts with apply, and then use it again.`,
         parameters: { type: 'object', properties: { size: SizeArgument(DefaultConceptsSize), page: { type: 'integer', minimum: 1, description: 'Which page of the file overview to return; given, the overview is returned at any stage.' } }, additionalProperties: false },
     },

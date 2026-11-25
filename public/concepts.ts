@@ -1,10 +1,10 @@
-import { S, V3, scene, camera, canvas, layerRank, render, renderEdges, fileIndex, glow } from "./state.js";
+import { S, V3, scene, camera, canvas, layerRank, render, renderEdges, fileIndex, glow, hasFilters, inScene } from "./state.js";
 import { centerView, buildLayerPlanes, setConceptBounds, sceneryMeshes } from "./meshes.js";
 import { pickFile } from "./boxes.js";
 import { selectFile } from "./panels.js";
 import { changeView } from "./viewcall.js";
 import { setSpin } from "./controls.js";
-import { conceptSpineLayout, type IConceptRoute } from "./rules.js";
+import { conceptSpineLayout, conceptTrace, conceptFilterView, conceptFraming, type IConceptRoute, type IConceptFilterView, type IConceptTraceHop } from "./rules.js";
 import type { FileRecord } from "./types.js";
 
 const Unmapped = "Not in an operation";
@@ -63,6 +63,10 @@ let links: Link[] = [];
 let linkKey = "";
 let riserKey = "";
 let hiddenScenery: BABYLON.Mesh[] = [];
+// What the outliner's filters leave of the design; rebuilt with the layout.
+let filterView: IConceptFilterView | null = null;
+const opShown = (name: string): boolean => filterView === null || filterView.operations.has(name);
+const dataShown = (name: string): boolean => filterView === null || filterView.data.has(name);
 const sizes = new WeakMap<FileRecord, { rest: BABYLON.Vector3; mine: BABYLON.Vector3 }>();
 
 const overlay = document.createElement("div");
@@ -620,6 +624,24 @@ function chips(parent: HTMLElement, kind: "op" | "datum", names: string[]): void
   parent.appendChild(row);
 }
 
+// Each operation that writes or reads a data entry, with the steps there that touch the entry's own files.
+function hops(parent: HTMLElement, items: IConceptTraceHop[]): void
+{
+  const rows = el("ul", "", "hops");
+  for (const item of items)
+  {
+    const row = el("li");
+    const open = el("button", item.op, "chip");
+    open.type = "button";
+    open.title = "Open this operation";
+    open.addEventListener("click", () => setActive({ kind: "op", name: item.op }));
+    row.appendChild(open);
+    for (const text of item.steps) row.appendChild(el("p", text, "hop-step"));
+    rows.appendChild(row);
+  }
+  parent.appendChild(rows);
+}
+
 function head(name: string, color: string, open: (() => void) | null): void
 {
   const header = el("header");
@@ -679,6 +701,20 @@ function frameChoice(choice: NonNullable<Choice>): void
   {
     const marker = layout.data.find((candidate) => candidate.name === choice.name);
     if (marker) point = new V3(marker.at.x, marker.y, marker.at.z);
+    // The entry is framed together with the operations that write and read it, so both ends are in view.
+    const trace = conceptTrace(S.CONCEPTS.data, S.CONCEPTS.operations, choice.name);
+    const ends = new Set([...trace.comesFrom, ...trace.goesTo].map((hop) => hop.op));
+    const points = layout.operations.filter((spot) => ends.has(spot.name)).map((spot) => ({ x: spot.at.x, y: (spot.lowY + spot.highY) / 2, z: spot.at.z }));
+    if (marker) points.push({ x: marker.at.x, y: marker.y, z: marker.at.z });
+    const frame = conceptFraming(points, camera.fov, canvas.clientWidth / Math.max(1, canvas.clientHeight), camera.radius);
+    if (frame && points.length > 1)
+    {
+      const a = camera.alpha, b = camera.beta;
+      const up = new V3(-Math.cos(a) * Math.cos(b), Math.sin(b), -Math.sin(a) * Math.cos(b));
+      const lift = frame.radius * Math.tan(camera.fov / 2) * 0.5;
+      S.camGoal = { target: new V3(frame.center.x, frame.center.y, frame.center.z).subtract(up.scale(lift)), radius: frame.radius };
+      return;
+    }
   }
   if (!point) return;
   // The screen's up direction for an orbiting camera at (alpha, beta).
@@ -718,8 +754,13 @@ function renderSheet(): void
 let indexOpen = false;
 function renderIndex(at: Layout): void
 {
-  const ops = at.operations.filter((spot) => !spot.unmapped);
-  const toggle = el("button", ops.length + " operations · " + at.data.length + " data " + (indexOpen ? "▾" : "▴"), "index-toggle");
+  const ops = at.operations.filter((spot) => !spot.unmapped && opShown(spot.name));
+  const shownData = at.data.filter((marker) => dataShown(marker.name));
+  const filtering = filterView !== null && filterView.filtering;
+  const counts = filtering
+    ? "showing " + ops.length + " of " + filterView!.totalOperations + " operations · " + shownData.length + " of " + filterView!.totalData + " data"
+    : ops.length + " operations · " + at.data.length + " data";
+  const toggle = el("button", counts + " " + (indexOpen ? "▾" : "▴"), "index-toggle");
   toggle.type = "button";
   toggle.addEventListener("click", () => { indexOpen = !indexOpen; renderSheet(); });
   list.appendChild(toggle);
@@ -727,6 +768,7 @@ function renderIndex(at: Layout): void
   const opList = el("div", "", "index-list");
   for (const spot of at.operations)
   {
+    if (!spot.unmapped && !opShown(spot.name)) continue;
     const row = el("button", "", "index-op" + (spot.unmapped ? " unmapped" : ""));
     row.type = "button";
     row.style.setProperty("--op", cssColor(spot.color));
@@ -737,7 +779,7 @@ function renderIndex(at: Layout): void
     opList.appendChild(row);
   }
   list.appendChild(opList);
-  chips(section("Data"), "datum", at.data.map((marker) => marker.name));
+  chips(section("Data"), "datum", shownData.map((marker) => marker.name));
 }
 
 // An operation reads as a process sheet: what comes in, the steps, what goes out, and the rules.
@@ -816,11 +858,9 @@ function renderData(name: string): void
   head(name, cssColor(DataColor), null);
   if (datum?.summary) list.appendChild(el("p", datum.summary));
   if (datum?.layer) list.appendChild(el("p", "Held in the " + datum.layer + " layer", "meta"));
-  const operations = Object.entries(S.CONCEPTS.operations);
-  const writers = operations.filter(([, op]) => op.writes.includes(name)).map(([key]) => key);
-  const readers = operations.filter(([, op]) => op.reads.includes(name)).map(([key]) => key);
-  if (writers.length > 0) chips(section("Written by"), "op", writers);
-  if (readers.length > 0) chips(section("Read by"), "op", readers);
+  const trace = conceptTrace(S.CONCEPTS.data, S.CONCEPTS.operations, name);
+  if (trace.comesFrom.length > 0) hops(section("Comes from"), trace.comesFrom);
+  if (trace.goesTo.length > 0) hops(section("Goes to"), trace.goesTo);
   const held = datum?.files ?? [];
   if (held.length > 0)
   {
@@ -856,6 +896,9 @@ function applyActive(): void
   if (!layout) return;
   const focus = active ?? hovered;
   const operation = focus?.kind === "op" ? S.CONCEPTS.operations[focus.name] : undefined;
+  const trace = focus?.kind === "datum" ? conceptTrace(S.CONCEPTS.data, S.CONCEPTS.operations, focus.name) : null;
+  const writers = new Set(trace?.comesFrom.map((hop) => hop.op));
+  const readers = new Set(trace?.goesTo.map((hop) => hop.op));
   const touches = (name: string): boolean =>
   {
     if (focus === null) return true;
@@ -866,32 +909,41 @@ function applyActive(): void
   {
     if (focus === null) return true;
     if (focus.kind === "op") return name === focus.name;
-    const op = S.CONCEPTS.operations[name];
-    return op !== undefined && (op.reads.includes(focus.name) || op.writes.includes(focus.name));
+    return writers.has(name) || readers.has(name);
   };
+  // An operation or data entry the filters leave nothing of stays in place as a ghost, so the layout does not
+  // jump as chips are toggled, but it gives way to what remains and drops out of the index.
   for (const spot of layout.operations)
   {
-    const on = opTouches(spot.name);
+    const ghost = !spot.unmapped && !opShown(spot.name);
+    const on = !ghost && opTouches(spot.name);
     const base = spot.unmapped ? 0.09 : 0.16;
-    if (spot.pill?.material) spot.pill.material.alpha = !on ? 0.04 : focus === null ? base : focus.kind === "op" ? 0.3 : 0.22;
-    spot.tag?.classList.toggle("faded", !on);
+    if (spot.pill?.material) spot.pill.material.alpha = ghost ? 0.02 : !on ? 0.04 : focus === null ? base : focus.kind === "op" ? 0.3 : 0.22;
+    spot.tag?.classList.toggle("faded", !on && !ghost);
+    spot.tag?.classList.toggle("ghost", ghost);
+    spot.tag?.classList.toggle("source", writers.has(spot.name));
+    spot.tag?.classList.toggle("sink", readers.has(spot.name) && !writers.has(spot.name));
   }
   for (const marker of layout.data)
   {
-    const on = touches(marker.name);
-    if (marker.mesh?.material) marker.mesh.material.alpha = on ? 0.95 : 0.18;
-    marker.tag?.classList.toggle("faded", !on);
+    const ghost = !dataShown(marker.name);
+    const on = !ghost && touches(marker.name);
+    if (marker.mesh?.material) marker.mesh.material.alpha = ghost ? 0.06 : on ? 0.95 : 0.18;
+    marker.tag?.classList.toggle("faded", !on && !ghost);
+    marker.tag?.classList.toggle("ghost", ghost);
     marker.tag?.classList.toggle("chosen", focus?.kind === "datum" && focus.name === marker.name);
   }
   for (const link of links)
   {
+    if (!opShown(link.op) || !dataShown(link.datum)) { link.mesh.alpha = 0.02; continue; }
     if (focus === null)
     {
       link.mesh.alpha = link.kind === "writes" ? 0.84 : 0.28;
       continue;
     }
     const on = focus.kind === "op" ? link.op === focus.name : link.datum === focus.name;
-    link.mesh.alpha = on ? (link.kind === "writes" ? 1 : 0.9) : 0.05;
+    // A traced entry's own links are all bright, the writes and the reads alike.
+    link.mesh.alpha = on ? (link.kind === "writes" || focus.kind === "datum" ? 1 : 0.9) : 0.05;
   }
 }
 
@@ -977,6 +1029,11 @@ export function placeConceptLabels(): void
   placeLeaders(transform, viewport);
 }
 
+function filterSignature(): string
+{
+  return hasFilters() ? [...S.outliner.systems].sort().join(",") + "/" + [...S.outliner.layers].sort().join(",") + "/" + (S.tagFilter ?? "") + "/" + (S.isolatedFiles?.size ?? "") : "";
+}
+
 // Runs every frame, after a shown route has set its targets, so the zoom wins while it is on.
 export function conceptTargets(): void
 {
@@ -984,10 +1041,11 @@ export function conceptTargets(): void
   // The columns are laid out again only when the files or their imports change. The layer gap moves
   // heights alone, and every vertical piece of the zoom reads the boxes' own heights as they glide,
   // so a gap change refreshes the dots' resting heights in place instead of rebuilding the layout.
-  const key = S.graphSignature + "|" + S.fileRecords.size;
+  const key = S.graphSignature + "|" + S.fileRecords.size + "|" + filterSignature();
   const rebuilt = layout === null || key !== layoutKey;
   if (rebuilt)
   {
+    filterView = conceptFilterView(S.CONCEPTS.data, S.CONCEPTS.operations, hasFilters(), inScene);
     layout = buildLayout();
     layoutKey = key;
     if (layout) { buildMeshes(layout); buildLabels(layout); }
@@ -1060,6 +1118,7 @@ function setZoom(on: boolean): void
     disposeMeshes();
     overlay.replaceChildren();
     layout = null;
+    filterView = null;
     setConceptBounds(null);
     setScenery(true);
     buildLayerPlanes();

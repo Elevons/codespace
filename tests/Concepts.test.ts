@@ -4,8 +4,9 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { RunAsync } from '../src/cli/Cli.ts'
 import { Architecture } from '../src/repo/Architecture.ts'
-import { ConceptsLeft, ConceptsNextAsync, ReviewConcepts } from '../src/repo/Concepts.ts'
-import { conceptFileOwners, conceptSpineLayout, conceptDataClaims } from '../public/rules.ts'
+import { ConceptsDriftAsync, ConceptsLeft, ConceptsNextAsync, RecordAppliedAsync, ReviewConcepts } from '../src/repo/Concepts.ts'
+import { Ledger } from '../src/repo/Ledger.ts'
+import { conceptFileOwners, conceptSpineLayout, conceptDataClaims, conceptTrace, conceptFilterView, conceptFraming } from '../public/rules.ts'
 import { Graph } from '../src/repo/Graph.ts'
 import { Repo } from '../src/repo/Repo.ts'
 import { makeRepo, removeTemp } from './support.ts'
@@ -198,7 +199,7 @@ test('ConceptsLeft counts what the design still needs, without reading a file', 
     try
     {
         const architecture = await Architecture.ReadAsync(root, Known)
-        assert.deepEqual(ConceptsLeft(architecture), { started: true, operations: 2, data: 2, unplaced: 1 }, 'both data lack files; src/Cli.ts is described and unplaced')
+        assert.deepEqual(ConceptsLeft(architecture), { started: true, operations: 2, data: 2, unplaced: 1, changedOperations: 0, changedData: 0 }, 'both data lack files; src/Cli.ts is described and unplaced')
     }
     finally { await removeTemp(root) }
 
@@ -206,7 +207,7 @@ test('ConceptsLeft counts what the design still needs, without reading a file', 
     try
     {
         const architecture = await Architecture.ReadAsync(empty, Known)
-        assert.deepEqual(ConceptsLeft(architecture), { started: false, operations: 0, data: 0, unplaced: 0 })
+        assert.deepEqual(ConceptsLeft(architecture), { started: false, operations: 0, data: 0, unplaced: 0, changedOperations: 0, changedData: 0 })
     }
     finally { await removeTemp(empty) }
 })
@@ -500,4 +501,133 @@ test('The review flags data that holds more than 15 files', async () =>
         assert.ok(review.issues.some((issue) => /"Bucket" holds 17 files/.test(issue)))
     }
     finally { await removeTemp(root) }
+})
+
+const Finished = {
+    data: { Data: { summary: 'The data.', layer: 'data', files: ['src/b.ts'] } },
+    operations: { Run: { summary: 'Runs.', reads: ['Data'], writes: ['Data'], steps: [{ text: 'Start.', files: ['src/Cli.ts'] }, { text: 'Go.', files: ['src/a.ts'] }] } },
+}
+
+async function nextAsync(root: string)
+{
+    const opened = await Repo.OpenAsync(root)
+    return ConceptsNextAsync(opened, await Architecture.ReadAsync(root, Known), await Graph.BuildAsync(opened), 6, 'cli.ts')
+}
+
+test('Applying concepts stamps their files, a changed file flags them, and applying again clears it', async () =>
+{
+    const root = await repo()
+    try
+    {
+        const opened = await Repo.OpenAsync(root)
+        const patch = { concepts: Finished }
+        const updated = await Architecture.UpdateAsync(root, Known, patch)
+        await RecordAppliedAsync(opened, patch, updated.architecture)
+        const stamps = await Ledger.ReadConceptsAsync(root)
+        assert.deepEqual(Object.keys(stamps.operations.Run ?? {}).sort(), ['src/Cli.ts', 'src/a.ts'], 'an operation is stamped by its steps\' files')
+        assert.deepEqual(Object.keys(stamps.data.Data ?? {}), ['src/b.ts'])
+        assert.equal((await nextAsync(root)).mode, 'done')
+
+        const { writeFile } = await import('node:fs/promises')
+        await writeFile(join(root, 'src/a.ts'), "import { b } from './b.ts'\nexport const a = b + 1\n")
+        await writeFile(join(root, 'src/b.ts'), 'export const b = 2\n')
+        const changed = await nextAsync(root)
+        assert.equal(changed.mode, 'changed')
+        assert.equal(changed.remaining, 2)
+        assert.deepEqual(changed.changed.map((item) => [item.kind, item.name, item.reason, item.changedFiles]), [['operation', 'Run', 'changed', ['src/a.ts']], ['data', 'Data', 'changed', ['src/b.ts']]])
+        assert.equal((changed.changed[0]!.current as { summary?: string }).summary, 'Runs.')
+        const left = ConceptsLeft(await Architecture.ReadAsync(root, Known), await ConceptsDriftAsync(opened, await Architecture.ReadAsync(root, Known)))
+        assert.deepEqual([left.changedOperations, left.changedData], [1, 1])
+
+        const again = { concepts: { operations: { Run: { summary: 'Runs, rewritten.' } } } }
+        const rewritten = await Architecture.UpdateAsync(root, Known, again)
+        await RecordAppliedAsync(opened, again, rewritten.architecture)
+        const after = await nextAsync(root)
+        assert.equal(after.mode, 'changed', 'the data entry is still flagged until it is applied too')
+        assert.deepEqual(after.changed.map((item) => item.name), ['Data'])
+        const dataAgain = { concepts: { data: { Data: { summary: 'Rewritten.' } } } }
+        await RecordAppliedAsync(opened, dataAgain, (await Architecture.UpdateAsync(root, Known, dataAgain)).architecture)
+        assert.equal((await nextAsync(root)).mode, 'done')
+
+        const removal = { concepts: { operations: { Run: null } } }
+        await RecordAppliedAsync(opened, removal as never, (await Architecture.UpdateAsync(root, Known, removal as never)).architecture)
+        assert.equal((await Ledger.ReadConceptsAsync(root)).operations.Run, undefined, 'a removed operation loses its stamp')
+    }
+    finally { await removeTemp(root) }
+})
+
+test('Entries written before stamps existed are current, and are stamped on their next apply', async () =>
+{
+    const root = await repo(Finished)
+    try
+    {
+        const { writeFile } = await import('node:fs/promises')
+        await writeFile(join(root, 'src/a.ts'), 'export const a = 1\n')
+        const batch = await nextAsync(root)
+        assert.notEqual(batch.mode, 'changed')
+        assert.deepEqual(batch.changed, [])
+        assert.deepEqual(await Ledger.ReadConceptsAsync(root), { operations: {}, data: {} })
+    }
+    finally { await removeTemp(root) }
+})
+
+test('The apply command stamps concepts, and the ledger keeps file stamps beside them', async () =>
+{
+    const root = await repo()
+    const log = console.log
+    console.log = () => {}
+    try
+    {
+        const { writeFile } = await import('node:fs/promises')
+        await writeFile(join(root, 'patch.json'), JSON.stringify({ files: { 'src/a.ts': { summary: 'A.', system: 'core', tags: ['core'], layer: 'data' } }, concepts: Finished }))
+        assert.equal(await RunAsync(['apply', '--file', join(root, 'patch.json'), '--repo', root]), 0)
+        const opened = await Repo.OpenAsync(root)
+        assert.ok((await Ledger.ReadAsync(root))['src/a.ts'], 'the file stamp is kept')
+        assert.deepEqual(Object.keys((await Ledger.ReadConceptsAsync(root)).operations), ['Run'])
+        await Ledger.ForgetAsync(root, [{ from: 'src/a.ts', to: 'src/z.ts' }], [])
+        assert.ok((await Ledger.ReadConceptsAsync(root)).operations.Run?.['src/z.ts'], 'a moved file carries its design stamp')
+        assert.equal((await ConceptsDriftAsync(opened, await Architecture.ReadAsync(root, Known))).operations.length, 0)
+    }
+    finally
+    {
+        console.log = log
+        await removeTemp(root)
+    }
+})
+
+const traceOps = {
+    Load: { files: ['a.ts'], reads: [], writes: ['Store'], steps: [{ text: 'Read it.', files: ['a.ts'] }, { text: 'Save it.', files: ['s.ts'] }] },
+    Show: { files: ['v.ts'], reads: ['Store'], writes: [], steps: [{ text: 'Draw it.', files: ['v.ts'] }] },
+    Count: { files: ['c.ts', 's.ts'], reads: ['Store'], writes: ['Total'], steps: [{ text: 'Tally.', files: ['s.ts'] }] },
+}
+const traceData = { Store: { files: ['s.ts'] }, Total: { files: ['t.ts'] }, Loose: {} }
+
+test('A data entry traces to the operations that write and read it, with the steps that touch its files', () =>
+{
+    const trace = conceptTrace(traceData, traceOps, 'Store')
+    assert.deepEqual(trace.comesFrom, [{ op: 'Load', steps: ['Save it.'] }])
+    assert.deepEqual(trace.goesTo, [{ op: 'Show', steps: [] }, { op: 'Count', steps: ['Tally.'] }], 'an operation with no matching step is listed alone')
+    assert.deepEqual(conceptTrace(traceData, traceOps, 'Loose'), { comesFrom: [], goesTo: [] })
+})
+
+test('The filters leave the operations with a drawn file, and the data they touch', () =>
+{
+    const all = conceptFilterView(traceData, traceOps, false, () => false)
+    assert.deepEqual([all.operations.size, all.data.size, all.totalOperations, all.totalData], [3, 3, 3, 3], 'no filter keeps everything')
+    const view = conceptFilterView(traceData, traceOps, true, (path) => path === 'v.ts')
+    assert.deepEqual([...view.operations], ['Show'])
+    assert.deepEqual([...view.data], ['Store'], 'Total is touched only by an operation that is gone, and Loose by none')
+    assert.deepEqual([view.totalOperations, view.totalData], [3, 3])
+    const step = conceptFilterView(traceData, traceOps, true, (path) => path === 's.ts')
+    assert.deepEqual([...step.operations].sort(), ['Count', 'Load'], 'a file named only in a step counts')
+})
+
+test('Framing holds every point and never zooms in', () =>
+{
+    assert.equal(conceptFraming([], 1, 1, 10), null)
+    const near = conceptFraming([{ x: 0, y: 0, z: 0 }, { x: 2, y: 0, z: 0 }], 0.8, 1, 10)!
+    assert.deepEqual(near.center, { x: 1, y: 0, z: 0 })
+    assert.equal(near.radius, 10, 'the camera keeps its distance when the points already fit')
+    const far = conceptFraming([{ x: 0, y: 0, z: 0 }, { x: 60, y: 0, z: 0 }], 0.8, 0.5, 10)!
+    assert.ok(far.radius > 60, 'a narrow screen needs more distance')
 })

@@ -18,11 +18,10 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Architecture, type IArchitecturePatch } from '../repo/Architecture.ts'
-import { ConceptsNextAsync, DefaultConceptsSize, ReadPage } from '../repo/Concepts.ts'
+import { ConceptsNextAsync, DefaultConceptsSize, ReadPage, RecordAppliedAsync } from '../repo/Concepts.ts'
 import { Graph } from '../repo/Graph.ts'
 import { ClampSize, DefaultBatch, MaxBatchSize, StatusAsync } from '../repo/Ingest.ts'
 import { InstallAsync } from '../repo/Install.ts'
-import { Ledger } from '../repo/Ledger.ts'
 import { LiftNotesAsync } from '../repo/LiftNotes.ts'
 import { TakeNextAsync } from '../repo/Next.ts'
 import { DefaultRefineSize, Refine } from '../repo/Refine.ts'
@@ -136,7 +135,7 @@ export async function RunAsync(args: readonly string[]): Promise<number>
             const patch = change as IArchitecturePatch
             const updated = await Architecture.UpdateAsync(repo.Root, await repo.ListFilesAsync(), patch)
             // Every file the change names is now described from its text as it stands, so it is not offered again until it changes.
-            await Ledger.RecordAsync(repo, Object.keys(patch.files ?? {}))
+            await RecordAppliedAsync(repo, patch, updated.architecture)
             console.log(JSON.stringify({ ok: true, notes: updated.notes }))
             return 0
         }

@@ -1,8 +1,9 @@
 import { dirname } from 'node:path'
-import type { IArchitecture } from './Architecture.ts'
+import type { IArchitecture, IArchitecturePatch } from './Architecture.ts'
 import { ConceptsGuide } from './ConceptsGuide.ts'
 import type { Graph } from './Graph.ts'
 import { SkippedSummary } from './Ingest.ts'
+import { Ledger } from './Ledger.ts'
 import type { Repo } from './Repo.ts'
 
 export const DefaultConceptsSize = 8
@@ -114,9 +115,18 @@ export interface IConceptsReview
     blocking: string[]
 }
 
+export interface IConceptChanged
+{
+    kind: 'operation' | 'data'
+    name: string
+    reason: 'changed'
+    changedFiles: string[]
+    current: Record<string, unknown>
+}
+
 export interface IConceptsBatch
 {
-    mode: 'overview' | 'operations' | 'data' | 'place' | 'review' | 'done'
+    mode: 'overview' | 'operations' | 'data' | 'place' | 'changed' | 'review' | 'done'
     remaining: number
     guide: string
     layers: string[]
@@ -135,6 +145,7 @@ export interface IConceptsBatch
         nearby: IConceptNearby[]
     }>
     unplaced: IConceptUnplaced[]
+    changed: IConceptChanged[]
     review?: IConceptsReview
 }
 
@@ -192,16 +203,83 @@ export interface IConceptsLeft
     operations: number
     data: number
     unplaced: number
+    changedOperations: number
+    changedData: number
 }
 
-export function ConceptsLeft(architecture: IArchitecture): IConceptsLeft
+export interface IConceptsDrift
+{
+    operations: Array<{ name: string, changedFiles: string[] }>
+    data: Array<{ name: string, changedFiles: string[] }>
+}
+
+const NoDrift: IConceptsDrift = { operations: [], data: [] }
+
+function OperationFiles(operation: { files: readonly string[], steps: ReadonlyArray<{ files: readonly string[] }> }): string[]
+{
+    return [...new Set([...operation.files, ...operation.steps.flatMap((step) => step.files)])]
+}
+
+// An entry is only compared with the stamps it was written with; one written before stamps existed has none and counts as current.
+export async function ConceptsDriftAsync(repo: Repo, architecture: IArchitecture): Promise<IConceptsDrift>
+{
+    const stamps = await Ledger.ReadConceptsAsync(repo.Root)
+    const wanted = new Set<string>()
+    for (const kind of ['operations', 'data'] as const)
+        for (const [name, entries] of Object.entries(kind === 'operations' ? architecture.concepts.operations : architecture.concepts.data))
+            if (entries !== undefined) for (const path of Object.keys(stamps[kind][name] ?? {})) wanted.add(path)
+    if (wanted.size === 0) return NoDrift
+    const hashes = await Ledger.HashesAsync(repo, wanted)
+    const drifted = (recorded: Record<string, string> | undefined, named: readonly string[]): string[] =>
+        recorded === undefined ? [] : named.filter((path) => recorded[path] !== undefined && hashes.has(path) && hashes.get(path) !== recorded[path]).sort()
+    const operations: IConceptsDrift['operations'] = []
+    for (const [name, operation] of Object.entries(architecture.concepts.operations))
+    {
+        const changedFiles = drifted(stamps.operations[name], OperationFiles(operation))
+        if (changedFiles.length > 0) operations.push({ name, changedFiles })
+    }
+    const data: IConceptsDrift['data'] = []
+    for (const [name, datum] of Object.entries(architecture.concepts.data))
+    {
+        const changedFiles = drifted(stamps.data[name], datum.files ?? [])
+        if (changedFiles.length > 0) data.push({ name, changedFiles })
+    }
+    return { operations, data }
+}
+
+// Records an apply: the files it names, and the files each operation and data entry it writes names, as they are now.
+export async function RecordAppliedAsync(repo: Repo, patch: IArchitecturePatch, architecture: IArchitecture): Promise<void>
+{
+    await Ledger.RecordAsync(repo, Object.keys(patch.files ?? {}))
+    const change = (patch.concepts ?? {}) as { data?: unknown, things?: unknown, operations?: unknown }
+    const names = (section: unknown): string[] => typeof section === 'object' && section !== null ? Object.keys(section) : []
+    const entries: Array<{ kind: 'operations' | 'data', name: string, files: string[] }> = []
+    const removed: Record<'operations' | 'data', string[]> = { operations: [], data: [] }
+    for (const name of [...names(change.data ?? change.things)])
+    {
+        const datum = architecture.concepts.data[name]
+        if (datum === undefined) removed.data.push(name)
+        else entries.push({ kind: 'data', name, files: datum.files ?? [] })
+    }
+    for (const name of names(change.operations))
+    {
+        const operation = architecture.concepts.operations[name]
+        if (operation === undefined) removed.operations.push(name)
+        else entries.push({ kind: 'operations', name, files: OperationFiles(operation) })
+    }
+    if (entries.length > 0) await Ledger.RecordConceptsAsync(repo, entries)
+    if (removed.data.length > 0) await Ledger.ForgetConceptsAsync(repo.Root, 'data', removed.data)
+    if (removed.operations.length > 0) await Ledger.ForgetConceptsAsync(repo.Root, 'operations', removed.operations)
+}
+
+export function ConceptsLeft(architecture: IArchitecture, drift: IConceptsDrift = NoDrift): IConceptsLeft
 {
     const operations = Object.values(architecture.concepts.operations).filter((operation) => OperationMissing(operation).length > 0).length
     const data = Object.values(architecture.concepts.data).filter((datum) => DataMissing(datum).length > 0).length
     const started = Object.keys(architecture.concepts.operations).length > 0
     const placed = PlacedFiles(architecture)
     const unplaced = started ? FilesToPlace(architecture).filter((path) => !placed.has(path)).length : 0
-    return { started, operations, data, unplaced }
+    return { started, operations, data, unplaced, changedOperations: drift.operations.length, changedData: drift.data.length }
 }
 
 function BuildGraphIndex(graph: Graph, inDesign: ReadonlySet<string>): { imports: Map<string, string[]>, usedBy: Map<string, string[]> }
@@ -490,7 +568,8 @@ export async function ConceptsNextAsync(repo: Repo, architecture: IArchitecture,
     const review = hasOperations ? ReviewConcepts(architecture, graph, known, size) : undefined
     const placedNow = PlacedFiles(architecture)
     const unplaced = hasOperations ? FilesToPlace(architecture).filter((path) => !placedNow.has(path)) : []
-    const remaining = !hasOperations ? 1 : operationsLeft.length + dataLeft.length + unplaced.length + review!.blocking.length
+    const drift = hasOperations ? await ConceptsDriftAsync(repo, architecture) : NoDrift
+    const remaining = !hasOperations ? 1 : operationsLeft.length + dataLeft.length + unplaced.length + drift.operations.length + drift.data.length + review!.blocking.length
 
     // Keep overview near the top of the serialized JSON so it is never clipped if a host truncates long tool replies.
     const batch: IConceptsBatch = {
@@ -502,6 +581,7 @@ export async function ConceptsNextAsync(repo: Repo, architecture: IArchitecture,
         data: dataRows,
         operations: [],
         unplaced: [],
+        changed: [],
         review: undefined,
     }
 
@@ -584,6 +664,17 @@ export async function ConceptsNextAsync(repo: Repo, architecture: IArchitecture,
                 near: [...near].sort().slice(0, MaxNearby),
             }
         })
+        return batch
+    }
+
+    if (drift.operations.length + drift.data.length > 0)
+    {
+        batch.mode = 'changed'
+        const row = (kind: 'operation' | 'data', item: { name: string, changedFiles: string[] }): IConceptChanged => ({
+            kind, name: item.name, reason: 'changed', changedFiles: item.changedFiles,
+            current: { ...(kind === 'operation' ? operations[item.name]! : data[item.name]!) },
+        })
+        batch.changed = [...drift.operations.map((item) => row('operation', item)), ...drift.data.map((item) => row('data', item))].slice(0, Math.min(size, MaxOperationsPerBatch))
         return batch
     }
 

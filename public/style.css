@@ -953,6 +953,9 @@ body.concept-zoom #labels { display: none; }
 #concept-hint { position: fixed; left: 50%; top: 60px; transform: translateX(-50%); padding: 8px 12px; border-radius: 6px;
   background: rgba(13,17,23,.92); color: #e6edf3; font: 13px ui-sans-serif, system-ui, sans-serif; z-index: 50; }
 #concept-labels .concept-op.faded { opacity: .35; }
+#concept-labels .concept-op.ghost, #concept-labels .concept-data.ghost { opacity: .12; }
+#concept-labels .concept-op.source { box-shadow: 0 0 0 1px #e3b341; }
+#concept-labels .concept-op.sink { box-shadow: 0 0 0 1px #58a6ff; }
 #concept-leaders { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 4; }
 #concept-leaders line { stroke-width: 1; opacity: .5; }
 #concept-leaders line.hot { stroke-width: 2; opacity: 1; }
@@ -1010,3 +1013,7 @@ body.phone #concept-leaders { display: none; }
 #concept-key i.write { border-top-style: solid; }
 body.phone #concept-labels .concept-data small { display: none; }
 body.phone #concept-key { display: none; }
+
+#concept-list .hops { list-style: none; margin: 0; padding: 0; }
+#concept-list .hops li { margin: 0 0 6px; }
+#concept-list .hops .hop-step { margin: 2px 0 0 10px; font-size: 11px; color: #9aa7b4; }

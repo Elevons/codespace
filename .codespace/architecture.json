@@ -123,9 +123,11 @@
         "conceptTap": "A tap in the concept view stays in it: a file opens its details and empty space puts the sheet away.",
         "openOperation": "Clicking an operation's name zooms back in and shows its files lit in place, with the operation's summary as the note.",
         "declutter": "Hides labels that would cover a more important one (the chosen one and what it touches, then operations by size, then data).",
-        "renderIndex": "With nothing chosen, lists every operation and data entry in the sheet, folded to one row, so hidden labels stay reachable.",
-        "frameChoice": "On a phone, aims the camera so the chosen column or hexagon sits in the upper half, above the sheet.",
-        "dataLabel": "Names a hexagon with its layer and how many files stand under it."
+        "renderIndex": "The folded index lists only what the filters leave, and counts it (showing 4 of 17 operations).",
+        "frameChoice": "On a phone, a data entry is framed together with its writers and readers.",
+        "dataLabel": "Names a hexagon with its layer and how many files stand under it.",
+        "applyActive": "Lights a chosen entry's writers and readers and its links, fades the rest, and ghosts what the filters leave nothing of.",
+        "renderData": "The data sheet lists Comes from and Goes to, each operation with the steps that touch the entry's files."
       }
     },
     "public/controls.ts": {
@@ -286,7 +288,10 @@
       "summary": "The map's pure folder, colour, layer-rank, visibility, ray-picking, and concept-spine layout rules, kept testable away from the scene.",
       "notes": {
         "conceptFileOwners": "Picks one column per file: the operation whose steps cite it most, the smaller on a tie, then gives any operation left empty a file back from the biggest column sharing it.",
-        "conceptDataClaims": "Picks the files that stand under a data entry's hexagon: each file it lists, unless an operation needs it to keep a column of its own."
+        "conceptDataClaims": "Picks the files that stand under a data entry's hexagon: each file it lists, unless an operation needs it to keep a column of its own.",
+        "conceptTrace": "For a data entry, the operations that write it (comes from) and read it (goes to), each with the step text that touches the entry's files.",
+        "conceptFilterView": "Which operations and data stay under the Outliner's filters: an operation with a drawn file, and data a remaining operation reads or writes.",
+        "conceptFraming": "The camera aim and distance that hold a set of points, never closer than the camera already is."
       }
     },
     "public/shown.ts": {
@@ -368,7 +373,10 @@
       "system": "server",
       "layer": "entry",
       "tags": ["entry", "io"],
-      "summary": "The commands an agent runs to describe a repository: what is left, the next batch, applying it, installing the upkeep rules, and the second pass."
+      "summary": "The commands an agent runs to describe a repository: what is left, the next batch, applying it, installing the upkeep rules, and the second pass.",
+      "notes": {
+        "RunAsync": "apply records the files it names and the files of each concepts entry it writes (RecordAppliedAsync)."
+      }
     },
     "src/cli/Options.ts": {
       "system": "server",
@@ -396,14 +404,17 @@
       "system": "server",
       "layer": "repo",
       "tags": ["orchestrate", "core"],
-      "summary": "Hands out the concepts pass: every described file as a paged overview, then operations and data still missing fields, then the files nothing names, then a review of what the design leaves.",
+      "summary": "Hands out the concepts pass: every described file as a paged overview, then operations and data still missing fields, then the files nothing names, then entries whose files changed, then a review of what the design leaves.",
       "notes": {
         "ReviewConcepts": "Checks the design against the files and imports: systems with nothing placed, data no operation reads or writes, data holding more than 15 files, near-duplicate operations, unplaced imports, and writing issues.",
-        "ConceptsNextAsync": "Drives the staged pass (overview, operations, data, place, review, done); the place stage hands back files no operation or data entry names, with where their neighbours sit, until none is left. A page number returns that page of the overview at any stage.",
+        "ConceptsNextAsync": "Stages: overview, operations, data, place, changed, review, done. The changed stage hands back flagged entries with reason changed, the changed paths, and the current entry, and counts them in remaining.",
         "DesignFiles": "Every file the design can name: all but the generated and vendored ones, so the agent judges tests, docs, and data tables itself.",
         "BuildOverview": "Lists every design file with its system, layer, tags, summary, and import counts, cut into pages by size so nothing is trimmed.",
         "FilesToPlace": "The described files the design must place: every one but the generated and vendored ones.",
-        "DataMissing": "A data entry is finished once it has a layer and names the files that define or hold it."
+        "DataMissing": "A data entry is finished once it has a layer and names the files that define or hold it.",
+        "ConceptsDriftAsync": "Compares each operation's and data entry's stamped files with their text now; an entry with no stamps is never flagged.",
+        "RecordAppliedAsync": "Run after every apply: stamps the files the patch names, and the files each operation and data entry it writes names; removed entries lose their stamps.",
+        "ConceptsLeft": "Counts what the design still needs, plus (given the drift) how many operations and data entries changed."
       }
     },
     "src/repo/ConceptsGuide.ts": {
@@ -468,7 +479,15 @@
       "system": "server",
       "layer": "repo",
       "tags": ["core", "io"],
-      "summary": "Remembers what each file looked like when its description was written, so a later update can tell which descriptions have gone stale."
+      "summary": "Remembers what each file, and each file an operation or data entry names, looked like when it was written, so a later pass can tell which descriptions and design entries have gone stale.",
+      "notes": {
+        "Ledger.ReadConceptsAsync": "The design stamps: for each operation and data entry, the hash of every file it named when it was applied. An entry with none was written before stamps existed and counts as current.",
+        "Ledger.RecordConceptsAsync": "Stamps the files an applied operation or data entry names, replacing that entry's earlier stamps.",
+        "Ledger.ForgetConceptsAsync": "Drops the stamps of removed entries.",
+        "Ledger.HashesAsync": "Hashes each named file once, so drift compares many entries without reading a file twice.",
+        "Ledger.ReadAllAsync": "Reads the whole ledger file: file stamps and design stamps.",
+        "Ledger.ChangeAsync": "Reads and rewrites the whole ledger under the lock, so a file-stamp change never drops the design stamps."
+      }
     },
     "src/repo/LiftNotes.ts": {
       "system": "server",
@@ -528,7 +547,10 @@
       "system": "server",
       "layer": "api",
       "tags": ["orchestrate", "io"],
-      "summary": "The endpoints for the architecture, the import graph, a file's neighbours, the tool list, the view stream, flows, the health check, ingest status, next and refine, the selection, and the chat."
+      "summary": "The endpoints for the architecture, the import graph, a file's neighbours, the tool list, the view stream, flows, the health check, ingest status, next and refine, the selection, and the chat.",
+      "notes": {
+        "Api.UpdateArchitectureAsync": "Stamps files and design entries as the CLI's apply does; the status endpoint counts changed operations and data."
+      }
     },
     "src/server/Guard.ts": {
       "system": "server",
@@ -600,7 +622,7 @@
       "system": "meta",
       "layer": "tests",
       "tags": ["test"],
-      "summary": "Checks concepts are read with layers, rules and steps, edited by apply with validation, followed through renames, and handed out by the concepts pass."
+      "summary": "Checks the concepts pass: reading and merging the section, the staged hand-out, drift after a file changes, review, the layout, tracing and filtering."
     },
     "tests/Filter.test.ts": {
       "system": "meta",

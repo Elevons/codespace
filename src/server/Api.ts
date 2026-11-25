@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Chat } from '../agent/Chat.ts'
 import { Architecture, type IArchitecturePatch } from '../repo/Architecture.ts'
 import { ConceptsGuide } from '../repo/ConceptsGuide.ts'
-import { ConceptsLeft, ConceptsNextAsync, DefaultConceptsSize, ReadPage } from '../repo/Concepts.ts'
+import { ConceptsDriftAsync, ConceptsLeft, ConceptsNextAsync, DefaultConceptsSize, ReadPage, RecordAppliedAsync } from '../repo/Concepts.ts'
 import { DescribeGuide } from '../repo/DescribeGuide.ts'
 import { DraftTour, NormaliseFlow, ReadFlowsAsync, WriteFlowsAsync } from '../repo/Flows.ts'
 import { Graph } from '../repo/Graph.ts'
@@ -10,7 +10,6 @@ import { ScanSecretsAsync, Survey } from '../repo/Health.ts'
 import { JsonStore } from '../repo/JsonStore.ts'
 import { Neighbours } from '../repo/Neighbours.ts'
 import { ClampSize, DefaultBatch, StatusAsync } from '../repo/Ingest.ts'
-import { Ledger } from '../repo/Ledger.ts'
 import { TakeNextAsync } from '../repo/Next.ts'
 import { DefaultRefineSize, Refine } from '../repo/Refine.ts'
 import { RefineGuide } from '../repo/RefineGuide.ts'
@@ -96,7 +95,7 @@ export class Api
                 ...status,
                 described: Object.values(architecture.files).filter((entry) => entry.summary !== undefined).length,
                 refine: refine === null ? { remaining: 0, breaks: 0 } : { remaining: refine.remaining, breaks: refine.breakCount },
-                concepts: ConceptsLeft(architecture),
+                concepts: ConceptsLeft(architecture, await ConceptsDriftAsync(repo, architecture)),
                 prompt: `${DescribeGuide(this.cli, repo.Root)}\n\n${RefineGuide(this.cli, repo.Root)}\n\n${ConceptsGuide(this.cli, repo.Root)}`,
             }
             SendJson(response, 200, body)
@@ -208,7 +207,7 @@ export class Api
     {
         const repo = workspace.repo
         const updated = await Architecture.UpdateAsync(repo.Root, await repo.ListFilesAsync(), body as IArchitecturePatch)
-        await Ledger.RecordAsync(repo, Object.keys((body as IArchitecturePatch).files ?? {}))
+        await RecordAppliedAsync(repo, body as IArchitecturePatch, updated.architecture)
         workspace.view.ArchitectureChanged()
         SendJson(response, 200, updated)
     }

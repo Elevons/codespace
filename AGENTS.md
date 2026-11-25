@@ -52,12 +52,17 @@ The file has:
   (solid) it. A key in the corner says which shape is which. Clicking an operation opens its process sheet
   (In, Steps, Out, Rules); a step points at its files. With nothing chosen the sheet is a folded index of every
   operation and data entry, since labels that would overlap are hidden. Choosing a file in this view opens its
-  details without leaving it. Files nothing names gather under "Not in an operation". `apply` edits the section
+  details without leaving it. Choosing a data entry traces it: its writers and readers stay lit, its links draw bright, and its sheet lists
+  "Comes from" and "Goes to" with the steps that touch its files. The Outliner's system and layer filters narrow the
+  design too: operations with no drawn file and data nothing remaining touches fade to ghosts and leave the
+  folded index ("showing 4 of 17 operations"). Files nothing names gather under "Not in an operation". `apply` edits the section
   (merged by name, `null` removes, same validation), and `concepts` hands out the work, like `next`: first
   every described file, paged (`--page N`), with nothing picked out, so the agent decides what the data and
   operations are; then the operations and data still missing steps, reads/writes, a layer, or files; then
-  every described file nothing names yet, until each is in an operation's steps or a data entry's files; then
-  a review. There is no separate button for
+  every described file nothing names yet, until each is in an operation's steps or a data entry's files; then the operations
+  and data whose files changed since they were written (`reason: "changed"`; `apply` stamps every file an entry
+  names in `.codespace/ingested.json`, entries written before stamps count as current; re-apply the entry,
+  rewritten if it no longer fits); then a review. There is no separate button for
   it: Ingest Codebase (and Update Map) writes the files, refines the layers, then runs this pass, and the
   Repo panel's status counts what is left of the design.
 
