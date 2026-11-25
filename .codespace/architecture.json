@@ -306,7 +306,7 @@
       "tags": ["core"],
       "summary": "The page's mutable world and constants: the graph, the chosen file and block, the selection, import names, filters, the layer picked from the legend, edit flashes, wire anchors, scene handles, the commit the history colouring stands at, and camera framing for a file's block stack or a chosen floor.",
       "notes": {
-        "frameFile": "Glides the camera to a chosen file and its block stack, except in the concept view, which keeps its own framing."
+        "frameFile": "Glides the camera to a chosen file and its block stack; in the concept view it goes to the file's dot instead, and frameFolder does nothing there."
       }
     },
     "public/style.css": {

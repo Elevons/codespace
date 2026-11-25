@@ -240,10 +240,19 @@ export function isLitRecord(rec: FileRecord): boolean
 // Glides the camera to one file, close enough to read it and the block stack it opens into.
 export function frameFile(rec: FileRecord): void
 {
-  // The concept view is a map of its own: choosing a file there shows its details without moving the camera.
-  if (S.conceptZoom) return;
   S.autoSpin = false;
   window.dispatchEvent(new Event("codespace:spin"));
+  if (S.conceptZoom)
+  {
+    // The concept view moves files to dots of its own, so go to where the dot is, not to the file's place in the layers.
+    const radius = Math.min(camera.radius, 9);
+    // On a phone the sheet covers the lower half, so aim a quarter of the screen below the dot to bring it into the upper half.
+    const lift = document.body.classList.contains("phone") ? radius * Math.tan(camera.fov / 2) * 0.5 : 0;
+    const a = camera.alpha, b = camera.beta;
+    const up = new V3(-Math.cos(a) * Math.cos(b), Math.sin(b), -Math.sin(a) * Math.cos(b));
+    S.camGoal = { target: rec.target.subtract(up.scale(lift)), radius };
+    return;
+  }
   // Frame the box and its block stack, not only the closed box: the stack stands 1.5× the box's
   // height, so its centre sits a quarter of a box-height above the box's. Fitting the stack keeps
   // every floor on screen and pulls a small file close enough to read.
@@ -272,7 +281,8 @@ export function frameBlock(rec: FileRecord): boolean
 // Glides the camera to one folder, close enough that its files read.
 export function frameFolder(n: GraphNode, currentRadius: number): void
 {
-  if (n.cx === undefined) return;
+  // A folder has no place in the concept view, where files stand by operation.
+  if (n.cx === undefined || S.conceptZoom) return;
   const reach = Math.max(n.tileW ?? 8, n.tileD ?? 8);
   S.autoSpin = false;
   window.dispatchEvent(new Event("codespace:spin"));
