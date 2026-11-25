@@ -938,15 +938,13 @@ body.pinned #repo-form, body.pinned #repo-browse, body.pinned #repo-recent { dis
 
 /* The concept zoom: operations and data in place of the city, named by their own labels. */
 body.concept-zoom #labels { display: none; }
-#concept-labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 4; }
-#concept-labels > * { position: absolute; left: 0; top: 0; white-space: nowrap; will-change: transform; overflow: hidden; text-overflow: ellipsis; }
-#concept-lines { position: fixed; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 4; }
-#concept-lines path { fill: none; stroke-opacity: .6; stroke-width: 1; }
-#concept-labels .concept-op { pointer-events: auto; cursor: pointer; padding: 2px 8px; border-radius: 5px; text-align: left;
+#concept-labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+#concept-labels > * { position: absolute; left: 0; top: 0; white-space: nowrap; }
+#concept-labels .concept-op { pointer-events: auto; cursor: pointer; padding: 3px 9px; border-radius: 6px; text-align: center;
   font: 600 12px ui-sans-serif, system-ui, sans-serif; color: #e6edf3; background: rgba(13,17,23,.82);
   border: 1px solid var(--op, #8b98a8); }
 #concept-labels .concept-op:hover { background: rgba(31,41,55,.95); }
-#concept-labels .concept-op small { margin-left: 6px; font: 400 10px ui-sans-serif, system-ui, sans-serif; color: #9aa7b4; }
+#concept-labels .concept-op small { display: block; font: 400 10px ui-sans-serif, system-ui, sans-serif; color: #9aa7b4; }
 #concept-labels .concept-op.unmapped { border-style: dashed; color: #9aa7b4; }
 #concept-labels .concept-data { pointer-events: auto; cursor: pointer; padding: 1px 7px; border-radius: 4px; border: 1px solid #6e5a22;
   font: 11px ui-sans-serif, system-ui, sans-serif; color: #e3b341; background: rgba(13,17,23,.78); }
@@ -1003,7 +1001,7 @@ body.phone #concept-list.index { padding: 6px; }
 body.phone #concept-list button { min-height: 36px; }
 body.phone #concept-leaders { display: none; }
 
-#concept-labels .concept-data small { margin-left: 6px; font: 400 9px ui-sans-serif, system-ui, sans-serif; color: #a8853a; }
+#concept-labels .concept-data small { display: block; font: 400 9px ui-sans-serif, system-ui, sans-serif; color: #a8853a; }
 #concept-key { position: fixed; left: 14px; bottom: 150px; z-index: 4; max-width: 300px; padding: 8px 10px; border-radius: 8px; pointer-events: none;
   background: rgba(13,17,23,.85); border: 1px solid #30363d; color: #9aa7b4; font: 11px/1.5 ui-sans-serif, system-ui, sans-serif; }
 #concept-key[hidden] { display: none; }

@@ -738,8 +738,8 @@ function renderSheet(): void
   leaders.replaceChildren();
   const spot = active?.kind === "op" ? layout?.operations.find((candidate) => candidate.name === active!.name) : undefined;
   const marker = active?.kind === "datum" ? layout?.data.find((candidate) => candidate.name === active!.name) : undefined;
-  // With nothing chosen on a phone the sheet is the index, since a phone has no column of names.
-  const showIndex = !spot && !marker && S.conceptZoom && layout !== null && document.body.classList.contains("phone");
+  // With nothing chosen the sheet is the index, so a name whose label is hidden is still one click away.
+  const showIndex = !spot && !marker && S.conceptZoom && layout !== null;
   list.hidden = !spot && !marker && !showIndex;
   if (!spot && !marker) leaders.setAttribute("hidden", ""); else leaders.removeAttribute("hidden");
   list.classList.toggle("index", showIndex);
@@ -988,122 +988,44 @@ function buildLabels(at: Layout): void
   }
 }
 
-// The names stand in two columns at the sides of the free screen, operations on the right and data on the left,
-// each tied by a leader line to its column's top or its hexagon, as the layer legend is tied to its planes; names
-// over the map hid what they named. Each column keeps the order its anchors run down the screen, so the lines
-// seldom cross, and takes that order again only once the camera is still, so a row does not jump while the map
-// turns. A phone has no room for the columns: there the folded index in the sheet names everything.
-const RowGap = 2, Stub = 14, Margin = 12;
-const SvgNs = "http://www.w3.org/2000/svg";
-const lines = document.createElementNS(SvgNs, "svg");
-lines.id = "concept-lines";
-document.body.insertBefore(lines, overlay);
-const orders: { left: HTMLElement[]; right: HTMLElement[] } = { left: [], right: [] };
-let pose = "";
-
-function anchorOf(element: HTMLElement, transform: BABYLON.Matrix, viewport: BABYLON.Viewport): BABYLON.Vector3
+// Labels that would cover a more important one are hidden rather than piled up; they come back as the
+// camera moves, and every name stays reachable from the sheet.
+const labelSize = new WeakMap<HTMLElement, { w: number; h: number }>();
+function declutter(placed: { element: HTMLElement; x: number; y: number; rank: number }[], width: number, height: number): void
 {
-  const point = new V3(Number(element.dataset.x), Number(element.dataset.y ?? 0), Number(element.dataset.z));
-  return V3.Project(point, BABYLON.Matrix.IdentityReadOnly, transform, viewport);
-}
-
-// The free screen between the side panels, and the band above the bottom bars.
-function freeSpace(width: number, height: number): { left: number; right: number; top: number; bottom: number }
-{
-  const box = (id: string) => { const node = document.getElementById(id); return node && node.offsetHeight > 0 && !node.hidden ? node.getBoundingClientRect() : null; };
-  const dockLeft = box("dock-left"), dockRight = box("dock-right"), sheet = box("concept-list"), bars = box("dock-bottom");
-  let left = Math.max(dockLeft?.right ?? 0, sheet?.right ?? 0);
-  const right = Math.min(width, dockRight?.left ?? width);
-  if (right - left < 300) left = 0;
-  return { left, right, top: 60, bottom: bars ? bars.top - 10 : height - 10 };
-}
-
-type Placed = { path: string; foot: string; color: string; dim: boolean };
-
-// Places one column and returns its inner edge, the one facing the map.
-function placeColumn(rows: HTMLElement[], side: "left" | "right", anchors: Map<HTMLElement, BABYLON.Vector3>, reorder: boolean,
-  space: { left: number; right: number; top: number; bottom: number }, out: Placed[]): number
-{
-  // The left column stops short of the right one, so a long name is cut rather than laid over another.
-  const room = Math.max(80, space.right - space.left - Margin * 2);
-  for (const row of rows) row.style.maxWidth = room + "px";
-  const stale = orders[side].length !== rows.length || orders[side].some((row) => !anchors.has(row));
-  if (stale || reorder) orders[side] = [...rows].sort((a, b) => anchors.get(a)!.y - anchors.get(b)!.y);
-  const order = orders[side];
-  const heights = order.map((row) => row.offsetHeight);
-  const columnWidth = Math.max(0, ...order.map((row) => row.offsetWidth));
-  const edge = side === "right" ? space.right - Margin - columnWidth : space.left + Margin + columnWidth;
-  const tall = heights.reduce((sum, h) => sum + h + RowGap, 0) - RowGap;
-  let y = Math.max(space.top, (space.top + space.bottom - tall) / 2);
-  order.forEach((row, i) =>
+  placed.sort((a, b) => a.rank - b.rank);
+  const kept: { l: number; t: number; r: number; b: number }[] = [];
+  for (const { element, x, y } of placed)
   {
-    const x = side === "right" ? space.right - Margin - row.offsetWidth : space.left + Margin;
-    row.style.transform = "translate(" + x.toFixed(1) + "px," + y.toFixed(1) + "px)";
-    const anchor = anchors.get(row)!;
-    const y0 = y + heights[i] / 2;
-    const color = row.classList.contains("concept-op") ? row.style.getPropertyValue("--op") || "#8b98a8" : "#e3b341";
-    // A line leaves the row on the side its anchor is on, so it seldom crosses back over the names; an anchor
-    // behind the camera gets none.
-    if (anchor.z >= 0 && anchor.z <= 1)
-    {
-      const toRight = anchor.x >= x + row.offsetWidth / 2;
-      const from = toRight ? x + row.offsetWidth : x;
-      const bend = toRight ? Math.max(from, side === "left" ? edge : from) + Stub : Math.min(from, side === "right" ? edge : from) - Stub;
-      out.push({
-        path: "M" + from.toFixed(1) + " " + y0.toFixed(1) + "L" + bend.toFixed(1) + " " + y0.toFixed(1) + "L" + anchor.x.toFixed(1) + " " + anchor.y.toFixed(1),
-        foot: anchor.x.toFixed(1) + "," + anchor.y.toFixed(1), color, dim: row.classList.contains("faded"),
-      });
-    }
-    y += heights[i] + RowGap;
-  });
-  return edge;
+    let size = labelSize.get(element);
+    if (!size || size.w === 0) { size = { w: element.offsetWidth, h: element.offsetHeight }; labelSize.set(element, size); }
+    const box = { l: x - size.w / 2 - 2, t: y - size.h - 2, r: x + size.w / 2 + 2, b: y + 2 };
+    const onScreen = box.r > 0 && box.l < width && box.b > 0 && box.t < height;
+    const clear = onScreen && !kept.some((k) => box.l < k.r && box.r > k.l && box.t < k.b && box.b > k.t);
+    element.style.visibility = clear ? "" : "hidden";
+    if (clear) kept.push(box);
+  }
 }
 
 export function placeConceptLabels(): void
 {
+  if (overlay.hidden) return;
   const width = canvas.clientWidth, height = canvas.clientHeight;
   const transform = scene.getTransformMatrix();
   const viewport = camera.viewport.toGlobal(width, height);
-  const phone = document.body.classList.contains("phone");
-  lines.style.display = overlay.hidden || phone ? "none" : "";
-  overlay.style.display = phone ? "none" : "";
-  if (overlay.hidden || phone) { placeLeaders(transform, viewport); return; }
-  const rows = Array.from(overlay.children as HTMLCollectionOf<HTMLElement>);
-  // A ghost, which the filters leave nothing of, gives its row up, and so does a row that does not touch
-  // the chosen operation or entry, so the columns shrink to what the choice is about.
-  for (const row of rows) row.style.display = row.classList.contains("ghost") || (active !== null && row.classList.contains("faded")) ? "none" : "";
-  const shown = rows.filter((row) => row.style.display !== "none");
-  const anchors = new Map(shown.map((row) => [row, anchorOf(row, transform, viewport)]));
-  const now = [camera.alpha, camera.beta, camera.radius, camera.target.x, camera.target.y, camera.target.z].map((n) => n.toFixed(3)).join(",");
-  const still = now === pose && S.camGoal === null;
-  pose = now;
-  const space = freeSpace(width, height);
-  const placed: Placed[] = [];
-  const opsEdge = placeColumn(shown.filter((row) => row.classList.contains("concept-op")), "right", anchors, still, space, placed);
-  placeColumn(shown.filter((row) => !row.classList.contains("concept-op")), "left", anchors, still, { ...space, right: opsEdge - Stub * 2 }, placed);
-
-  lines.setAttribute("width", String(width));
-  lines.setAttribute("height", String(height));
-  const paths = Array.from(lines.querySelectorAll("path"));
-  const feet = Array.from(lines.querySelectorAll("circle"));
-  placed.forEach((line, i) =>
+  const placed: { element: HTMLElement; x: number; y: number; rank: number }[] = [];
+  for (const element of overlay.children as HTMLCollectionOf<HTMLElement>)
   {
-    let path = paths[i];
-    if (!path) { path = document.createElementNS(SvgNs, "path"); lines.prepend(path); paths.push(path); }
-    let foot = feet[i];
-    if (!foot) { foot = document.createElementNS(SvgNs, "circle"); foot.setAttribute("r", "2.5"); lines.appendChild(foot); feet.push(foot); }
-    path.setAttribute("d", line.path);
-    path.style.stroke = line.color;
-    path.style.strokeOpacity = line.dim ? "0.1" : "";
-    const [cx, cy] = line.foot.split(",");
-    foot.setAttribute("cx", cx);
-    foot.setAttribute("cy", cy);
-    foot.style.fill = line.color;
-    foot.style.opacity = line.dim ? "0.25" : "";
-    foot.style.display = "";
-  });
-  for (let i = placed.length; i < paths.length; i++) paths[i].setAttribute("d", "");
-  for (let i = placed.length; i < feet.length; i++) feet[i].style.display = "none";
+    const point = new V3(Number(element.dataset.x), Number(element.dataset.y ?? 0), Number(element.dataset.z));
+    const p = V3.Project(point, BABYLON.Matrix.IdentityReadOnly, transform, viewport);
+    element.style.transform = "translate(" + p.x.toFixed(1) + "px," + p.y.toFixed(1) + "px) translate(-50%, -100%)";
+    // The chosen label and what it touches come first, then operations by size, then data.
+    const isOp = element.classList.contains("concept-op");
+    const lit = element.classList.contains("chosen") || (active !== null && !element.classList.contains("faded"));
+    const rank = (lit ? 0 : 2e6) + (isOp ? 0 : 1e6) - Number(element.dataset.weight ?? 0);
+    placed.push({ element, x: p.x, y: p.y, rank });
+  }
+  declutter(placed, width, height);
   placeLeaders(transform, viewport);
 }
 

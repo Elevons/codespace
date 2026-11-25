@@ -122,13 +122,12 @@
         "setZoom": "Turns the zoom on or off: puts away the city's ground, layer planes, labels, rings, and wires, frames the camera from above, and on the way back restores every file to its terrace.",
         "conceptTap": "A tap in the concept view stays in it: a file opens its details and empty space puts the sheet away.",
         "openOperation": "Clicking an operation's name zooms back in and shows its files lit in place, with the operation's summary as the note.",
-        "renderIndex": "On a phone, with nothing chosen, the sheet is the folded index of every operation and data entry; it lists only what the filters leave, and counts it (showing 4 of 17 operations).",
+        "declutter": "Hides labels that would cover a more important one (the chosen one and what it touches, then operations by size, then data).",
+        "renderIndex": "The folded index lists only what the filters leave, and counts it (showing 4 of 17 operations).",
         "frameChoice": "On a phone, a data entry is framed together with its writers and readers.",
         "dataLabel": "Names a hexagon with its layer and how many files stand under it.",
         "applyActive": "Lights a chosen entry's writers and readers and its links, fades the rest, and ghosts what the filters leave nothing of.",
-        "renderData": "The data sheet lists Comes from and Goes to, each operation with the steps that touch the entry's files.",
-        "placeConceptLabels": "Stands the names in two columns at the sides of the free screen, operations on the right and data on the left (past the sheet when it is open), each tied by a leader line to its column's top or its hexagon; the rows keep the order their anchors run down the screen, taken again only when the camera is still. While something is chosen only what touches it keeps a row. A phone shows no columns.",
-        "placeColumn": "Places one column of names, cuts a name that would reach the other column, and draws each row's line from the side its anchor is on."
+        "renderData": "The data sheet lists Comes from and Goes to, each operation with the steps that touch the entry's files."
       }
     },
     "public/controls.ts": {

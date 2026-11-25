@@ -50,10 +50,8 @@ The file has:
   Concepts button, zooms the map out to them: each operation's files gather into one column, and each data
   entry is a hexagon floating at its layer's height, wired to the operations that read (dashed) and write
   (solid) it. A key in the corner says which shape is which. Clicking an operation opens its process sheet
-  (In, Steps, Out, Rules); a step points at its files. The names stand in two columns at the sides, operations on the
-  right and data on the left, each tied to its column or hexagon by a leader line, as the layer legend is; while
-  something is chosen only what touches it keeps a name. A phone has no room for the columns, so there, with nothing
-  chosen, the sheet is a folded index of every operation and data entry. Choosing a file in this view opens its
+  (In, Steps, Out, Rules); a step points at its files. With nothing chosen the sheet is a folded index of every
+  operation and data entry, since labels that would overlap are hidden. Choosing a file in this view opens its
   details without leaving it. Choosing a data entry traces it: its writers and readers stay lit, its links draw bright, and its sheet lists
   "Comes from" and "Goes to" with the steps that touch its files. The Outliner's system and layer filters narrow the
   design too: operations with no drawn file and data nothing remaining touches fade to ghosts and leave the
