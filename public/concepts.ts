@@ -1,10 +1,10 @@
-import { S, V3, scene, camera, canvas, layerRank, render, renderEdges, fileIndex, glow, hasFilters, inScene, revealFiles } from "./state.js";
+import { S, V3, scene, camera, canvas, layerRank, MIN_LAYER_GAP, render, renderEdges, fileIndex, glow, hasFilters, inScene, revealFiles } from "./state.js";
 import { centerView, buildLayerPlanes, setConceptBounds, sceneryMeshes } from "./meshes.js";
-import { build } from "./city.js";
+import { build, restack } from "./city.js";
 import { pickFile } from "./boxes.js";
 import { revealOutliner, renderOutliner, selectFile } from "./panels.js";
 import { changeView } from "./viewcall.js";
-import { setSpin } from "./controls.js";
+import { setLayerGap, setSpin } from "./controls.js";
 import { conceptSpineLayout, conceptTrace, conceptFilterView, conceptFraming, conceptStems, type IConceptRoute, type IConceptFilterView, type IConceptTraceHop } from "./rules.js";
 import type { FileRecord } from "./types.js";
 
@@ -167,7 +167,8 @@ function updateBounds(at: Layout): void
   {
     const cx = (at.spine.minX + at.spine.maxX) / 2;
     const hw = (at.spine.maxX - at.spine.minX) / 2;
-    expand(cx, minY === Infinity ? 0 : minY, at.spine.z, hw, at.spine.halfDepth);
+    // The deck sits just under the data, so the bounds reach below it too.
+    expand(cx, (minY === Infinity ? 0 : minY) - 0.3, at.spine.z, hw, at.spine.halfDepth);
   }
   if (at.tray) expand(at.tray.x, minY === Infinity ? 0 : minY, at.tray.z, at.tray.width / 2, at.tray.depth / 2);
   if (minX <= maxX) setConceptBounds({ min: new V3(minX, minY, minZ), max: new V3(maxX, maxY, maxZ) });
@@ -339,26 +340,17 @@ function fitPills(at: Layout): void
   }
 }
 
-// Each data entry floats at the height of its layer, and the central spine deck hugs beneath the shared data.
+// Each data entry sits below the files, on a deck of its own, so the hexagons read as the ground the
+// operations stand on rather than as more files among them.
 function fitData(at: Layout): void
 {
-  const sum = new Map<string, number>(), count = new Map<string, number>();
-  let all = 0, total = 0;
-  for (const rec of S.fileRecords.values())
-  {
-    const layer = S.FILE_LAYERS.get(rec.path);
-    const y = rec.shape.position.y;
-    all += y; total++;
-    if (layer === undefined) continue;
-    sum.set(layer, (sum.get(layer) ?? 0) + y);
-    count.set(layer, (count.get(layer) ?? 0) + 1);
-  }
-  const middle = total === 0 ? 0 : all / total;
+  let lowest = Infinity;
+  for (const rec of S.fileRecords.values()) lowest = Math.min(lowest, stackY(rec.path));
+  const dataY = (lowest === Infinity ? 0 : lowest) - 0.55;
   let minSpineY = Infinity;
   for (const marker of at.data)
   {
-    const layer = S.CONCEPTS.data[marker.name]?.layer;
-    marker.y = layer !== undefined && count.has(layer) ? sum.get(layer)! / count.get(layer)! : middle;
+    marker.y = dataY;
     if (marker.dockedTo === null) minSpineY = Math.min(minSpineY, marker.y);
     marker.mesh?.position.set(marker.at.x, marker.y, marker.at.z);
     if (marker.tag)
@@ -378,7 +370,7 @@ function fitData(at: Layout): void
   fitLinks(at);
 }
 
-// Anchors any shared data entry that floats on a higher layer down to its slot on the spine deck.
+// Anchors any shared data entry that floats above the deck down to its slot on the spine deck.
 function fitSpineRisers(at: Layout, deckY: number): void
 {
   const key = Math.round(deckY * 20) + "|" + at.data.filter((m) => m.dockedTo === null).map((m) => Math.round(m.y * 20)).join(",");
@@ -1242,6 +1234,9 @@ export function conceptTargets(): void
   }
 }
 
+// The city's layer gap before the concept view collapsed it, so leaving can put it back.
+let cityLayerGap: number | null = null;
+
 function setZoom(on: boolean): void
 {
   if (on === S.conceptZoom) return;
@@ -1258,6 +1253,9 @@ function setZoom(on: boolean): void
   button?.setAttribute("aria-pressed", String(on));
   if (on)
   {
+    // The concept view reads by column, not by layer height, so collapse the planes to their narrowest.
+    cityLayerGap = S.layerGap;
+    setLayerGap(MIN_LAYER_GAP);
     if (rightTabs) rightTabs.hidden = false;
     setRightTab("concepts");
     // Labels that drift with a spinning camera are hard to click, and a steady front angle lines
@@ -1271,6 +1269,12 @@ function setZoom(on: boolean): void
   }
   else
   {
+    if (cityLayerGap !== null)
+    {
+      setLayerGap(cityLayerGap);
+      restack(false);
+      cityLayerGap = null;
+    }
     if (rightTabs) rightTabs.hidden = true;
     document.body.classList.remove("rtab-concepts", "rtab-outliner");
     if (outlinerShow) outlinerShow.textContent = "Outliner";

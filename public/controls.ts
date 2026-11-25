@@ -1,4 +1,4 @@
-import { S, camera, canvas, DEFAULT_ALPHA, filePath, frameBlock, frameFile, frameFolder, glow, hasFilters, isFileVisible, matchesTagFilter, render, renderEdges, fileIndex, pathIndex, revealFiles, sliceValue } from "./state.js";
+import { S, camera, canvas, DEFAULT_ALPHA, filePath, frameBlock, frameFile, frameFolder, glow, hasFilters, isFileVisible, matchesTagFilter, MIN_LAYER_GAP, render, renderEdges, fileIndex, pathIndex, revealFiles, sliceValue } from "./state.js";
 import { api } from "./endpoint.js";
 import { build, restack } from "./city.js";
 import { centerView, recenterTarget, pulseFile } from "./meshes.js";
@@ -370,10 +370,13 @@ document.addEventListener("keydown", (event) =>
 // city, and a burst of slider events redraws once per frame at most.
 const spreadSlider = document.getElementById("spread") as HTMLInputElement;
 const spreadCaption = document.querySelector('label[for="spread"]') as HTMLElement;
+spreadSlider.min = String(MIN_LAYER_GAP);
 let spreadFrame = 0;
 spreadSlider.addEventListener("input", () =>
 {
   S.layerGap = Number(spreadSlider.value);
+  // The concept view reads the gap every frame and has no city boxes to re-stack.
+  if (S.conceptZoom) return;
   if (spreadFrame !== 0) return;
   spreadFrame = requestAnimationFrame(() =>
   {
@@ -382,6 +385,13 @@ spreadSlider.addEventListener("input", () =>
     recenterTarget();
   });
 });
+
+/** Sets the layer gap from code and keeps the slider in step, without re-stacking the city. */
+export function setLayerGap(gap: number): void
+{
+  S.layerGap = gap;
+  spreadSlider.value = String(gap);
+}
 
 // What the boxes are coloured by: role, layer, folder, size, or recent changes.
 const colorSelect = document.getElementById("colorby") as HTMLSelectElement;

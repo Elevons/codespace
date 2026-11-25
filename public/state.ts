@@ -15,6 +15,8 @@ export const AREA_PER_WEIGHT = 2.0;
 export const TILE_GAP = 0.7, MARGIN = 0.55, PLATE_H = 0.06, FLOOR_STEP = 0.035;
 export const DEFAULT_ALPHA = -Math.PI / 2 - 0.62, DEFAULT_BETA = 0.95;
 const LAYER_GAP = 3;
+// The narrowest the spread slider allows, the gap the concept view collapses to.
+export const MIN_LAYER_GAP = 0.3;
 
 // ---- the mutable world ----
 export const S = {

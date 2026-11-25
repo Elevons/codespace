@@ -34,8 +34,9 @@ function build(): void
 
 // Re-stacks the boxes when the spread slider moves the layer gap. Only a file's height depends on
 // the gap, never the treemap or a folder, so this skips the layout, the tiles, and every folder:
-// the boxes follow the slider at once, and their rings, threads, and labels follow them.
-function restack(): void
+// the boxes follow the slider at once, and their rings, threads, and labels follow them. `snap`
+// false moves only the resting heights, so leaving the concept view can glide back instead.
+function restack(snap = true): void
 {
   const layered = S.LAYERS.length > 0;
   for (const b of S.boxes)
@@ -51,7 +52,7 @@ function restack(): void
     rec.target.y = b.terrace.y;
     // The slider should feel attached to the boxes, so a box at rest takes its new height at once.
     // A box lifted onto a shown route's lane glides instead, since that lane is not its resting spot.
-    if (S.trace === null || !S.trace.trace || !S.trace.set.has(b.path)) rec.shape.position.y = b.terrace.y;
+    if (snap && (S.trace === null || !S.trace.trace || !S.trace.set.has(b.path))) rec.shape.position.y = b.terrace.y;
   }
   S.shownLayers.forEach((_name, index) =>
   {

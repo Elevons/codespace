@@ -108,7 +108,7 @@
       "tags": ["core"],
       "summary": "Lays the repository's folder tree out as a treemap and feeds the shapes that draw it.",
       "notes": {
-        "restack": "Re-heights the file boxes and layer planes when the spread slider moves the layer gap, without laying the treemap out again, so only a file's height changes."
+        "restack": "Re-heights the file boxes and layer planes when the spread slider moves the layer gap, without laying the treemap out again, so only a file's height changes. `snap` false moves only the resting heights, so leaving the concept view can glide back."
       }
     },
     "public/concepts.ts": {
@@ -119,20 +119,21 @@
       "notes": {
         "buildLayout": "Places each operation in one of the two banks with a spine of shared data between them, docks the data only one operation touches beside its column, and gives every file a spot in its owning operation's column. Files no operation names gather under 'Not in an operation'.",
         "conceptTargets": "Runs each frame after the route has set its targets, so while the zoom is on every file glides to its operation and shrinks to a dot; the size it had is kept so zooming back restores it.",
-        "setZoom": "Turns the zoom on or off: puts away the city's ground, layer planes, labels, rings, and wires, frames the camera from above, and on the way back restores every file to its terrace.",
+        "setZoom": "Turns the zoom on or off: collapses the layer gap to its narrowest on the way in and restores the previous gap on the way out, puts away the city's ground, layer planes, labels, rings, and wires, frames the camera from above, and on the way back restores every file to its terrace.",
         "conceptTap": "A tap in the concept view stays in it: a file opens its details and empty space puts the sheet away.",
         "openOperation": "Clicking an operation's name zooms back in and shows its files lit in place, with the operation's summary as the note.",
         "declutter": "Of the names shown, hides one that would cover a more important one (the chosen one and what it touches, then operations by size, then data).",
         "renderIndex": "On desktop, lists every operation and data entry inside the right panel alongside the outliner; on a phone it stays folded above the tabs until opened. Hovering a row names it on the map, and filtered views show only what remains.",
         "frameChoice": "On a phone, a data entry is framed together with its writers and readers.",
-        "dataLabel": "Names a hexagon with its layer and how many files stand under it.",
+        "dataLabel": "Names a hexagon with its layer and how many files it holds.",
         "applyActive": "Lights a chosen entry's writers and readers and its links, fades the rest, and ghosts what the filters leave nothing of.",
         "renderData": "The data sheet lists Comes from and Goes to, each operation with the steps that touch the entry's files.",
         "namedNow": "At rest each shown operation wears a quiet stem badge and data stays unnamed; hovering or choosing an item expands its full name and names what it touches.",
         "conceptHover": "Hovering in the concept view names the first operation column or hexagon the pointer's ray meets (the columns are pickable for this alone), or the operation of a file outside any column.",
         "placeLeaders": "Draws each listed file's pointer from whichever edge of the sheet faces the dot, hiding lines scrolled outside the sheet body or when the sheet is hidden.",
         "conceptFiles": "The files an operation names in its own list and its steps, or the files a data entry holds, so choosing either can bring them back into the scene.",
-        "setActive": "Chooses an operation or data entry: brings back any of its files an eye hid, opens its sheet in the right panel, and on a phone frames the chosen column or hexagon in the upper half."
+        "setActive": "Chooses an operation or data entry: brings back any of its files an eye hid, opens its sheet in the right panel, and on a phone frames the chosen column or hexagon in the upper half.",
+        "fitData": "Places every data hexagon below the lowest file dot and puts the spine deck just under it, so data reads as the ground the operations stand on rather than as more files among them."
       }
     },
     "public/controls.ts": {
@@ -145,7 +146,8 @@
         "revealValue": "Brings back the hidden files of a system or layer being switched on, so a chosen slice always draws something.",
         "toggleSlice": "Turns one system or layer on or off; switching one on brings back its hidden files, then reaches the other strip's values it needs so the selection never locks them out.",
         "isolateSlice": "Shows only one system or layer, or brings them all back when it is already alone; isolating a value brings back its hidden files.",
-        "spotLayer": "Picks a layer from the legend to keep bright while the rest fade in place; picking one brings back any of its files an eye hid."
+        "spotLayer": "Picks a layer from the legend to keep bright while the rest fade in place; picking one brings back any of its files an eye hid.",
+        "setLayerGap": "Sets the layer gap from code and keeps the spread slider in step, without re-stacking the city, so the concept view can collapse and restore it."
       }
     },
     "public/edges.ts": {
@@ -326,7 +328,8 @@
       "summary": "The page's mutable world and constants: the graph, the chosen file and block, the selection, import names, filters, the layer picked from the legend, edit flashes, wire anchors, scene handles, the commit the history colouring stands at, and camera framing for a file's block stack or a chosen floor.",
       "notes": {
         "frameFile": "Glides the camera to a chosen file and its block stack; in the concept view it goes to the file's dot instead, and frameFolder does nothing there.",
-        "revealFiles": "Brings files back from an eye that hid them, so a chosen concept or filter slice always draws its files. A file's own eye wins over its folder's, so it opens the folders above the file without showing the rest."
+        "revealFiles": "Brings files back from an eye that hid them, so a chosen concept or filter slice always draws its files. A file's own eye wins over its folder's, so it opens the folders above the file without showing the rest.",
+        "MIN_LAYER_GAP": "The narrowest the spread slider allows, the gap the concept view collapses to."
       }
     },
     "public/style.css": {
