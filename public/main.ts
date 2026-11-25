@@ -10,7 +10,7 @@ import { openBlockAt, select, selectFile, toggleFileSelection } from "./panels.j
 import { setSpin, refreshGraph } from "./controls.js";
 import { loadRepo } from "./repo.js";
 import { routeTargets } from "./route.js";
-import { conceptTargets, conceptTap, placeConceptLabels } from "./concepts.js";
+import { conceptHover, conceptTargets, conceptTap, placeConceptLabels } from "./concepts.js";
 import { syncPads } from "./pads.js";
 import "./view.js";
 import "./repo-switch.js";
@@ -124,6 +124,7 @@ engine.runRenderLoop(() =>
   if (pickWanted)
   {
     pickWanted = false;
+    conceptHover(scene.pointerX, scene.pointerY);
     const hit = pickFile(scene.pointerX, scene.pointerY);
     const path = hit ? hit.path : null;
     canvas.style.cursor = path ? "pointer" : "";

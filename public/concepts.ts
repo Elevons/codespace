@@ -619,6 +619,8 @@ function chips(parent: HTMLElement, kind: "op" | "datum", names: string[]): void
     const chip = el("button", name, kind === "datum" ? "chip datum" : "chip");
     chip.type = "button";
     chip.addEventListener("click", () => setActive({ kind, name }));
+    chip.addEventListener("pointerenter", () => setHovered({ kind, name }));
+    chip.addEventListener("pointerleave", () => clearHovered(kind, name));
     row.appendChild(chip);
   }
   parent.appendChild(row);
@@ -751,7 +753,9 @@ function renderSheet(): void
 
 // The labels cannot all fit, so the sheet lists every operation and data entry to choose from,
 // folded to one row until it is opened.
-let indexOpen = false;
+// The index starts open on a wide screen, where it is the only list of names, and folded on a phone, where it
+// would cover the map.
+let indexOpen = !document.body.classList.contains("phone");
 function renderIndex(at: Layout): void
 {
   const ops = at.operations.filter((spot) => !spot.unmapped && opShown(spot.name));
@@ -776,6 +780,8 @@ function renderIndex(at: Layout): void
     const named = spot.unmapped ? spot.files.length : (S.CONCEPTS.operations[spot.name]?.files.length ?? 0);
     row.appendChild(el("small", String(named)));
     row.addEventListener("click", () => setActive({ kind: "op", name: spot.name }));
+    row.addEventListener("pointerenter", () => setHovered({ kind: "op", name: spot.name }));
+    row.addEventListener("pointerleave", () => clearHovered("op", spot.name));
     opList.appendChild(row);
   }
   list.appendChild(opList);
@@ -1007,6 +1013,42 @@ function declutter(placed: { element: HTMLElement; x: number; y: number; rank: n
   }
 }
 
+// The map names nothing until something is hovered or chosen: then that item and what it touches, the data an
+// operation reads and writes or the operations that write and read an entry. A name for everything at once covered
+// what it named; the sheet's index lists them all.
+function namedNow(): Set<HTMLElement>
+{
+  const named = new Set<HTMLElement>();
+  const focus = active ?? hovered;
+  if (!layout || focus === null) return named;
+  const operation = focus.kind === "op" ? S.CONCEPTS.operations[focus.name] : undefined;
+  const trace = focus.kind === "datum" ? conceptTrace(S.CONCEPTS.data, S.CONCEPTS.operations, focus.name) : null;
+  const ops = new Set(focus.kind === "op" ? [focus.name] : [...trace!.comesFrom, ...trace!.goesTo].map((hop) => hop.op));
+  const data = new Set(focus.kind === "datum" ? [focus.name] : [...(operation?.reads ?? []), ...(operation?.writes ?? [])]);
+  for (const spot of layout.operations) if (spot.tag && ops.has(spot.name)) named.add(spot.tag);
+  for (const marker of layout.data) if (marker.tag && data.has(marker.name)) named.add(marker.tag);
+  return named;
+}
+
+// Hovering a hexagon or a file's dot in the concept view names it, or the operation the file stands in.
+let hoverFromMap = false;
+export function conceptHover(x: number, y: number): void
+{
+  if (!S.conceptZoom || !layout) return;
+  const plate = scene.pick(x, y, (mesh) => (mesh.metadata as { datum?: string } | null)?.datum !== undefined);
+  let next: Choice = null;
+  if (plate.hit) next = { kind: "datum", name: (plate.pickedMesh!.metadata as { datum: string }).datum };
+  else
+  {
+    const hit = pickFile(x, y);
+    const spot = hit ? layout.operations.find((candidate) => !candidate.unmapped && candidate.files.includes(hit.path)) : undefined;
+    if (spot) next = { kind: "op", name: spot.name };
+  }
+  if (next === null && !hoverFromMap) return;
+  hoverFromMap = next !== null;
+  if (next?.kind !== hovered?.kind || next?.name !== hovered?.name) setHovered(next);
+}
+
 export function placeConceptLabels(): void
 {
   if (overlay.hidden) return;
@@ -1014,8 +1056,10 @@ export function placeConceptLabels(): void
   const transform = scene.getTransformMatrix();
   const viewport = camera.viewport.toGlobal(width, height);
   const placed: { element: HTMLElement; x: number; y: number; rank: number }[] = [];
+  const named = namedNow();
   for (const element of overlay.children as HTMLCollectionOf<HTMLElement>)
   {
+    if (!named.has(element)) { element.style.visibility = "hidden"; continue; }
     const point = new V3(Number(element.dataset.x), Number(element.dataset.y ?? 0), Number(element.dataset.z));
     const p = V3.Project(point, BABYLON.Matrix.IdentityReadOnly, transform, viewport);
     element.style.transform = "translate(" + p.x.toFixed(1) + "px," + p.y.toFixed(1) + "px) translate(-50%, -100%)";

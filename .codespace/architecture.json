@@ -122,12 +122,14 @@
         "setZoom": "Turns the zoom on or off: puts away the city's ground, layer planes, labels, rings, and wires, frames the camera from above, and on the way back restores every file to its terrace.",
         "conceptTap": "A tap in the concept view stays in it: a file opens its details and empty space puts the sheet away.",
         "openOperation": "Clicking an operation's name zooms back in and shows its files lit in place, with the operation's summary as the note.",
-        "declutter": "Hides labels that would cover a more important one (the chosen one and what it touches, then operations by size, then data).",
-        "renderIndex": "The folded index lists only what the filters leave, and counts it (showing 4 of 17 operations).",
+        "declutter": "Of the names shown, hides one that would cover a more important one (the chosen one and what it touches, then operations by size, then data).",
+        "renderIndex": "With nothing chosen the sheet is the index of every operation and data entry, open on a wide screen and folded on a phone; hovering a row names it on the map. It lists only what the filters leave, and counts it (showing 4 of 17 operations).",
         "frameChoice": "On a phone, a data entry is framed together with its writers and readers.",
         "dataLabel": "Names a hexagon with its layer and how many files stand under it.",
         "applyActive": "Lights a chosen entry's writers and readers and its links, fades the rest, and ghosts what the filters leave nothing of.",
-        "renderData": "The data sheet lists Comes from and Goes to, each operation with the steps that touch the entry's files."
+        "renderData": "The data sheet lists Comes from and Goes to, each operation with the steps that touch the entry's files.",
+        "namedNow": "The map names nothing until something is hovered or chosen: then that item and what it touches, the data an operation reads and writes or the operations that write and read an entry. Naming everything at once covered what it named; the sheet's index lists them all.",
+        "conceptHover": "Hovering a hexagon or a file's dot in the concept view names it, or the operation the file stands in."
       }
     },
     "public/controls.ts": {
