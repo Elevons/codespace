@@ -147,6 +147,7 @@ const searchInput = document.getElementById("search") as HTMLInputElement;
 function openSearch(): void
 {
   revealOutliner();
+  window.dispatchEvent(new CustomEvent("codespace:right-tab", { detail: "outliner" }));
   searchInput.focus();
   searchInput.select();
 }

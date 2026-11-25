@@ -62,6 +62,13 @@
 </div>
 
 <div class="dock" id="dock-right">
+  <div class="panel" id="dock-right-tabs" hidden>
+    <div class="rtab-group" role="tablist" aria-label="Right panel">
+      <button type="button" role="tab" data-rtab="concepts" aria-selected="true">Concepts</button>
+      <button type="button" role="tab" data-rtab="outliner" aria-selected="false">Outliner<span class="rtab-badge" id="rtab-filter-badge" hidden></span></button>
+    </div>
+    <button id="dock-right-hide" class="hicon" type="button" aria-expanded="true" title="Collapse the panel" aria-label="Collapse the panel"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg></button>
+  </div>
   <section class="panel" id="outliner">
     <div id="outliner-head">
       <h2 class="panel-title" id="outliner-title">Outliner <span id="outliner-count"></span></h2>
@@ -132,16 +139,14 @@
   <div class="panel bar" id="tools">
     <button id="repo" type="button" title="Change the repository the map reads">Repo: …</button>
     <button id="chat-btn" type="button" title="Talk to the agent about this repository">Chat</button>
-    <button type="button" class="insight-open" data-open-tab="tour" title="Walk through the repository from its entry points">Start here</button>
-    <button type="button" class="insight-open" data-open-tab="recent" title="The files changed since the last commit">Changes</button>
-    <button type="button" class="insight-open" data-open-tab="flows" title="Saved views of the map, to show again">Flows</button>
-    <button type="button" class="insight-open" data-open-tab="history" title="Scrub through the commits and watch the codebase grow">History</button>
-    <button type="button" class="insight-open" data-open-tab="health" title="The codebase's size, layer breaks, largest files, and key-shaped values">Health</button>
-    <button id="spin" class="on">Spin<span class="state">on</span></button>
-    <button id="reset">Reset view</button>
-    <button id="refresh">Refresh</button>
+    <span class="bar-sep" aria-hidden="true"></span>
+    <button type="button" class="insight-open" data-open-tab="panel" title="Changes, saved flows, commit history, and codebase health">Insights</button>
+    <span class="bar-sep" aria-hidden="true"></span>
+    <button id="spin" class="on" title="Toggle camera spin">Spin<span class="state">on</span></button>
+    <button id="reset" title="Reset view (R)">Reset</button>
+    <button id="refresh" title="Reload repository">Refresh</button>
+    <button id="live" class="on" title="Watch for file changes">Live<span class="state">on</span></button>
     <button id="help-btn" type="button" title="Controls and shortcuts (?)" aria-label="Controls and shortcuts">?</button>
-    <button id="live" class="on">Live<span class="state">on</span></button>
   </div>
   <div class="panel bar" id="controls">
     <label for="colorby">Colour</label>
@@ -154,15 +159,17 @@
       <option value="changes">Changes</option>
       <option value="history">History</option>
     </select>
-    <label for="spread">Layer gap</label>
-    <input id="spread" type="range" min="0.3" max="6" step="0.1" value="1.2">
-    <button id="glow" class="on" title="Bloom, the only post-processing pass">Glow: on</button>
+    <span class="bar-sep" aria-hidden="true"></span>
+    <label for="spread">Gap</label>
+    <input id="spread" type="range" min="0.3" max="6" step="0.1" value="1.2" title="Layer gap">
+    <span class="bar-sep" aria-hidden="true"></span>
+    <button id="glow" class="on" title="Bloom, the only post-processing pass">Glow<span class="state">on</span></button>
   </div>
 </div>
 
-<button id="concept-zoom" type="button" aria-pressed="false" title="Zoom out to the operations and things (Space)">
-  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>
-  <span>Concepts</span>
+<button id="concept-zoom" type="button" aria-pressed="false" title="Switch between City and Concepts view (Space)">
+  <span class="cz-seg cz-city">City</span>
+  <span class="cz-seg cz-concepts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Concepts</span>
 </button>
 
 <!-- On a phone the panels above move into one sheet, opened from a tab bar along the bottom (mobile.ts). -->

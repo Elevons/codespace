@@ -103,7 +103,8 @@ function close(): void
 /** Marks the bottom bar's button for the open tab, so the bar says which one is showing. */
 function paintOpeners(): void
 {
-  for (const opener of openers) opener.classList.toggle("on", !panel.hidden && !panel.classList.contains("collapsed") && opener.dataset.openTab === tab);
+  for (const opener of openers)
+    opener.classList.toggle("on", !panel.hidden && !panel.classList.contains("collapsed") && (opener.dataset.openTab === "panel" || opener.dataset.openTab === tab));
 }
 
 function paintTabs(): void
@@ -506,6 +507,12 @@ for (const opener of openers)
   {
     const want = opener.dataset.openTab;
     if (want === "tour") { openInsight("flows"); void showTour(); return; }
+    if (want === "panel")
+    {
+      if (!document.body.classList.contains("phone") && !panel.hidden && !panel.classList.contains("collapsed")) { close(); return; }
+      openInsight(tab);
+      return;
+    }
     const next = want as Tab;
     if (!document.body.classList.contains("phone") && !panel.hidden && !panel.classList.contains("collapsed") && tab === next) { close(); return; }
     openInsight(next);

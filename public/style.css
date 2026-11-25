@@ -1,4 +1,4 @@
-  :root { color-scheme: dark; --dock-left-w: clamp(260px, 25vw, 360px); --dock-right-w: clamp(210px, 19vw, 280px); --dock-bottom-h: 78px; }
+  :root { color-scheme: dark; --dock-left-w: clamp(250px, 22vw, 330px); --dock-right-w: clamp(240px, 20vw, 300px); --dock-bottom-h: 54px; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #04070d; color: #e6edf3;
     font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
@@ -27,9 +27,9 @@
   #layer-legend .lrow.faded { opacity: .45; }
   #layer-legend.right .lrow { border-left: none; border-right: 3px solid; }
   /* The code panel: the source of a symbol picked from a file's list, docked beside the left column. */
-  #codeblock { position: fixed; top: 14px; left: calc(14px + var(--dock-left-w) + 12px);
+  #codeblock { position: fixed; top: 58px; left: calc(14px + var(--dock-left-w) + 12px);
     right: calc(14px + var(--dock-right-w) + 12px); z-index: 5; width: auto; max-width: 720px;
-    max-height: 60vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+    max-height: calc(100dvh - var(--dock-bottom-h, 54px) - 86px); display: flex; flex-direction: column; padding: 0; overflow: hidden; }
   #codeblock[hidden] { display: none; }
   #codeblock-head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
     padding: 8px 10px 8px 14px; border-bottom: 1px solid #30363d; }
@@ -50,10 +50,29 @@
      Panels flow inside a dock instead of floating on their own, so they stack, share the
      height, scroll when short of room, and never overlap. The docks let clicks through
      their gaps to the scene. */
-  .dock { position: fixed; top: 14px; bottom: 78px; display: flex; flex-direction: column; gap: 10px;
+  .dock { position: fixed; top: 14px; bottom: calc(var(--dock-bottom-h, 54px) + 26px); display: flex; flex-direction: column; gap: 8px;
     pointer-events: none; }
   #dock-left { left: 14px; width: var(--dock-left-w); }
   #dock-right { right: 14px; width: var(--dock-right-w); }
+  #dock-right-tabs { flex: none; display: flex; align-items: center; gap: 4px; padding: 4px; overflow: visible; }
+  #dock-right-tabs[hidden], body.phone #dock-right-tabs { display: none; }
+  #dock-right-tabs .rtab-group { flex: 1 1 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+  #dock-right-tabs [role="tab"] { display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    height: 26px; padding: 0 8px; border: 1px solid transparent; border-radius: 7px; background: none;
+    color: #8b949e; font: 600 11.5px ui-sans-serif, system-ui, sans-serif; cursor: pointer; }
+  #dock-right-tabs [role="tab"]:hover { color: #c9d1d9; background: rgba(255,255,255,.04); }
+  #dock-right-tabs [role="tab"][aria-selected="true"] { background: #21262d; border-color: #30363d; color: #e6edf3; }
+  #dock-right-tabs .rtab-badge { min-width: 15px; height: 15px; padding: 0 4px; border-radius: 8px;
+    background: rgba(31,111,235,.3); border: 1px solid rgba(56,139,253,.55); color: #cfe1ff;
+    font: 600 9.5px/13px ui-sans-serif, system-ui, sans-serif; text-align: center; }
+  #dock-right-tabs .rtab-badge[hidden] { display: none; }
+  #dock-right-hide { flex: none; display: grid; place-items: center; width: 26px; height: 26px; padding: 0;
+    background: none; border: 1px solid transparent; border-radius: 6px; color: #8b949e; cursor: pointer; }
+  #dock-right-hide:hover { background: #21262d; border-color: #30363d; color: #e6edf3; }
+  #dock-right-hide svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+  body.concept-zoom.rtab-concepts:not(.phone) #outliner { display: none; }
+  body.concept-zoom.rtab-outliner:not(.phone) #concept-list { display: none; }
+  body.concept-zoom:not(.phone) #outliner-hide { display: none; }
   /* The outliner puts itself away to the right edge, leaving this tab to bring it back. */
   #outliner-show { position: fixed; right: 0; top: 50%; z-index: 5; transform: translateY(-50%);
     display: flex; align-items: center; gap: 6px; padding: 12px 5px;
@@ -65,28 +84,33 @@
   #outliner-show:hover { background: #21262d; color: #e6edf3; }
   #outliner-show[hidden] { display: none; }
   body.outliner-hidden #outliner { display: none; }
+  body.outliner-hidden:not(.phone) #dock-right-tabs, body.outliner-hidden:not(.phone) #dock-right > #concept-list { display: none; }
   body.outliner-hidden:not(.chat-open) #dock-right { display: none; }
+  body.outliner-hidden:not(.chat-open) { --dock-right-w: 28px; }
   body.chat-open #outliner-show { display: none; }
   body.phone #outliner-show, body.phone #outliner-hide { display: none; }
-  /* The concept zoom: a pill over the map, so it needs neither the keyboard nor a sheet. */
-  #concept-zoom { position: fixed; z-index: 6; top: 14px; left: 50%; transform: translateX(-50%);
-    display: flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 13px;
-    background: rgba(22,27,34,.9); color: #c9d1d9; border: 1px solid #30363d; border-radius: 999px;
-    font: 600 12px ui-sans-serif, system-ui, sans-serif; cursor: pointer;
-    backdrop-filter: blur(8px); box-shadow: 0 6px 20px rgba(0,0,0,.35); }
-  #concept-zoom:hover { background: #21262d; color: #e6edf3; }
+  /* The concept zoom: a segmented City | Concepts switcher centered at the top. */
+  #concept-zoom { position: fixed; z-index: 6; top: 12px; left: 50%; transform: translateX(-50%);
+    display: inline-flex; align-items: center; gap: 2px; padding: 3px;
+    background: rgba(18,23,30,.92); color: #8b949e; border: 1px solid #30363d; border-radius: 999px;
+    font: 600 11.5px ui-sans-serif, system-ui, sans-serif; cursor: pointer;
+    backdrop-filter: blur(10px); box-shadow: 0 6px 20px rgba(0,0,0,.4); }
+  #concept-zoom:hover { border-color: #484f58; }
   #concept-zoom:focus-visible { outline: 2px solid #58a6ff; outline-offset: 2px; }
-  #concept-zoom svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7;
+  #concept-zoom .cz-seg { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 11px;
+    border-radius: 999px; transition: background .12s, color .12s; }
+  #concept-zoom svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.7;
     stroke-linecap: round; stroke-linejoin: round; }
-  #concept-zoom.on { background: rgba(31,111,235,.25); border-color: #1f6feb; color: #e6edf3; }
-  #concept-zoom.on svg { stroke: #58a6ff; }
+  #concept-zoom:not(.on) .cz-city { background: #21262d; color: #e6edf3; }
+  #concept-zoom.on .cz-concepts { background: rgba(31,111,235,.32); color: #e6edf3; box-shadow: inset 0 0 0 1px rgba(56,139,253,.55); }
+  #concept-zoom.on .cz-concepts svg { stroke: #79c0ff; }
 
   #dock-bottom { position: fixed; left: 14px; right: 14px; bottom: 14px; display: flex;
     justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 10px; pointer-events: none; }
 
-  .panel { min-height: 0; overflow: auto; pointer-events: auto; background: rgba(22,27,34,.88);
-    border: 1px solid #30363d; border-radius: 10px; backdrop-filter: blur(8px);
-    box-shadow: 0 8px 30px rgba(0,0,0,.45); padding: 12px 14px; }
+  .panel { min-height: 0; overflow: auto; pointer-events: auto; background: rgba(18,23,30,.9);
+    border: 1px solid rgba(48,54,61,.92); border-radius: 10px; backdrop-filter: blur(10px);
+    box-shadow: 0 8px 28px rgba(0,0,0,.45); padding: 12px 14px; }
   .panel-title { margin: 0 0 8px; font-size: 11px; font-weight: 600; text-transform: uppercase;
     letter-spacing: .8px; color: #9aa4b2; }
   /* Every panel folds to its header, so several can share a column without crowding. */
@@ -374,13 +398,18 @@
   #outliner-file-count { flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* The bottom bars: the view buttons on the left, the layer gap and extras on the right. */
-  .bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; padding: 8px 10px; overflow: visible; }
-  .bar button { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 7px;
-    padding: 7px 12px; font-size: 12px; cursor: pointer; }
-  .bar button:hover { background: #30363d; }
-  .bar button.on { background: #1f6feb; border-color: #1f6feb; }
-  #controls label { font-size: 12px; color: #9aa4b2; white-space: nowrap; }
-  #controls input[type="range"] { width: clamp(90px, 10vw, 150px); accent-color: #1f6feb; }
+  .bar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 5px 7px; overflow: visible; }
+  .bar-sep { width: 1px; height: 18px; margin: 0 3px; background: #30363d; flex: none; }
+  .bar [hidden] + .bar-sep { display: none; }
+  .bar button { background: transparent; color: #c9d1d9; border: 1px solid transparent; border-radius: 6px;
+    padding: 5px 9px; font-size: 11.5px; cursor: pointer; transition: background .1s, border-color .1s, color .1s; }
+  .bar button:hover { background: #21262d; border-color: #30363d; color: #e6edf3; }
+  .bar button.on { background: rgba(56,139,253,.13); border-color: rgba(56,139,253,.38); color: #e6edf3; }
+  #repo { background: rgba(255,255,255,.04); border-color: #30363d; color: #e6edf3; font-weight: 500; }
+  #chat-btn.on, .insight-open.on { background: rgba(31,111,235,.22); border-color: rgba(56,139,253,.6); color: #e6edf3; }
+  #live.on { background: rgba(63,185,80,.1); border-color: rgba(63,185,80,.35); color: #e6edf3; }
+  #controls label { font-size: 11.5px; color: #8b949e; white-space: nowrap; }
+  #controls input[type="range"] { width: clamp(84px, 8.5vw, 132px); accent-color: #1f6feb; }
 
   /* ---- added surfaces: search, breadcrumbs, stats, code, help ------------ */
   /* The repository's folder, under its name: copying it is how a person tells an agent where to look. */
@@ -641,13 +670,15 @@
   #help dd { margin: 0; color: #8b91ad; }
 
   /* A toggle's state and the repository's name follow their label after a colon, drawn here so the phone's tiles can drop it. */
+  .bar .state { display: none; }
   .bar .state::before, #repo .repo-name::before { content: ": "; }
   /* The colour menu and the on/off dots on the toggles. */
-  #controls select { padding: 6px 8px; border: 1px solid #30363d; border-radius: 7px; background: #21262d;
-    color: #e6edf3; font-size: 12px; }
-  #spin::before, #live::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px;
-    border-radius: 3px; background: #6e7681; vertical-align: 1px; }
-  #spin.on::before, #live.on::before { background: #e6edf3; }
+  #controls select { padding: 4px 8px; border: 1px solid #30363d; border-radius: 6px; background: #21262d;
+    color: #e6edf3; font-size: 11.5px; }
+  #spin::before, #live::before, #glow::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px;
+    border-radius: 50%; background: #6e7681; vertical-align: 1px; }
+  #spin.on::before, #glow.on::before { background: #58a6ff; }
+  #live.on::before { background: #3fb950; }
   /* Live's dot turns amber while the last read failed and it is trying again. */
   #live.warn::before { background: #d29922; }
 
@@ -742,7 +773,7 @@
     .bar > * { flex: none; }
     .bar button { padding: 5px 9px; white-space: nowrap; }
     .stats, .keys, #info .how { display: none; }
-    #codeblock { top: 8px; left: calc(8px + min(300px, 34vw) + 8px); width: auto; right: 8px; max-height: calc(100dvh - 80px); }
+    #codeblock { top: 50px; left: calc(8px + min(300px, 34vw) + 8px); width: auto; right: calc(8px + min(240px, 28vw) + 8px); max-height: calc(100dvh - 114px); }
     #repo-panel { bottom: 64px; max-height: calc(100dvh - 80px); overflow: auto; }
   }
 
@@ -753,8 +784,9 @@
   #msheet, #mtabs, #mpeek { display: none; }
   body.phone #dock-bottom, body.phone #dock-left, body.phone #dock-right { display: none; }
   /* On a phone the pill is the only way into the concept view, so it is a full touch target. */
-  body.phone #concept-zoom { top: calc(8px + env(safe-area-inset-top)); min-height: 44px; padding: 0 18px; gap: 8px; font-size: 13px; }
-  body.phone #concept-zoom svg { width: 18px; height: 18px; }
+  body.phone #concept-zoom { top: calc(8px + env(safe-area-inset-top)); padding: 4px; font-size: 13px; }
+  body.phone #concept-zoom .cz-seg { height: 34px; padding: 0 13px; }
+  body.phone #concept-zoom svg { width: 16px; height: 16px; }
   body.phone #concept-hint { top: calc(62px + env(safe-area-inset-top)); }
 
   body.phone #mtabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; position: fixed; z-index: 8; left: 0; right: 0; bottom: 0;
@@ -884,13 +916,16 @@
 
   /* View: the map's controls as a grid of big square buttons. */
   #mpane-view .bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 0; overflow: visible; }
+  #mpane-view .bar-sep, #mpane-view .insight-open { display: none; }
   #mpane-view #controls { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 16px; }
   #mpane-view .bar button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-    min-height: 72px; padding: 8px; border-radius: 14px; font-size: 14px; white-space: normal; line-height: 1.2; }
+    min-height: 72px; padding: 8px; border-radius: 14px; font-size: 14px; white-space: normal; line-height: 1.2;
+    background: #21262d; border: 1px solid #30363d; color: #e6edf3; }
+  #mpane-view .bar button.on { background: rgba(31,111,235,.25); border-color: #388bfd; }
   #mpane-view .bar button .state { display: block; font-size: 12px; opacity: .8; }
   #mpane-view .bar button .state::before, #mpane-view #repo .repo-name::before { content: none; }
   #mpane-view #repo .repo-name { display: block; font-size: 12px; opacity: .8; }
-  #mpane-view #spin::before, #mpane-view #live::before { display: none; }
+  #mpane-view #spin::before, #mpane-view #live::before, #mpane-view #glow::before { display: none; }
   #mpane-view #controls label { padding: 4px 2px 0; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #6e7681; }
   #mpane-view #controls select { width: 100%; min-height: 48px; border-radius: 12px; font-size: 16px; }
   #mpane-view #controls input[type="range"] { width: 100%; min-height: 40px; }
@@ -967,13 +1002,24 @@ body.concept-zoom #labels { display: none; }
 #concept-leaders { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 4; }
 #concept-leaders line { stroke-width: 1; opacity: .5; }
 #concept-leaders line.hot { stroke-width: 2; opacity: 1; }
-#concept-list { position: fixed; left: 388px; top: 14px; width: 250px; max-height: calc(100vh - 140px); overflow: auto; z-index: 5;
-  padding: 10px; border-radius: 8px; background: rgba(13,17,23,.92); border: 1px solid #30363d; color: #c9d1d9;
-  font: 12px ui-sans-serif, system-ui, sans-serif; }
+#dock-right > #concept-list { position: static; left: auto; top: auto; width: auto; max-height: none; z-index: auto;
+  flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; padding: 0; overflow: hidden;
+  color: #c9d1d9; font: 12px ui-sans-serif, system-ui, sans-serif; }
+#dock-right > #concept-list[hidden], body.phone #concept-list[hidden], #concept-list[hidden] { display: none; }
+#concept-list .cl-head { flex: none; display: flex; align-items: center; gap: 6px; padding: 8px 10px 8px 12px;
+  border-bottom: 1px solid #21262d; }
+#concept-list .cl-head .panel-title { margin: 0; }
+#concept-list .cl-head .cl-count { margin-left: auto; font-size: 11px; color: #6e7681; }
+#concept-list .cl-head header { flex: 1 1 auto; min-width: 0; }
+#concept-list .cl-back { flex: none; padding: 2px 7px; font-weight: 600; }
+#concept-list .cl-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px 10px 10px; scrollbar-width: thin; }
+#concept-list .cl-body[hidden] { display: none; }
+#concept-list .cl-body > section:first-child { margin-top: 0; }
 #concept-list header { display: flex; align-items: center; gap: 6px; }
-#concept-list header strong { flex: 1; font-size: 13px; color: #e6edf3; border-left: 3px solid var(--op, #8b98a8); padding-left: 6px; }
+#concept-list header strong { flex: 1; min-width: 0; font-size: 13px; color: #e6edf3; border-left: 3px solid var(--op, #8b98a8); padding-left: 7px; overflow-wrap: anywhere; }
 #concept-list button { font: inherit; padding: 2px 8px; border-radius: 5px; border: 1px solid #30363d; background: #21262d; color: #c9d1d9; cursor: pointer; }
-#concept-list p { margin: 8px 0 0; color: #9aa7b4; }
+#concept-list button:hover { background: #30363d; color: #e6edf3; }
+#concept-list p { margin: 6px 0 0; color: #9aa7b4; }
 #concept-list p.meta { font-size: 11px; color: #7d8a97; margin-top: 4px; }
 #concept-list section { margin-top: 10px; }
 #concept-list h4 { margin: 0 0 4px; font: 600 10px ui-sans-serif, system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #7d8a97; }
@@ -993,29 +1039,36 @@ body.concept-zoom #labels { display: none; }
 #concept-list ul.files li:hover { background: #21262d; color: #fff; }
 #concept-list ul.rules li { padding: 2px 0 2px 10px; color: #9aa7b4; border-left: 2px solid #30363d; margin-bottom: 3px; }
 
-/* The concept zoom on a phone: smaller labels, and the sheet sits above the tab bar, full width. */
+/* The concept list rows match the outliner's density on desktop, and become a bottom sheet on a phone. */
 #concept-list .index-toggle { width: 100%; text-align: left; padding: 8px 10px; font-weight: 600; }
-#concept-list .index-list { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
-#concept-list .index-op { display: flex; align-items: center; gap: 8px; text-align: left; padding: 8px 10px; border-left: 3px solid var(--op, #8b98a8); }
-#concept-list .index-op span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#concept-list .index-op small { color: #7d8a97; }
-#concept-list .index-op.unmapped { border-left-style: dashed; color: #9aa7b4; }
+#concept-list .index-list { display: flex; flex-direction: column; gap: 1px; }
+#concept-list .index-op { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  padding: 5px 8px; border: 0; border-left: 3px solid var(--op, #8b98a8); border-radius: 5px;
+  background: transparent; color: #c9d1d9; cursor: pointer; }
+#concept-list .index-op:hover, #concept-list .index-op.hl { background: #21262d; color: #e6edf3; }
+#concept-list .index-op span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#concept-list .index-op small { flex: none; font-size: 10.5px; color: #6e7681; font-variant-numeric: tabular-nums; }
+#concept-list .index-op.unmapped { border-left-style: dashed; color: #8b949e; }
 body.phone #concept-labels .concept-op { font-size: 11px; padding: 2px 7px; max-width: 42vw; overflow: hidden; text-overflow: ellipsis; }
 body.phone #concept-labels .concept-op.stem { font-size: 9.5px; padding: 1px 5px; }
 body.phone #concept-labels .concept-op small { display: none; }
 body.phone #concept-labels .concept-data { font-size: 10px; padding: 1px 5px; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; }
-body.phone #concept-list { left: max(6px, env(safe-area-inset-left)); right: max(6px, env(safe-area-inset-right)); top: auto; width: auto;
-  bottom: calc(var(--tabs-h, 67px) + 6px); max-height: 46dvh; font-size: 13px; border-radius: 14px; }
-body.phone #concept-list.index { padding: 6px; }
+body.phone #concept-list { position: fixed; left: max(6px, env(safe-area-inset-left)); right: max(6px, env(safe-area-inset-right)); top: auto; width: auto;
+  bottom: calc(var(--tabs-h, 67px) + 6px); max-height: 46dvh; z-index: 5; display: flex; flex-direction: column; padding: 0;
+  font-size: 13px; border-radius: 14px; overflow: hidden; color: #c9d1d9; }
+body.phone #concept-list.folded .cl-head { border-bottom: 0; padding: 6px; }
+body.phone #concept-list .index-op { padding: 8px 10px; }
 body.phone #concept-list button { min-height: 36px; }
 body.phone #concept-leaders { display: none; }
 
 #concept-labels .concept-data small { display: block; font: 400 9px ui-sans-serif, system-ui, sans-serif; color: #a8853a; }
-#concept-key { position: fixed; left: 14px; bottom: 150px; z-index: 4; max-width: 300px; padding: 8px 10px; border-radius: 8px; pointer-events: none;
-  background: rgba(13,17,23,.85); border: 1px solid #30363d; color: #9aa7b4; font: 11px/1.5 ui-sans-serif, system-ui, sans-serif; }
+#concept-key { flex: none; display: flex; flex-direction: column; gap: 2px; padding: 7px 10px;
+  border-top: 1px solid #21262d; background: rgba(13,17,23,.55); color: #8b949e;
+  font: 10.5px/1.4 ui-sans-serif, system-ui, sans-serif; pointer-events: none; }
+#concept-key > div { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
 #concept-key[hidden] { display: none; }
 #concept-key b { color: #e6edf3; font-weight: 600; margin-right: 4px; }
-#concept-key i { display: inline-block; width: 12px; height: 10px; margin-right: 6px; vertical-align: -1px; }
+#concept-key i { display: inline-block; width: 12px; height: 10px; margin-right: 5px; vertical-align: -1px; }
 #concept-key i.hex { background: #e3b341; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
 #concept-key i.op { border: 1px solid #8b98a8; border-radius: 3px; }
 #concept-key i.read, #concept-key i.write { height: 0; border-top: 2px dashed #8b98a8; vertical-align: 3px; }

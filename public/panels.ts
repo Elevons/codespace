@@ -914,6 +914,13 @@ function renderCounts(shown: number): void
   if (note) note.textContent = inScene + " of " + files.length + " in scene";
   const clear = document.getElementById("outliner-clear");
   if (clear) clear.hidden = S.outliner.query === "" && !hasFilters() && S.outliner.collapsed.size === 0;
+  const filterBadge = document.getElementById("rtab-filter-badge");
+  if (filterBadge)
+  {
+    const activeFilters = S.outliner.systems.size + S.outliner.layers.size + (S.tagFilter !== null ? 1 : 0) + (S.isolatedFiles !== null ? 1 : 0);
+    filterBadge.hidden = activeFilters === 0;
+    filterBadge.textContent = String(activeFilters);
+  }
   const fold = document.getElementById("outliner-collapse");
   if (fold)
   {
@@ -1094,8 +1101,10 @@ function setOutlinerHidden(hidden: boolean): void
   document.body.classList.toggle("outliner-hidden", hidden);
   const tab = document.getElementById("outliner-show");
   const close = document.getElementById("outliner-hide");
+  const dockClose = document.getElementById("dock-right-hide");
   if (tab) tab.hidden = !hidden;
   if (close) close.setAttribute("aria-expanded", String(!hidden));
+  if (dockClose) dockClose.setAttribute("aria-expanded", String(!hidden));
   try { localStorage.setItem(OutlinerHiddenKey, hidden ? "1" : "0"); }
   catch { /* storage can be off, and the panel still collapses for this visit */ }
 }
@@ -1107,6 +1116,7 @@ export function revealOutliner(): void
 }
 
 document.getElementById("outliner-hide")?.addEventListener("click", () => setOutlinerHidden(true));
+document.getElementById("dock-right-hide")?.addEventListener("click", () => setOutlinerHidden(true));
 document.getElementById("outliner-show")?.addEventListener("click", () => setOutlinerHidden(false));
 try { if (localStorage.getItem(OutlinerHiddenKey) === "1") setOutlinerHidden(true); }
 catch { /* storage can be off; the panel starts open */ }

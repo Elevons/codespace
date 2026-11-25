@@ -1,7 +1,7 @@
 import { S, V3, scene, camera, canvas, layerRank, render, renderEdges, fileIndex, glow, hasFilters, inScene } from "./state.js";
 import { centerView, buildLayerPlanes, setConceptBounds, sceneryMeshes } from "./meshes.js";
 import { pickFile } from "./boxes.js";
-import { selectFile } from "./panels.js";
+import { revealOutliner, selectFile } from "./panels.js";
 import { changeView } from "./viewcall.js";
 import { setSpin } from "./controls.js";
 import { conceptSpineLayout, conceptTrace, conceptFilterView, conceptFraming, conceptStems, type IConceptRoute, type IConceptFilterView, type IConceptTraceHop } from "./rules.js";
@@ -72,14 +72,12 @@ const sizes = new WeakMap<FileRecord, { rest: BABYLON.Vector3; mine: BABYLON.Vec
 const overlay = document.createElement("div");
 overlay.id = "concept-labels";
 overlay.hidden = true;
-// What the shapes are, since nothing else on the map says: a hexagon is data, a sleeve is something that changes it.
+// What the shapes are, kept in the concept sheet's footer on desktop.
 const key = document.createElement("div");
 key.id = "concept-key";
 key.hidden = true;
-key.innerHTML = '<div><i class="hex"></i><b>Data</b> kept or passed on; its own files stand under it</div>' +
-  '<div><i class="op"></i><b>Operation</b> changes data; its files stand in its column</div>' +
-  '<div><i class="read"></i>reads \u00b7 <i class="write"></i>writes</div>';
-document.body.appendChild(key);
+key.innerHTML = '<div><span><i class="hex"></i><b>Data</b> hex</span><span><i class="op"></i><b>Op</b> column</span></div>' +
+  '<div><span><i class="read"></i>reads</span><span><i class="write"></i>writes</span></div>';
 const cityLabels = document.getElementById("labels");
 if (cityLabels) cityLabels.after(overlay); else document.body.appendChild(overlay);
 const button = document.getElementById("concept-zoom") as HTMLButtonElement | null;
@@ -570,8 +568,53 @@ let hovered: Choice = null;
 const expanded = new Set<number>();
 const list = document.createElement("aside");
 list.id = "concept-list";
+list.className = "panel";
 list.hidden = true;
-document.body.appendChild(list);
+const listHead = document.createElement("div");
+listHead.className = "cl-head";
+const listBody = document.createElement("div");
+listBody.className = "cl-body";
+list.append(listHead, listBody, key);
+const dockRight = document.getElementById("dock-right");
+const rightTabs = document.getElementById("dock-right-tabs");
+const outlinerShow = document.getElementById("outliner-show");
+const phoneQuery = window.matchMedia("(max-width: 720px)");
+
+function mountSheet(): void
+{
+  if (phoneQuery.matches || !dockRight)
+  {
+    if (list.parentNode !== document.body) document.body.appendChild(list);
+  }
+  else if (rightTabs && rightTabs.parentNode === dockRight)
+  {
+    if (list.parentNode !== dockRight) rightTabs.after(list);
+  }
+  else if (list.parentNode !== dockRight) dockRight.prepend(list);
+}
+mountSheet();
+phoneQuery.addEventListener("change", () => { mountSheet(); if (S.conceptZoom) renderSheet(); });
+
+function setRightTab(next: "concepts" | "outliner"): void
+{
+  document.body.classList.toggle("rtab-concepts", S.conceptZoom && next === "concepts");
+  document.body.classList.toggle("rtab-outliner", S.conceptZoom && next === "outliner");
+  rightTabs?.querySelectorAll<HTMLButtonElement>("[data-rtab]").forEach((btn) =>
+  {
+    btn.setAttribute("aria-selected", String(btn.dataset.rtab === next));
+  });
+  if (outlinerShow) outlinerShow.textContent = S.conceptZoom && next === "concepts" ? "Concepts" : "Outliner";
+}
+rightTabs?.addEventListener("click", (event) =>
+{
+  const btn = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-rtab]");
+  if (btn?.dataset.rtab === "concepts" || btn?.dataset.rtab === "outliner") setRightTab(btn.dataset.rtab);
+});
+window.addEventListener("codespace:right-tab", (event) =>
+{
+  const want = (event as CustomEvent<string>).detail;
+  if (S.conceptZoom && (want === "concepts" || want === "outliner")) setRightTab(want);
+});
 const leaders = document.createElementNS("http://www.w3.org/2000/svg", "svg");
 leaders.id = "concept-leaders";
 leaders.setAttribute("hidden", "");
@@ -611,7 +654,7 @@ function section(title: string): HTMLElement
 {
   const block = el("section");
   block.appendChild(el("h4", title));
-  list.appendChild(block);
+  listBody.appendChild(block);
   return block;
 }
 
@@ -651,6 +694,12 @@ function hops(parent: HTMLElement, items: IConceptTraceHop[]): void
 function head(name: string, color: string, open: (() => void) | null): void
 {
   const header = el("header");
+  const back = el("button", "\u2190", "cl-back");
+  back.type = "button";
+  back.title = "All concepts";
+  back.setAttribute("aria-label", "Back to all concepts");
+  back.addEventListener("click", () => setActive(null));
+  header.appendChild(back);
   const title = el("strong", name);
   title.style.setProperty("--op", color);
   header.appendChild(title);
@@ -662,12 +711,7 @@ function head(name: string, color: string, open: (() => void) | null): void
     show.addEventListener("click", open);
     header.appendChild(show);
   }
-  const close = el("button", "\u00d7");
-  close.type = "button";
-  close.title = "Close";
-  close.addEventListener("click", () => setActive(null));
-  header.appendChild(close);
-  list.appendChild(header);
+  listHead.appendChild(header);
 }
 
 function addLeader(row: HTMLElement, path: string, color: string): void
@@ -688,6 +732,11 @@ function setActive(next: Choice): void
 {
   active = next;
   expanded.clear();
+  if (next !== null && !phoneQuery.matches)
+  {
+    setRightTab("concepts");
+    revealOutliner();
+  }
   renderSheet();
   if (next !== null && document.body.classList.contains("phone")) frameChoice(next);
 }
@@ -740,7 +789,8 @@ function renderSheet(): void
 {
   pointers.length = 0;
   emphasised = new Set();
-  list.replaceChildren();
+  listHead.replaceChildren();
+  listBody.replaceChildren();
   leaders.replaceChildren();
   const spot = active?.kind === "op" ? layout?.operations.find((candidate) => candidate.name === active!.name) : undefined;
   const marker = active?.kind === "datum" ? layout?.data.find((candidate) => candidate.name === active!.name) : undefined;
@@ -749,34 +799,49 @@ function renderSheet(): void
   list.hidden = !spot && !marker && !showIndex;
   if (!spot && !marker) leaders.setAttribute("hidden", ""); else leaders.removeAttribute("hidden");
   list.classList.toggle("index", showIndex);
+  list.classList.toggle("folded", showIndex && phoneQuery.matches && !indexOpen);
+  listBody.hidden = showIndex && phoneQuery.matches && !indexOpen;
   if (spot) renderOperation(spot);
   else if (marker) renderData(marker.name);
   else { active = null; if (showIndex) renderIndex(layout!); }
   applyActive();
 }
 
-// The full names cannot all fit at once, so the sheet lists every operation and data entry to choose from,
-// folded to one row until it is opened; hovering an open row names it on the map.
+// On desktop the index sits inside the right panel alongside the outliner; on a phone it stays folded to one
+// bar above the tabs until opened.
 let indexOpen = false;
 function renderIndex(at: Layout): void
 {
   const ops = at.operations.filter((spot) => !spot.unmapped && opShown(spot.name));
   const shownData = at.data.filter((marker) => dataShown(marker.name));
   const filtering = filterView !== null && filterView.filtering;
-  const counts = filtering
-    ? "showing " + ops.length + " of " + filterView!.totalOperations + " operations · " + shownData.length + " of " + filterView!.totalData + " data"
-    : ops.length + " operations · " + at.data.length + " data";
-  const toggle = el("button", counts + " " + (indexOpen ? "▾" : "▴"), "index-toggle");
-  toggle.type = "button";
-  toggle.addEventListener("click", () => { indexOpen = !indexOpen; renderSheet(); });
-  list.appendChild(toggle);
-  if (!indexOpen) return;
+  if (phoneQuery.matches)
+  {
+    const counts = filtering
+      ? "showing " + ops.length + " of " + filterView!.totalOperations + " operations · " + shownData.length + " of " + filterView!.totalData + " data"
+      : ops.length + " operations · " + at.data.length + " data";
+    const toggle = el("button", counts + " " + (indexOpen ? "▾" : "▴"), "index-toggle");
+    toggle.type = "button";
+    toggle.addEventListener("click", () => { indexOpen = !indexOpen; renderSheet(); });
+    listHead.appendChild(toggle);
+    if (!indexOpen) return;
+  }
+  else
+  {
+    const counts = filtering
+      ? ops.length + "/" + filterView!.totalOperations + " ops · " + shownData.length + "/" + filterView!.totalData + " data"
+      : ops.length + " ops · " + at.data.length + " data";
+    listHead.appendChild(el("span", "Concepts", "panel-title"));
+    listHead.appendChild(el("span", counts, "cl-count"));
+  }
+  const opSection = section("Operations");
   const opList = el("div", "", "index-list");
   for (const spot of at.operations)
   {
     if (!spot.unmapped && !opShown(spot.name)) continue;
     const row = el("button", "", "index-op" + (spot.unmapped ? " unmapped" : ""));
     row.type = "button";
+    row.dataset.op = spot.name;
     row.style.setProperty("--op", cssColor(spot.color));
     row.appendChild(el("span", spot.name));
     const named = spot.unmapped ? spot.files.length : (S.CONCEPTS.operations[spot.name]?.files.length ?? 0);
@@ -786,7 +851,7 @@ function renderIndex(at: Layout): void
     row.addEventListener("pointerleave", () => clearHovered("op", spot.name));
     opList.appendChild(row);
   }
-  list.appendChild(opList);
+  opSection.appendChild(opList);
   chips(section("Data"), "datum", shownData.map((marker) => marker.name));
 }
 
@@ -796,7 +861,7 @@ function renderOperation(spot: Spot): void
   const op = S.CONCEPTS.operations[spot.name];
   const color = cssColor(spot.color);
   head(spot.name, color, () => openOperation(spot));
-  if (op?.summary) list.appendChild(el("p", op.summary));
+  if (op?.summary) listBody.appendChild(el("p", op.summary));
   if (op && op.reads.length > 0) chips(section("In"), "datum", op.reads);
 
   if (op && op.steps.length > 0)
@@ -864,8 +929,8 @@ function renderData(name: string): void
 {
   const datum = S.CONCEPTS.data[name];
   head(name, cssColor(DataColor), null);
-  if (datum?.summary) list.appendChild(el("p", datum.summary));
-  if (datum?.layer) list.appendChild(el("p", "Held in the " + datum.layer + " layer", "meta"));
+  if (datum?.summary) listBody.appendChild(el("p", datum.summary));
+  if (datum?.layer) listBody.appendChild(el("p", "Held in the " + datum.layer + " layer", "meta"));
   const trace = conceptTrace(S.CONCEPTS.data, S.CONCEPTS.operations, name);
   if (trace.comesFrom.length > 0) hops(section("Comes from"), trace.comesFrom);
   if (trace.goesTo.length > 0) hops(section("Goes to"), trace.goesTo);
@@ -956,6 +1021,11 @@ function applyActive(): void
     // A traced entry's own links are all bright, the writes and the reads alike.
     link.mesh.alpha = on ? (link.kind === "writes" || focus.kind === "datum" ? 1 : 0.9) : 0.05;
   }
+  const hotOp = focus?.kind === "op" ? focus.name : null;
+  listBody.querySelectorAll<HTMLElement>(".index-op[data-op]").forEach((row) =>
+  {
+    row.classList.toggle("hl", row.dataset.op === hotOp);
+  });
 }
 
 // Draws each listed file's pointer: from its own row in the sheet to its dot, where the dot is now.
@@ -963,15 +1033,22 @@ function placeLeaders(transform: BABYLON.Matrix, viewport: BABYLON.Viewport): vo
 {
   if (pointers.length === 0) return;
   const box = list.getBoundingClientRect();
+  if (box.width === 0 || box.height === 0)
+  {
+    for (const { line } of pointers) line.style.display = "none";
+    return;
+  }
+  const bodyBox = listBody.getBoundingClientRect();
+  const midX = (box.left + box.right) / 2;
   for (const { path, row, line } of pointers)
   {
     const rec = S.fileRecords.get(path);
     const rowBox = row.getBoundingClientRect();
-    const hidden = !rec || rowBox.bottom < box.top || rowBox.top > box.bottom;
+    const hidden = !rec || rowBox.bottom < bodyBox.top || rowBox.top > bodyBox.bottom;
     line.style.display = hidden ? "none" : "";
     if (hidden) continue;
     const p = V3.Project(rec.shape.position, BABYLON.Matrix.IdentityReadOnly, transform, viewport);
-    line.setAttribute("x1", String(box.right));
+    line.setAttribute("x1", String(p.x < midX ? box.left : box.right));
     line.setAttribute("y1", String(Math.min(rowBox.bottom, Math.max(rowBox.top, (rowBox.top + rowBox.bottom) / 2))));
     line.setAttribute("x2", p.x.toFixed(1));
     line.setAttribute("y2", p.y.toFixed(1));
@@ -1164,6 +1241,8 @@ function setZoom(on: boolean): void
   button?.setAttribute("aria-pressed", String(on));
   if (on)
   {
+    if (rightTabs) rightTabs.hidden = false;
+    setRightTab("concepts");
     // Labels that drift with a spinning camera are hard to click, and a steady front angle lines
     // up the central data spine horizontally across the screen.
     setSpin(false);
@@ -1175,6 +1254,9 @@ function setZoom(on: boolean): void
   }
   else
   {
+    if (rightTabs) rightTabs.hidden = true;
+    document.body.classList.remove("rtab-concepts", "rtab-outliner");
+    if (outlinerShow) outlinerShow.textContent = "Outliner";
     for (const rec of S.fileRecords.values())
     {
       rec.target.copyFrom(rec.terrace);

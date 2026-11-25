@@ -51,8 +51,10 @@ The file has:
   entry is a hexagon floating at its layer's height, wired to the operations that read (dashed) and write
   (solid) it. A key in the corner says which shape is which. Clicking an operation opens its process sheet
   (In, Steps, Out, Rules); a step points at its files. At rest each operation wears a quiet stem badge and data stays
-  unnamed; hovering or choosing an item expands its full name and names what it touches. With nothing chosen the
-  sheet is a folded index of every operation and data entry, and hovering a row names it on the map. Choosing a file in this view opens its
+  unnamed; hovering or choosing an item expands its full name and names what it touches. On desktop, the Concepts index
+  and process sheet dock into the right panel beside the Outliner (with a `Concepts | Outliner` toggle) and carry the
+  shape key in their footer; on a phone the sheet stays a folded bar above the bottom tabs. Hovering a row names it on
+  the map. Choosing a file in this view opens its
   details without leaving it. Choosing a data entry traces it: its writers and readers stay lit, its links draw bright, and its sheet lists
   "Comes from" and "Goes to" with the steps that touch its files. The Outliner's system and layer filters narrow the
   design too: operations with no drawn file and data nothing remaining touches fade to ghosts and leave the
@@ -197,9 +199,8 @@ are listed under it, with a cross to remove each one.
 
 ### Insights: recent work, flows, history, and a health check
 
-The bottom bar's **Start here**, **Changes**, **Flows**, **History**, and **Health** buttons open one panel with
-four tabs (Start here draws the tour and opens Flows); on a phone the panel has its own Insights tab
-in the tab bar. Each answer is also an endpoint:
+The bottom bar's **Insights** button opens one panel with four tabs (Changes, Flows — with Start here, which draws
+the tour — History, and Health); on a phone the panel has its own Insights tab in the tab bar. Each answer is also an endpoint:
 
 - **Recent** lists `/api/changes` — each file changed since `HEAD`, with its line count — and
   can show or isolate them. Nothing new is read for it.
