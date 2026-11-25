@@ -262,13 +262,17 @@ async function deleteArchitecture(): Promise<void>
 function showPanel(): void
 {
   document.getElementById("codeblock")!.hidden = true;
+  errorNote.hidden = true;
   panel.hidden = false;
   button.classList.add("on");
   if (info !== null) pathInput.value = info.root;
-  pathInput.focus();
-  pathInput.select();
+  if (info?.pinned !== true)
+  {
+    pathInput.focus();
+    pathInput.select();
+    void browse(browsing);
+  }
   void refreshStatus();
-  void browse(browsing);
   // An agent may describe the codebase from outside the page, which sends no event.
   if (statusTimer === null) statusTimer = window.setInterval(() => { if (!panel.hidden) void refreshStatus(); }, 4000);
 }

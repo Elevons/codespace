@@ -435,6 +435,166 @@ function settleOutliner(delay = 0): void
 const bottomDock = document.getElementById("dock-bottom") as HTMLElement;
 new ResizeObserver(() => document.documentElement.style.setProperty("--dock-bottom-h", bottomDock.offsetHeight + "px")).observe(bottomDock);
 
+const LeftWidthKey = "codespace.dock.leftWidth";
+const RightWidthKey = "codespace.dock.rightWidth";
+
+function maxDockWidth(): number
+{
+  return Math.max(280, Math.min(620, Math.floor(window.innerWidth * 0.46)));
+}
+
+function loadDockWidth(key: string, cssVar: string, min: number): void
+{
+  try
+  {
+    const raw = localStorage.getItem(key);
+    if (!raw) return;
+    const width = Number(raw);
+    if (Number.isFinite(width) && width >= min)
+      document.documentElement.style.setProperty(cssVar, Math.min(maxDockWidth(), Math.round(width)) + "px");
+  }
+  catch { /* storage can be off */ }
+}
+
+function bindWidthResize(handle: HTMLElement, dock: HTMLElement, side: "left" | "right"): void
+{
+  const cssVar = side === "left" ? "--user-left-w" : "--user-right-w";
+  const storageKey = side === "left" ? LeftWidthKey : RightWidthKey;
+  const minWidth = side === "left" ? 220 : 260;
+  let dragging = false;
+  let startX = 0;
+  let startW = 0;
+  let lastW = 0;
+
+  const stop = (event: PointerEvent): void =>
+  {
+    if (!dragging) return;
+    dragging = false;
+    document.body.classList.remove("resizing-x");
+    handle.classList.remove("active");
+    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+    try { localStorage.setItem(storageKey, String(Math.round(lastW))); }
+    catch { /* storage can be off */ }
+  };
+
+  handle.addEventListener("pointerdown", (event) =>
+  {
+    if (event.button !== 0 || document.body.classList.contains("phone")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragging = true;
+    startX = event.clientX;
+    startW = dock.getBoundingClientRect().width;
+    lastW = startW;
+    handle.setPointerCapture(event.pointerId);
+    document.body.classList.add("resizing-x");
+    handle.classList.add("active");
+  });
+
+  handle.addEventListener("pointermove", (event) =>
+  {
+    if (!dragging) return;
+    const delta = side === "left" ? event.clientX - startX : startX - event.clientX;
+    lastW = Math.max(minWidth, Math.min(maxDockWidth(), startW + delta));
+    document.documentElement.style.setProperty(cssVar, Math.round(lastW) + "px");
+  });
+
+  handle.addEventListener("pointerup", stop);
+  handle.addEventListener("pointercancel", stop);
+  handle.addEventListener("dblclick", (event) =>
+  {
+    event.stopPropagation();
+    document.documentElement.style.removeProperty(cssVar);
+    try { localStorage.removeItem(storageKey); }
+    catch { /* storage can be off */ }
+  });
+}
+
+function bindHeightResize(panel: HTMLElement, dockLeft: HTMLElement): void
+{
+  const handle = document.createElement("div");
+  handle.className = "panel-resize-y";
+  handle.title = "Drag to resize height · Double-click to reset";
+  panel.appendChild(handle);
+  let dragging = false;
+  let startY = 0;
+  let startH = 0;
+
+  const stop = (event: PointerEvent): void =>
+  {
+    if (!dragging) return;
+    dragging = false;
+    document.body.classList.remove("resizing-y");
+    handle.classList.remove("active");
+    if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+  };
+
+  handle.addEventListener("pointerdown", (event) =>
+  {
+    if (event.button !== 0 || document.body.classList.contains("phone") || panel.classList.contains("collapsed")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragging = true;
+    startY = event.clientY;
+    startH = panel.getBoundingClientRect().height;
+    handle.setPointerCapture(event.pointerId);
+    document.body.classList.add("resizing-y");
+    handle.classList.add("active");
+  });
+
+  handle.addEventListener("pointermove", (event) =>
+  {
+    if (!dragging) return;
+    const maxH = Math.max(140, dockLeft.clientHeight - 16);
+    const nextH = Math.max(100, Math.min(maxH, startH + (event.clientY - startY)));
+    panel.style.height = Math.round(nextH) + "px";
+    panel.style.maxHeight = "none";
+    panel.style.flex = "0 0 auto";
+  });
+
+  handle.addEventListener("pointerup", stop);
+  handle.addEventListener("pointercancel", stop);
+  handle.addEventListener("dblclick", (event) =>
+  {
+    event.stopPropagation();
+    panel.style.height = "";
+    panel.style.maxHeight = "";
+    panel.style.flex = "";
+  });
+}
+
+function setupDockResize(): void
+{
+  loadDockWidth(LeftWidthKey, "--user-left-w", 220);
+  loadDockWidth(RightWidthKey, "--user-right-w", 260);
+  const dockLeft = document.getElementById("dock-left");
+  const dockRight = document.getElementById("dock-right");
+  if (dockLeft)
+  {
+    for (const id of FoldedPanels)
+    {
+      const panel = document.getElementById(id);
+      if (!panel) continue;
+      const handle = document.createElement("div");
+      handle.className = "dock-resize-x right";
+      handle.title = "Drag to resize · Double-click to reset";
+      panel.appendChild(handle);
+      bindWidthResize(handle, dockLeft, "left");
+      bindHeightResize(panel, dockLeft);
+    }
+  }
+  if (dockRight)
+  {
+    const handle = document.createElement("div");
+    handle.className = "dock-resize-x left";
+    handle.title = "Drag to resize · Double-click to reset";
+    dockRight.appendChild(handle);
+    bindWidthResize(handle, dockRight, "right");
+  }
+}
+
+setupDockResize();
+
 // A chip that cannot be switched on says why in the footer, since a touch screen shows no tooltip.
 let noteTimer = 0;
 function showOutlinerNote(text: string): void

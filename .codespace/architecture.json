@@ -137,7 +137,10 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "core"],
-      "summary": "The map's controls and options: framing the chosen block, file, or folder; colouring (choosing History opens its tab), grouping, filters (including picking out a layer from its legend name), shift-click selection, collapsing the outliner, and refreshing the graph."
+      "summary": "The map's controls and options: framing the chosen block, file, or folder; colouring (choosing History opens its tab), grouping, filters (including picking out a layer from its legend name), shift-click selection, collapsing the outliner, and refreshing the graph.",
+      "notes": {
+        "setupDockResize": "Attaches width resize grips to the left and right docks (saved in localStorage) and height resize grips to the left-column panels, with double-click reset."
+      }
     },
     "public/edges.ts": {
       "system": "browser",
@@ -270,7 +273,10 @@
       "system": "browser",
       "layer": "panels",
       "tags": ["ui", "io"],
-      "summary": "The Repo panel: points the map at another folder, walks and lists recent repositories, reports how much is left to describe, refine, and design, and starts the ingest, refine, and delete actions."
+      "summary": "The Repo panel: points the map at another folder, walks and lists recent repositories, reports how much is left to describe, refine, and design, and starts the ingest, refine, and delete actions.",
+      "notes": {
+        "showPanel": "Opens the repository switcher, refreshes ingest status, and skips folder browsing when the page is pinned by ?repo=."
+      }
     },
     "public/repo.ts": {
       "system": "browser",
