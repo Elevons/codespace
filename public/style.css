@@ -1,8 +1,7 @@
   :root { color-scheme: dark;
     --dock-left-w: min(var(--user-left-w, clamp(250px, 22vw, 330px)), 46vw);
     --dock-right-w: min(var(--user-right-w, clamp(284px, 21vw, 320px)), 46vw);
-    --dock-bottom-h: 54px;
-    --tools-h: 74px; }
+    --dock-bottom-h: 54px; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #04070d; color: #e6edf3;
     font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
@@ -549,11 +548,11 @@
   #symbol-code .t { color: #d2a8ff; }
 
   /* The shortcut card, opened from the ? button or the ? key. */
-  /* The repository switcher: anchored right below #tools on desktop, showing the folder being read, recent ones, and ingest status. */
-  #repo-panel { position: fixed; z-index: 9; left: 14px;
-    top: calc(14px + var(--tools-h, 74px) + 8px); bottom: auto;
-    width: min(max(var(--dock-left-w), 320px), calc(100vw - 28px));
-    max-height: calc(100dvh - var(--tools-h, 74px) - 36px); overflow: auto; padding: 12px 14px; }
+  /* The repository switcher: pops out beside #tools on desktop, showing the folder being read, recent ones, and ingest status. */
+  #repo-panel { position: fixed; z-index: 9; top: 14px; bottom: auto;
+    left: calc(14px + var(--dock-left-w) + 8px);
+    width: min(360px, calc(100vw - var(--dock-left-w) - 36px));
+    max-height: calc(100dvh - 28px); overflow: auto; padding: 12px 14px; }
   #repo-panel[hidden] { display: none; }
   #repo-form { display: flex; gap: 8px; margin: 0; }
   #repo-form input { flex: 1; min-width: 0; background: #0d1117; color: #e6edf3; border: 1px solid #30363d;
@@ -810,7 +809,8 @@
     .bar button { padding: 5px 9px; white-space: nowrap; }
     .stats, .keys, #info .how { display: none; }
     #codeblock { top: 50px; left: calc(8px + min(300px, 34vw) + 8px); width: auto; right: calc(8px + min(240px, 28vw) + 8px); max-height: calc(100dvh - 114px); }
-    #repo-panel { top: calc(8px + var(--tools-h, 38px) + 6px); bottom: auto; left: 8px; max-height: calc(100dvh - var(--tools-h, 38px) - 22px); overflow: auto; }
+    #repo-panel { top: 8px; bottom: auto; left: calc(8px + min(300px, 34vw) + 8px);
+      width: min(340px, calc(100vw - min(300px, 34vw) - 24px)); max-height: calc(100dvh - 16px); overflow: auto; }
   }
 
   /* ---- the phone layout (mobile.ts adds body.phone on a narrow screen) ----------------------

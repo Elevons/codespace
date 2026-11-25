@@ -431,12 +431,10 @@ function settleOutliner(delay = 0): void
 }
 
 // Everything docked above the bottom bar keeps clear of it by its real height, which changes
-// when the bar wraps or the font does; #tools sits at the top of #dock-left and anchors #repo-panel below it.
+// when the bar wraps or the font does.
 const bottomDock = document.getElementById("dock-bottom") as HTMLElement;
 new ResizeObserver(() => document.documentElement.style.setProperty("--dock-bottom-h", bottomDock.offsetHeight + "px")).observe(bottomDock);
 const toolsBar = document.getElementById("tools");
-if (toolsBar)
-  new ResizeObserver(() => document.documentElement.style.setProperty("--tools-h", toolsBar.offsetHeight + "px")).observe(toolsBar);
 
 const LeftWidthKey = "codespace.dock.leftWidth";
 const RightWidthKey = "codespace.dock.rightWidth";
