@@ -772,3 +772,43 @@ export function conceptFraming(points: readonly { x: number; y: number; z: numbe
   const reach = Math.tan(fov / 2) * Math.min(1, aspect);
   return { center, radius: Math.max(minRadius, half / Math.max(reach, 0.1)) };
 }
+
+const STEM_STOPWORDS = new Set([
+  "a", "an", "the", "of", "in", "on", "to", "for", "from", "with", "by",
+  "into", "onto", "across", "over", "under", "through", "out", "up", "down", "off",
+  "and", "or", "as", "at", "is", "are", "be", "can", "when", "while",
+  "one", "each", "every", "all", "its", "their",
+]);
+
+// Gives each operation a short stem for its resting badge, adding a second word only when several
+// operations open with the same verb so siblings like "Test ..." or "Describe ..." stay distinct.
+export function conceptStems(names: readonly string[]): Map<string, string>
+{
+  const parsed = names.map((name) =>
+  {
+    const tokens = name.match(/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*/g) ?? [];
+    const rawHead = tokens[0] ?? name.trim();
+    const head = rawHead ? rawHead.charAt(0).toUpperCase() + rawHead.slice(1) : rawHead;
+    const rest = tokens.slice(1).filter((word) => !STEM_STOPWORDS.has(word.toLowerCase()));
+    return { name, head, headKey: head.toLowerCase(), rest };
+  });
+  const headCounts = new Map<string, number>();
+  for (const item of parsed) headCounts.set(item.headKey, (headCounts.get(item.headKey) ?? 0) + 1);
+
+  const stems = new Map<string, string>();
+  for (const item of parsed)
+  {
+    if ((headCounts.get(item.headKey) ?? 0) <= 1 || item.rest.length === 0)
+    {
+      stems.set(item.name, item.head);
+      continue;
+    }
+    const peers = parsed.filter((other) => other.headKey === item.headKey && other.name !== item.name);
+    const unique = item.rest.find((word) =>
+      peers.every((peer) => !peer.rest.some((pw) => pw.toLowerCase() === word.toLowerCase())));
+    const extra = unique ?? item.rest[0]!;
+    const formattedExtra = extra === extra.toUpperCase() && extra.length > 1 ? extra : extra.toLowerCase();
+    stems.set(item.name, item.head + " " + formattedExtra);
+  }
+  return stems;
+}

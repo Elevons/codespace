@@ -50,9 +50,9 @@ The file has:
   Concepts button, zooms the map out to them: each operation's files gather into one column, and each data
   entry is a hexagon floating at its layer's height, wired to the operations that read (dashed) and write
   (solid) it. A key in the corner says which shape is which. Clicking an operation opens its process sheet
-  (In, Steps, Out, Rules); a step points at its files. The map names nothing until an item is hovered or chosen; then
-  it names that item and what it touches. With nothing chosen the sheet is the index of every operation and data entry
-  (open on a wide screen, folded on a phone), and hovering a row names it on the map. Choosing a file in this view opens its
+  (In, Steps, Out, Rules); a step points at its files. At rest each operation wears a quiet stem badge and data stays
+  unnamed; hovering or choosing an item expands its full name and names what it touches. With nothing chosen the
+  sheet is a folded index of every operation and data entry, and hovering a row names it on the map. Choosing a file in this view opens its
   details without leaving it. Choosing a data entry traces it: its writers and readers stay lit, its links draw bright, and its sheet lists
   "Comes from" and "Goes to" with the steps that touch its files. The Outliner's system and layer filters narrow the
   design too: operations with no drawn file and data nothing remaining touches fade to ghosts and leave the

@@ -4,7 +4,7 @@ import { pickFile } from "./boxes.js";
 import { selectFile } from "./panels.js";
 import { changeView } from "./viewcall.js";
 import { setSpin } from "./controls.js";
-import { conceptSpineLayout, conceptTrace, conceptFilterView, conceptFraming, type IConceptRoute, type IConceptFilterView, type IConceptTraceHop } from "./rules.js";
+import { conceptSpineLayout, conceptTrace, conceptFilterView, conceptFraming, conceptStems, type IConceptRoute, type IConceptFilterView, type IConceptTraceHop } from "./rules.js";
 import type { FileRecord } from "./types.js";
 
 const Unmapped = "Not in an operation";
@@ -80,7 +80,8 @@ key.innerHTML = '<div><i class="hex"></i><b>Data</b> kept or passed on; its own 
   '<div><i class="op"></i><b>Operation</b> changes data; its files stand in its column</div>' +
   '<div><i class="read"></i>reads \u00b7 <i class="write"></i>writes</div>';
 document.body.appendChild(key);
-document.body.appendChild(overlay);
+const cityLabels = document.getElementById("labels");
+if (cityLabels) cityLabels.after(overlay); else document.body.appendChild(overlay);
 const button = document.getElementById("concept-zoom") as HTMLButtonElement | null;
 
 function hueColor(index: number, count: number): BABYLON.Color3
@@ -523,20 +524,21 @@ function setScenery(visible: boolean): void
   hiddenScenery = [];
 }
 
-function label(spot: Spot): HTMLElement
+function label(spot: Spot, stem: string): HTMLElement
 {
   const element = document.createElement("button");
   element.type = "button";
-  element.className = "concept-op" + (spot.unmapped ? " unmapped" : "");
+  element.className = "concept-op stem" + (spot.unmapped ? " unmapped" : "");
   element.style.setProperty("--op", cssColor(spot.color));
-  element.textContent = spot.name;
+  element.appendChild(el("span", stem, "stem-text"));
+  element.appendChild(el("span", spot.name, "full-text"));
   const small = document.createElement("small");
   const named = spot.unmapped ? spot.files.length : (S.CONCEPTS.operations[spot.name]?.files.length ?? spot.files.length);
   small.textContent = named + (named === 1 ? " file" : " files");
   element.dataset.weight = String(named);
   element.appendChild(small);
   element.title = S.CONCEPTS.operations[spot.name]?.summary ?? "";
-  element.addEventListener("pointerenter", () => setHovered({ kind: "op", name: spot.name }));
+  element.addEventListener("pointerenter", () => { hoverFromMap = false; setHovered({ kind: "op", name: spot.name }); });
   element.addEventListener("pointerleave", () => clearHovered("op", spot.name));
   element.addEventListener("click", (event) => { event.stopPropagation(); choose("op", spot.name); });
   return element;
@@ -554,7 +556,7 @@ function dataLabel(marker: Marker): HTMLElement
   small.textContent = [datum?.layer ? datum.layer + " layer" : "data", held > 0 ? held + (held === 1 ? " file" : " files") : ""].filter((part) => part !== "").join(" \u00b7 ");
   element.appendChild(small);
   element.title = datum?.summary ?? "";
-  element.addEventListener("pointerenter", () => setHovered({ kind: "datum", name: marker.name }));
+  element.addEventListener("pointerenter", () => { hoverFromMap = false; setHovered({ kind: "datum", name: marker.name }); });
   element.addEventListener("pointerleave", () => clearHovered("datum", marker.name));
   element.addEventListener("click", (event) => { event.stopPropagation(); choose("datum", marker.name); });
   return element;
@@ -753,11 +755,9 @@ function renderSheet(): void
   applyActive();
 }
 
-// The labels cannot all fit, so the sheet lists every operation and data entry to choose from,
-// folded to one row until it is opened.
-// The index starts open on a wide screen, where it is the only list of names, and folded on a phone, where it
-// would cover the map.
-let indexOpen = !document.body.classList.contains("phone");
+// The full names cannot all fit at once, so the sheet lists every operation and data entry to choose from,
+// folded to one row until it is opened; hovering an open row names it on the map.
+let indexOpen = false;
 function renderIndex(at: Layout): void
 {
   const ops = at.operations.filter((spot) => !spot.unmapped && opShown(spot.name));
@@ -925,8 +925,11 @@ function applyActive(): void
   {
     const ghost = !spot.unmapped && !opShown(spot.name);
     const on = !ghost && opTouches(spot.name);
+    const full = focus !== null && on;
     const base = spot.unmapped ? 0.09 : 0.16;
     if (spot.pill?.material) spot.pill.material.alpha = ghost ? 0.02 : !on ? 0.04 : focus === null ? base : focus.kind === "op" ? 0.3 : 0.22;
+    spot.tag?.classList.toggle("stem", !full);
+    spot.tag?.classList.toggle("hot", focus?.kind === "op" && focus.name === spot.name);
     spot.tag?.classList.toggle("faded", !on && !ghost);
     spot.tag?.classList.toggle("ghost", ghost);
     spot.tag?.classList.toggle("source", writers.has(spot.name));
@@ -978,9 +981,12 @@ function placeLeaders(transform: BABYLON.Matrix, viewport: BABYLON.Viewport): vo
 function buildLabels(at: Layout): void
 {
   overlay.replaceChildren();
+  labelSize = new WeakMap();
+  const stems = conceptStems(at.operations.filter((spot) => !spot.unmapped).map((spot) => spot.name));
   for (const spot of at.operations)
   {
-    const element = label(spot);
+    const stem = spot.unmapped ? "Unmapped" : (stems.get(spot.name) ?? spot.name);
+    const element = label(spot, stem);
     element.dataset.x = String(spot.at.x);
     element.dataset.z = String(spot.at.z);
     spot.tag = element;
@@ -998,15 +1004,23 @@ function buildLabels(at: Layout): void
 
 // Labels that would cover a more important one are hidden rather than piled up; they come back as the
 // camera moves, and every name stays reachable from the sheet.
-const labelSize = new WeakMap<HTMLElement, { w: number; h: number }>();
+let labelSize = new WeakMap<HTMLElement, { stem?: { w: number; h: number }; full?: { w: number; h: number } }>();
+window.addEventListener("resize", () => { labelSize = new WeakMap(); });
 function declutter(placed: { element: HTMLElement; x: number; y: number; rank: number }[], width: number, height: number): void
 {
   placed.sort((a, b) => a.rank - b.rank);
   const kept: { l: number; t: number; r: number; b: number }[] = [];
   for (const { element, x, y } of placed)
   {
-    let size = labelSize.get(element);
-    if (!size || size.w === 0) { size = { w: element.offsetWidth, h: element.offsetHeight }; labelSize.set(element, size); }
+    const mode = element.classList.contains("stem") ? "stem" : "full";
+    let entry = labelSize.get(element);
+    let size = entry?.[mode];
+    if (!size || size.w === 0)
+    {
+      size = { w: element.offsetWidth, h: element.offsetHeight };
+      entry = { ...entry, [mode]: size };
+      labelSize.set(element, entry);
+    }
     const box = { l: x - size.w / 2 - 2, t: y - size.h - 2, r: x + size.w / 2 + 2, b: y + 2 };
     const onScreen = box.r > 0 && box.l < width && box.b > 0 && box.t < height;
     const clear = onScreen && !kept.some((k) => box.l < k.r && box.r > k.l && box.t < k.b && box.b > k.t);
@@ -1015,20 +1029,20 @@ function declutter(placed: { element: HTMLElement; x: number; y: number; rank: n
   }
 }
 
-// The map names nothing until something is hovered or chosen: then that item and what it touches, the data an
-// operation reads and writes or the operations that write and read an entry. A name for everything at once covered
-// what it named; the sheet's index lists them all.
+// At rest each shown operation wears a quiet stem badge and data stays unnamed; hovering or choosing an
+// item expands its full name and names what it touches, while the remaining stems step back behind them.
 function namedNow(): Set<HTMLElement>
 {
   const named = new Set<HTMLElement>();
+  if (!layout) return named;
+  for (const spot of layout.operations)
+    if (spot.tag && (spot.unmapped || opShown(spot.name))) named.add(spot.tag);
   const focus = active ?? hovered;
-  if (!layout || focus === null) return named;
+  if (focus === null) return named;
   const operation = focus.kind === "op" ? S.CONCEPTS.operations[focus.name] : undefined;
-  const trace = focus.kind === "datum" ? conceptTrace(S.CONCEPTS.data, S.CONCEPTS.operations, focus.name) : null;
-  const ops = new Set(focus.kind === "op" ? [focus.name] : [...trace!.comesFrom, ...trace!.goesTo].map((hop) => hop.op));
   const data = new Set(focus.kind === "datum" ? [focus.name] : [...(operation?.reads ?? []), ...(operation?.writes ?? [])]);
-  for (const spot of layout.operations) if (spot.tag && ops.has(spot.name)) named.add(spot.tag);
-  for (const marker of layout.data) if (marker.tag && data.has(marker.name)) named.add(marker.tag);
+  for (const marker of layout.data)
+    if (marker.tag && dataShown(marker.name) && data.has(marker.name)) named.add(marker.tag);
   return named;
 }
 
@@ -1071,10 +1085,14 @@ export function placeConceptLabels(): void
     const point = new V3(Number(element.dataset.x), Number(element.dataset.y ?? 0), Number(element.dataset.z));
     const p = V3.Project(point, BABYLON.Matrix.IdentityReadOnly, transform, viewport);
     element.style.transform = "translate(" + p.x.toFixed(1) + "px," + p.y.toFixed(1) + "px) translate(-50%, -100%)";
-    // The chosen label and what it touches come first, then operations by size, then data.
+    // The focused label wins, followed by connected full operations and data, then quiet stem badges.
+    const weight = Number(element.dataset.weight ?? 0);
+    const primary = element.classList.contains("hot") || element.classList.contains("chosen");
+    const isStem = element.classList.contains("stem");
     const isOp = element.classList.contains("concept-op");
-    const lit = element.classList.contains("chosen") || (active !== null && !element.classList.contains("faded"));
-    const rank = (lit ? 0 : 2e6) + (isOp ? 0 : 1e6) - Number(element.dataset.weight ?? 0);
+    const rank = primary ? 0
+      : !isStem ? (isOp ? 1e5 - weight : 2e5)
+      : element.classList.contains("unmapped") ? 2e6 : 1e6 - weight;
     placed.push({ element, x: p.x, y: p.y, rank });
   }
   declutter(placed, width, height);

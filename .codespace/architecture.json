@@ -123,12 +123,12 @@
         "conceptTap": "A tap in the concept view stays in it: a file opens its details and empty space puts the sheet away.",
         "openOperation": "Clicking an operation's name zooms back in and shows its files lit in place, with the operation's summary as the note.",
         "declutter": "Of the names shown, hides one that would cover a more important one (the chosen one and what it touches, then operations by size, then data).",
-        "renderIndex": "With nothing chosen the sheet is the index of every operation and data entry, open on a wide screen and folded on a phone; hovering a row names it on the map. It lists only what the filters leave, and counts it (showing 4 of 17 operations).",
+        "renderIndex": "With nothing chosen the sheet is a folded index of every operation and data entry; hovering a row names it on the map. It lists only what the filters leave, and counts it (showing 4 of 17 operations).",
         "frameChoice": "On a phone, a data entry is framed together with its writers and readers.",
         "dataLabel": "Names a hexagon with its layer and how many files stand under it.",
         "applyActive": "Lights a chosen entry's writers and readers and its links, fades the rest, and ghosts what the filters leave nothing of.",
         "renderData": "The data sheet lists Comes from and Goes to, each operation with the steps that touch the entry's files.",
-        "namedNow": "The map names nothing until something is hovered or chosen: then that item and what it touches, the data an operation reads and writes or the operations that write and read an entry. Naming everything at once covered what it named; the sheet's index lists them all.",
+        "namedNow": "At rest each shown operation wears a quiet stem badge and data stays unnamed; hovering or choosing an item expands its full name and names what it touches.",
         "conceptHover": "Hovering in the concept view names the first operation column or hexagon the pointer's ray meets (the columns are pickable for this alone), or the operation of a file outside any column."
       }
     },
@@ -293,7 +293,8 @@
         "conceptDataClaims": "Picks the files that stand under a data entry's hexagon: each file it lists, unless an operation needs it to keep a column of its own.",
         "conceptTrace": "For a data entry, the operations that write it (comes from) and read it (goes to), each with the step text that touches the entry's files.",
         "conceptFilterView": "Which operations and data stay under the Outliner's filters: an operation with a drawn file, and data a remaining operation reads or writes.",
-        "conceptFraming": "The camera aim and distance that hold a set of points, never closer than the camera already is."
+        "conceptFraming": "The camera aim and distance that hold a set of points, never closer than the camera already is.",
+        "conceptStems": "Gives each operation a quiet one-word stem for its resting badge, adding a distinguishing word only when two operations open with the same verb."
       }
     },
     "public/shown.ts": {

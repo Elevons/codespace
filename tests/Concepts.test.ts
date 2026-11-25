@@ -6,7 +6,7 @@ import { RunAsync } from '../src/cli/Cli.ts'
 import { Architecture } from '../src/repo/Architecture.ts'
 import { ConceptsDriftAsync, ConceptsLeft, ConceptsNextAsync, RecordAppliedAsync, ReviewConcepts } from '../src/repo/Concepts.ts'
 import { Ledger } from '../src/repo/Ledger.ts'
-import { conceptFileOwners, conceptSpineLayout, conceptDataClaims, conceptTrace, conceptFilterView, conceptFraming } from '../public/rules.ts'
+import { conceptFileOwners, conceptSpineLayout, conceptDataClaims, conceptTrace, conceptFilterView, conceptFraming, conceptStems } from '../public/rules.ts'
 import { Graph } from '../src/repo/Graph.ts'
 import { Repo } from '../src/repo/Repo.ts'
 import { makeRepo, removeTemp } from './support.ts'
@@ -630,4 +630,30 @@ test('Framing holds every point and never zooms in', () =>
     assert.equal(near.radius, 10, 'the camera keeps its distance when the points already fit')
     const far = conceptFraming([{ x: 0, y: 0, z: 0 }, { x: 60, y: 0, z: 0 }], 0.8, 0.5, 10)!
     assert.ok(far.radius > 60, 'a narrow screen needs more distance')
+})
+
+test('conceptStems reduces operations to one word and disambiguates shared leading verbs', () =>
+{
+    const stems = conceptStems([
+        'Load the world content',
+        'Plan a goal',
+        'Chat',
+        'Test the world data',
+        'Test the world loader',
+        'Test the viewer',
+        'Describe files',
+        'Describe concepts',
+        'Serve the HTTP API',
+        'Serve the page',
+    ])
+    assert.equal(stems.get('Load the world content'), 'Load')
+    assert.equal(stems.get('Plan a goal'), 'Plan')
+    assert.equal(stems.get('Chat'), 'Chat')
+    assert.equal(stems.get('Test the world data'), 'Test data')
+    assert.equal(stems.get('Test the world loader'), 'Test loader')
+    assert.equal(stems.get('Test the viewer'), 'Test viewer')
+    assert.equal(stems.get('Describe files'), 'Describe files')
+    assert.equal(stems.get('Describe concepts'), 'Describe concepts')
+    assert.equal(stems.get('Serve the HTTP API'), 'Serve HTTP')
+    assert.equal(stems.get('Serve the page'), 'Serve page')
 })
