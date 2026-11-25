@@ -139,7 +139,7 @@
       "tags": ["ui", "core"],
       "summary": "The map's controls and options: framing the chosen block, file, or folder; colouring (choosing History opens its tab), grouping, filters (including picking out a layer from its legend name), shift-click selection, collapsing the outliner, and refreshing the graph.",
       "notes": {
-        "setupDockResize": "Attaches width resize grips to the left and right docks (saved in localStorage) and height resize grips to the left-column panels, with double-click reset."
+        "setupDockResize": "Attaches width resize grips to the left dock's panels (including the tools bar) and the right dock (saved in localStorage), and height resize grips to the left-column foldable panels, with double-click reset."
       }
     },
     "public/edges.ts": {
@@ -201,7 +201,7 @@
       "system": "browser",
       "layer": "shell",
       "tags": ["ui", "entry"],
-      "summary": "The page's HTML shell: the canvas, the panels, the outliner's collapse controls, the insights panel with its bottom-bar buttons and phone tab, and the bootstrap request for the repository."
+      "summary": "The page's HTML shell: the canvas, the left-docked tools bar and detail panels, the right-docked concepts/outliner/chat tabs, the insights panel and its phone tab, and the bootstrap request for the repository."
     },
     "public/ingest.ts": {
       "system": "browser",
@@ -323,7 +323,7 @@
       "system": "browser",
       "layer": "shell",
       "tags": ["ui"],
-      "summary": "The styles for the page, its panels, the outliner and its edge tab, the block rail, the insights panel, and the phone sheets."
+      "summary": "The styles for the page, the left and right docks, the tools and bottom control bars, the outliner and its edge tab, the block rail, the insights panel, and the phone sheets."
     },
     "public/symbols.ts": {
       "system": "browser",

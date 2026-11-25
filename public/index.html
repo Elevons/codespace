@@ -28,6 +28,17 @@
 </div>
 
 <div class="dock" id="dock-left">
+  <div class="panel bar" id="tools">
+    <button id="repo" type="button" title="Change the repository the map reads">Repo: …</button>
+    <button id="chat-btn" type="button" title="Talk to the agent about this repository">Chat</button>
+    <button type="button" class="insight-open" data-open-tab="panel" title="Changes, saved flows, commit history, and codebase health">Insights</button>
+    <button id="help-btn" type="button" title="Controls and shortcuts (?)" aria-label="Controls and shortcuts">?</button>
+    <span class="tools-break" aria-hidden="true"></span>
+    <button id="spin" class="on" title="Toggle camera spin">Spin<span class="state">on</span></button>
+    <button id="reset" title="Reset view (R)">Reset</button>
+    <button id="refresh" title="Reload repository">Refresh</button>
+    <button id="live" class="on" title="Watch for file changes">Live<span class="state">on</span></button>
+  </div>
   <section class="panel empty" id="info">
     <div id="info-head">
       <h2 class="panel-title">Details</h2>
@@ -136,18 +147,6 @@
 <button id="outliner-show" type="button" hidden title="Show the outliner" aria-label="Show the outliner">Outliner</button>
 
 <div id="dock-bottom">
-  <div class="panel bar" id="tools">
-    <button id="repo" type="button" title="Change the repository the map reads">Repo: …</button>
-    <button id="chat-btn" type="button" title="Talk to the agent about this repository">Chat</button>
-    <span class="bar-sep" aria-hidden="true"></span>
-    <button type="button" class="insight-open" data-open-tab="panel" title="Changes, saved flows, commit history, and codebase health">Insights</button>
-    <span class="bar-sep" aria-hidden="true"></span>
-    <button id="spin" class="on" title="Toggle camera spin">Spin<span class="state">on</span></button>
-    <button id="reset" title="Reset view (R)">Reset</button>
-    <button id="refresh" title="Reload repository">Refresh</button>
-    <button id="live" class="on" title="Watch for file changes">Live<span class="state">on</span></button>
-    <button id="help-btn" type="button" title="Controls and shortcuts (?)" aria-label="Controls and shortcuts">?</button>
-  </div>
   <div class="panel bar" id="controls">
     <label for="colorby">Colour</label>
     <select id="colorby">

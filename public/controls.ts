@@ -430,10 +430,13 @@ function settleOutliner(delay = 0): void
   settleTimer = window.setTimeout(() => window.dispatchEvent(new Event("codespace:chosen")), delay);
 }
 
-// Everything docked above the bottom bars keeps clear of them by their real height, which changes
-// when the bar wraps or the font does.
+// Everything docked above the bottom bar keeps clear of it by its real height, which changes
+// when the bar wraps or the font does; #tools sits at the top of #dock-left and anchors #repo-panel below it.
 const bottomDock = document.getElementById("dock-bottom") as HTMLElement;
 new ResizeObserver(() => document.documentElement.style.setProperty("--dock-bottom-h", bottomDock.offsetHeight + "px")).observe(bottomDock);
+const toolsBar = document.getElementById("tools");
+if (toolsBar)
+  new ResizeObserver(() => document.documentElement.style.setProperty("--tools-h", toolsBar.offsetHeight + "px")).observe(toolsBar);
 
 const LeftWidthKey = "codespace.dock.leftWidth";
 const RightWidthKey = "codespace.dock.rightWidth";
@@ -545,7 +548,7 @@ function bindHeightResize(panel: HTMLElement, dockLeft: HTMLElement): void
   handle.addEventListener("pointermove", (event) =>
   {
     if (!dragging) return;
-    const maxH = Math.max(140, dockLeft.clientHeight - 16);
+    const maxH = Math.max(140, dockLeft.clientHeight - (toolsBar?.offsetHeight ?? 0) - 24);
     const nextH = Math.max(100, Math.min(maxH, startH + (event.clientY - startY)));
     panel.style.height = Math.round(nextH) + "px";
     panel.style.maxHeight = "none";
@@ -571,6 +574,14 @@ function setupDockResize(): void
   const dockRight = document.getElementById("dock-right");
   if (dockLeft)
   {
+    if (toolsBar)
+    {
+      const handle = document.createElement("div");
+      handle.className = "dock-resize-x right";
+      handle.title = "Drag to resize · Double-click to reset";
+      toolsBar.appendChild(handle);
+      bindWidthResize(handle, dockLeft, "left");
+    }
     for (const id of FoldedPanels)
     {
       const panel = document.getElementById(id);

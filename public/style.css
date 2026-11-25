@@ -1,7 +1,8 @@
   :root { color-scheme: dark;
     --dock-left-w: min(var(--user-left-w, clamp(250px, 22vw, 330px)), 46vw);
     --dock-right-w: min(var(--user-right-w, clamp(284px, 21vw, 320px)), 46vw);
-    --dock-bottom-h: 54px; }
+    --dock-bottom-h: 54px;
+    --tools-h: 74px; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #04070d; color: #e6edf3;
     font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
@@ -55,7 +56,7 @@
      their gaps to the scene. */
   .dock { position: fixed; top: 14px; bottom: calc(var(--dock-bottom-h, 54px) + 26px); display: flex; flex-direction: column; gap: 8px;
     pointer-events: none; }
-  #dock-left { left: 14px; width: var(--dock-left-w); }
+  #dock-left { left: 14px; bottom: 14px; width: var(--dock-left-w); }
   #dock-right { right: 14px; width: var(--dock-right-w); }
   #dock-right-tabs { flex: none; display: flex; align-items: center; gap: 4px; padding: 4px; overflow: visible; }
   #dock-right-tabs[hidden], body.phone #dock-right-tabs { display: none; }
@@ -109,7 +110,7 @@
   #concept-zoom.on .cz-concepts svg { stroke: #79c0ff; }
 
   #dock-bottom { position: fixed; left: 14px; right: 14px; bottom: 14px; display: flex;
-    justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 10px; pointer-events: none; }
+    justify-content: flex-end; align-items: flex-end; flex-wrap: wrap; gap: 10px; pointer-events: none; }
 
   .panel { min-height: 0; overflow: auto; pointer-events: auto; background: rgba(18,23,30,.9);
     border: 1px solid rgba(48,54,61,.92); border-radius: 10px; backdrop-filter: blur(10px);
@@ -416,7 +417,7 @@
     font-size: 11px; color: #6e7681; }
   #outliner-file-count { flex: 1 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-  /* The bottom bars: the view buttons on the left, the layer gap and extras on the right. */
+  /* The map tool and option bars: #tools sits at the top of #dock-left, #controls at bottom-right. */
   .bar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 5px 7px; overflow: visible; }
   .bar-sep { width: 1px; height: 18px; margin: 0 3px; background: #30363d; flex: none; }
   .bar [hidden] + .bar-sep { display: none; }
@@ -427,6 +428,15 @@
   #repo { background: rgba(255,255,255,.04); border-color: #30363d; color: #e6edf3; font-weight: 500; }
   #chat-btn.on, .insight-open.on { background: rgba(31,111,235,.22); border-color: rgba(56,139,253,.6); color: #e6edf3; }
   #live.on { background: rgba(63,185,80,.1); border-color: rgba(63,185,80,.35); color: #e6edf3; }
+  #dock-left > #tools { flex: none; padding: 6px 8px; gap: 4px; overflow: visible; }
+  #dock-left > #tools button { padding: 4px 7px; font-size: 11px; }
+  #dock-left > #tools #repo { flex: 1 1 60px; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #dock-left > #tools #chat-btn, #dock-left > #tools .insight-open, #dock-left > #tools #help-btn { flex: none; }
+  #dock-left > #tools #help-btn { padding: 4px 6px; min-width: 24px; margin-left: auto; }
+  #dock-left > #tools .tools-break { flex: 1 0 100%; height: 1px; background: #21262d; margin: 2px 0; }
+  #dock-left > #tools #spin, #dock-left > #tools #reset, #dock-left > #tools #refresh, #dock-left > #tools #live {
+    flex: 1 1 auto; text-align: center; white-space: nowrap; padding: 4px 5px; }
+  #dock-left > #tools #spin::before, #dock-left > #tools #live::before { margin-right: 5px; }
   body:not(.phone):not(.outliner-hidden) #controls,
   body:not(.phone).chat-open #controls { min-width: var(--dock-right-w); justify-content: space-between; }
   #controls label { font-size: 11.5px; color: #8b949e; white-space: nowrap; }
@@ -539,11 +549,11 @@
   #symbol-code .t { color: #d2a8ff; }
 
   /* The shortcut card, opened from the ? button or the ? key. */
-  /* The repository switcher: the folder being read, the recent ones, and how much is left to describe. */
+  /* The repository switcher: anchored right below #tools on desktop, showing the folder being read, recent ones, and ingest status. */
   #repo-panel { position: fixed; z-index: 9; left: 14px;
-    bottom: calc(14px + var(--dock-bottom-h) + 10px);
+    top: calc(14px + var(--tools-h, 74px) + 8px); bottom: auto;
     width: min(max(var(--dock-left-w), 320px), calc(100vw - 28px));
-    max-height: calc(100dvh - var(--dock-bottom-h) - 38px); overflow: auto; padding: 12px 14px; }
+    max-height: calc(100dvh - var(--tools-h, 74px) - 36px); overflow: auto; padding: 12px 14px; }
   #repo-panel[hidden] { display: none; }
   #repo-form { display: flex; gap: 8px; margin: 0; }
   #repo-form input { flex: 1; min-width: 0; background: #0d1117; color: #e6edf3; border: 1px solid #30363d;
@@ -773,7 +783,8 @@
 
     #dock-bottom { left: calc(var(--edge) + env(safe-area-inset-left)); right: calc(var(--edge) + env(safe-area-inset-right));
       bottom: calc(var(--edge) + env(safe-area-inset-bottom)); flex-direction: column; align-items: stretch; flex-wrap: nowrap; gap: 6px; }
-    #repo-panel { left: var(--edge); right: var(--edge); width: auto; bottom: var(--above-bars); max-height: 46dvh; overflow: auto; }
+    #repo-panel { top: auto; left: var(--edge); right: var(--edge); width: auto; bottom: var(--above-bars); max-height: 46dvh; overflow: auto; }
+    .tools-break { display: none; }
     /* Each bar is one row that scrolls sideways, rather than wrapping into a tall block. */
     .bar { flex-wrap: nowrap; justify-content: flex-start; gap: 6px; padding: 6px; overflow-x: auto; overflow-y: hidden;
       scrollbar-width: none; overscroll-behavior-x: contain; }
@@ -788,7 +799,10 @@
   @media (max-height: 500px) and (min-width: 721px)
   {
     .dock { top: 8px; bottom: 64px; }
-    #dock-left { left: 8px; width: min(300px, 34vw); }
+    #dock-left { left: 8px; bottom: 8px; width: min(300px, 34vw); }
+    #dock-left > #tools { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 5px 6px; gap: 4px; }
+    #dock-left > #tools > * { flex: none !important; }
+    #dock-left > #tools .tools-break { display: none; }
     #dock-right { right: 8px; width: min(240px, 28vw); }
     #dock-bottom { left: 8px; right: 8px; bottom: 8px; flex-wrap: nowrap; gap: 6px; }
     .bar { flex: 0 1 auto; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 5px 6px; gap: 6px; }
@@ -796,7 +810,7 @@
     .bar button { padding: 5px 9px; white-space: nowrap; }
     .stats, .keys, #info .how { display: none; }
     #codeblock { top: 50px; left: calc(8px + min(300px, 34vw) + 8px); width: auto; right: calc(8px + min(240px, 28vw) + 8px); max-height: calc(100dvh - 114px); }
-    #repo-panel { bottom: 64px; max-height: calc(100dvh - 80px); overflow: auto; }
+    #repo-panel { top: calc(8px + var(--tools-h, 38px) + 6px); bottom: auto; left: 8px; max-height: calc(100dvh - var(--tools-h, 38px) - 22px); overflow: auto; }
   }
 
   /* ---- the phone layout (mobile.ts adds body.phone on a narrow screen) ----------------------
@@ -941,7 +955,8 @@
 
   /* View: the map's controls as a grid of big square buttons. */
   #mpane-view .bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 0; overflow: visible; }
-  #mpane-view .bar-sep, #mpane-view .insight-open { display: none; }
+  #mpane-view .bar-sep, #mpane-view .tools-break, #mpane-view .insight-open { display: none; }
+  #mpane-view #help-btn { order: 1; }
   #mpane-view #controls { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 16px; }
   #mpane-view .bar button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
     min-height: 72px; padding: 8px; border-radius: 14px; font-size: 14px; white-space: normal; line-height: 1.2;
@@ -975,7 +990,7 @@
     left: max(6px, env(safe-area-inset-left)); right: max(6px, env(safe-area-inset-right)); width: auto; max-height: none; border-radius: 16px; }
   body.phone #codeblock-close { min-height: 38px; padding: 4px 16px; font-size: 13px; border-radius: 10px; }
   body.phone #symbol-code { font-size: 12.5px; }
-  body.phone #repo-panel { z-index: 10; left: 6px; right: 6px; width: auto; bottom: calc(var(--tabs-h, 67px) + 6px); max-height: 70dvh; }
+  body.phone #repo-panel { z-index: 10; top: auto; left: 6px; right: 6px; width: auto; bottom: calc(var(--tabs-h, 67px) + 6px); max-height: 70dvh; }
   body.phone #help { z-index: 10; }
   /* On a phone the chat is the Chat tab's sheet: the panel fills it, with its own title and Close left to the sheet. */
   body.phone #msheet[data-pane="chat"] { height: 70dvh; }
